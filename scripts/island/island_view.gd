@@ -12,12 +12,12 @@ enum Tool { TOWER, TILE, BIOME }
 ## Damage dealt by the debug key, until enemies exist.
 @export var debug_damage := 25.0
 
-const OUTLINE_COLOR := Color(0.25, 0.2, 0.15, 0.6)
 const HQ_COLOR := Color("8c8f99")
 const HOVER_OK_COLOR := Color(1, 1, 1, 0.9)
 const HOVER_BLOCKED_COLOR := Color(0.9, 0.2, 0.2, 0.9)
 const GHOST_ALPHA := 0.45
-const WASTELAND_COLOR := Color("3d2b22")
+## Tint for the art of a tile destroyed in battle.
+const WASTELAND_TINT := Color(0.38, 0.28, 0.22)
 ## Interim tier display: biome colours get darker with every tier (light = 0, dark = 7).
 const TIER_SHADE_PER_LEVEL := 0.06
 const REPAIR_COLOR := Color("5fd068")
@@ -156,18 +156,28 @@ func _free_tower_node(coord: Vector2i) -> void:
 # --- Drawing -------------------------------------------------------------
 
 func _draw() -> void:
-	var inner := _scaled(_hex_points, 0.92)
-	for coord in island.coords():
+	# Back rows first, so mountains and trees overlap the row behind them.
+	var ordered := island.coords()
+	ordered.sort_custom(func(a: Vector2i, b: Vector2i) -> bool:
+		return a.y < b.y if a.y != b.y else a.x < b.x)
+	# Rocky underside first: only the island's lower edge stays visible below the tiles.
+	for coord in ordered:
+		draw_texture_rect(TerrainArt.underside(), TerrainArt.underside_rect(HexMath.to_pixel(coord, hex_size), hex_size), false)
+	for coord in ordered:
 		var tile := island.get_tile(coord)
 		var center := HexMath.to_pixel(coord, hex_size)
-		draw_colored_polygon(_offset(inner, center), WASTELAND_COLOR if tile.destroyed else tile_color(tile))
-		draw_polyline(_closed(_offset(inner, center)), OUTLINE_COLOR, 2.0, true)
+		var shade := WASTELAND_TINT if tile.destroyed else tile_shade(tile)
+		draw_texture_rect(TerrainArt.tile(tile.biome, coord), TerrainArt.tile_rect(center, hex_size), false, shade)
 		if tile.destroyed:
 			_draw_wasteland(center)
 		elif tile.is_hq:
 			_draw_hq(center)
 		elif tile.tier > 0:
 			_draw_tier(center, tile)
+	# Status rings on top of all tiles, so tall art never hides them.
+	for coord in ordered:
+		var tile := island.get_tile(coord)
+		var center := HexMath.to_pixel(coord, hex_size)
 		if tile.tower:
 			_draw_status(coord, center, tile)
 		elif tile.is_hq or (not tile.destroyed and tile.hp < island.tile_max_hp(coord)):
@@ -179,9 +189,9 @@ func _draw() -> void:
 	_draw_hover()
 
 
-## Base colour of a tile: its biome, darkened per tier.
-static func tile_color(tile: IslandTile) -> Color:
-	return Biome.color_of(tile.biome).darkened(TIER_SHADE_PER_LEVEL * tile.tier)
+## Tint for a tile's art: darker with every tier (interim tier display).
+static func tile_shade(tile: IslandTile) -> Color:
+	return Color.WHITE.darkened(TIER_SHADE_PER_LEVEL * tile.tier)
 
 
 ## Tints every tile for the active overlay (chosen with the HUD's overlay icons).
@@ -279,9 +289,7 @@ func _draw_hover() -> void:
 		# Empty hex: ghost preview where the tool can add a tile.
 		if tool != Tool.TOWER and island.can_add_tile(hovered_coord):
 			var biome := tool_biome if tool == Tool.BIOME else Biome.Type.NEUTRAL
-			var color := Biome.color_of(biome)
-			color.a = GHOST_ALPHA
-			draw_colored_polygon(_offset(_scaled(_hex_points, 0.92), center), color)
+			draw_texture_rect(TerrainArt.tile(biome, hovered_coord), TerrainArt.tile_rect(center, hex_size), false, Color(1, 1, 1, GHOST_ALPHA))
 			draw_polyline(outline, HOVER_OK_COLOR, 2.0, true)
 		return
 	# Tile tool: red where right click can't remove (HQ, towers, would split the island).

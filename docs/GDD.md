@@ -520,7 +520,7 @@ There are three levels of visibility, shown as clouds:
 - Revealed areas **cloud over again** after a while. Too few, damaged or unpowered Scouts leave the island **blind**.
 - **Enemy fire gives away its position.** Each shot clears its hex by one level: thick → grey → open.
 - ✅ **Prototype implementation (2026-10-15)**, numbers 💡 placeholders:
-  - Fog covers 13 hexes around the HQ; the island itself is always open sky.
+  - Fog covers 13 hexes around the HQ; the island **and the ring of hexes directly around it** are always open sky (✅ 2026-10-15).
   - **Towers only target enemies in open sky.** Grey fog shows dark shadows where enemies are; thick fog hides everything.
   - ✅ **Simplified (2026-10-15, too confusing before):** every Scout keeps a **circle** around itself open while it has energy (1 energy/s). Biomes only change radius and open time: Neutral/Plains radius 3 · Forest radius 3, sky stays open 2.5× longer · Mountain radius 5 · Desert and Swamp radius 4. +1 radius per tier above 1. Cone, beam and flash come back later.
   - Opened sky stays open **15 s**, grey **20 s** (was 6/8 s – fog returned too quickly).

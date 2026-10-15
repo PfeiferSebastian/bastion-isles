@@ -2,7 +2,8 @@ class_name FogOfWar
 extends RefCounted
 ## Fog of war around the island (GDD §8.6), on the island's hex grid.
 ## Three levels: THICK (dense clouds, nothing visible), GREY (light clouds: something is
-## there, but not what) and OPEN (clear sky). The island itself is always open.
+## there, but not what) and OPEN (clear sky). The island and the ring of hexes right
+## around it are always open.
 ## Scout towers keep a circle around themselves open; revealed sky clouds over again
 ## after a while. Enemy fire gives its position away one level per shot.
 
@@ -27,9 +28,19 @@ func _init(for_island: Island) -> void:
 
 
 func level_at(cell: Vector2i) -> int:
-	if island.has_tile(cell):
+	if always_open(cell):
 		return Level.OPEN
 	return _level.get(cell, Level.THICK)
+
+
+## The island's tiles and their direct neighbours are never fogged.
+func always_open(cell: Vector2i) -> bool:
+	if island.has_tile(cell):
+		return true
+	for n in HexMath.neighbors(cell):
+		if island.has_tile(n):
+			return true
+	return false
 
 
 func is_visible(cell: Vector2i) -> bool:
@@ -44,7 +55,7 @@ func cells() -> Array[Vector2i]:
 
 ## Lifts the fog of `cell` to `to_level` (never thickens it) and keeps it there for `hold` s.
 func reveal(cell: Vector2i, to_level: int, hold: float) -> void:
-	if island.has_tile(cell) or not _level.has(cell):
+	if always_open(cell) or not _level.has(cell):
 		return
 	if to_level < _level[cell]:
 		_level[cell] = to_level

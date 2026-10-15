@@ -382,6 +382,8 @@ func _test_fog_of_war() -> void:
 	var outside := Vector2i(5, 0)
 	_check(fog.level_at(outside) == FogOfWar.Level.THICK, "sky starts in thick fog")
 	_check(fog.is_visible(Vector2i(1, 0)), "own island is always visible")
+	_check(fog.is_visible(Vector2i(3, 0)), "hexes next to the island are always visible")
+	_check(not fog.is_visible(Vector2i(4, 0)), "two hexes out is fogged")
 	fog.reveal_step(outside)
 	_check(fog.level_at(outside) == FogOfWar.Level.GREY, "first shot: thick to grey")
 	fog.reveal_step(outside)

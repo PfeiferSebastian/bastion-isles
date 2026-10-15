@@ -18,6 +18,7 @@ script = ExtResource("2_sky")
 
 [node name="IslandView" type="Node2D" parent="."]
 script = ExtResource("3_island")
+texture_filter = 4
 placeable_scene = ExtResource("4_tower")
 
 [node name="Combat" type="Node2D" parent="."]
