@@ -67,6 +67,24 @@ func take(item: Dictionary) -> bool:
 	return true
 
 
+func to_dict() -> Dictionary:
+	return {towers = towers, tiles = tiles, stones = stones}
+
+
+## Replaces the contents with saved data (JSON turns the stone keys into strings).
+func load_dict(data: Dictionary) -> void:
+	towers.clear()
+	stones.clear()
+	var saved_towers: Dictionary = data.get("towers", {})
+	for key in saved_towers:
+		towers[String(key)] = int(saved_towers[key])
+	tiles = int(data.get("tiles", 0))
+	var saved_stones: Dictionary = data.get("stones", {})
+	for key in saved_stones:
+		stones[int(key)] = int(saved_stones[key])
+	changed.emit()
+
+
 ## Levels of `type` the player has at least one of, ascending.
 func tower_levels(type: StringName) -> Array[int]:
 	var result: Array[int] = []

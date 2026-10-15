@@ -22,8 +22,7 @@ static func base(biome: Biome.Type) -> AttackProfile:
 			p.color = Color("3b2f2a")
 			p.energy_per_shot = 3.6
 		Biome.Type.PLAINS:
-			# Continuous piercing laser (from the former Desert): a bit less on one target,
-			# strong against lines. The neighbour morph is parked until Plains weapons are redesigned.
+			# Continuous laser (from the former Desert) that stops at its target. The neighbour morph is parked until Plains weapons are redesigned.
 			p.beam_dps = 10.0
 			p.beam_count = 1
 			p.beam_energy = 1.2

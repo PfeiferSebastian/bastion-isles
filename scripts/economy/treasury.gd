@@ -23,6 +23,22 @@ func _init(starting_gold := 0) -> void:
 	inventory.changed.connect(changed.emit)
 
 
+func to_dict() -> Dictionary:
+	return {gold = gold, blueprints = blueprints, inventory = inventory.to_dict()}
+
+
+## Replaces gold, blueprints and inventory with saved data (see to_dict()).
+func load_dict(data: Dictionary) -> void:
+	gold = int(data.get("gold", gold))
+	blueprints.clear()
+	var saved: Dictionary = data.get("blueprints", {})
+	for type in saved:
+		blueprints[StringName(type)] = int(saved[type])
+	if data.has("inventory"):
+		inventory.load_dict(data.inventory)
+	changed.emit()
+
+
 func add_gold(amount: int) -> void:
 	gold += amount
 	changed.emit()

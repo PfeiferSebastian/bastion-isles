@@ -6,7 +6,9 @@ from the biome beneath them, and survive waves of airships. Design: [docs/GDD.md
 ## Setup
 
 1. Install **Godot 4.7** (the project uses GDScript).
-2. The tile art is a purchased pack and is **not** in this repository. Buy
+2. Optional: the island is drawn as plain coloured hexes. Painted tile art can be switched on
+   (`TerrainArt.force_colours = false` in `scripts/island/terrain_art.gd`), but it is a
+   purchased pack and is **not** in this repository. Buy
    *Painted 2D Terrain Hexes: Basic Set* by David Baumgart on the Unity Asset Store, download it
    through Unity, and copy its PNGs into `assets/third_party/hex_terrain_basic/`:
    - `Tiles/*.png` → `tiles/`

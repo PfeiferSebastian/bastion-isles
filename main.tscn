@@ -10,6 +10,7 @@
 [ext_resource type="Script" path="res://scripts/combat/combat.gd" id="8_combat"]
 [ext_resource type="Script" path="res://scripts/fog/fog_layer.gd" id="9_fog"]
 [ext_resource type="Script" path="res://scripts/ui/progress_tube.gd" id="10_tube"]
+[ext_resource type="Script" path="res://scripts/ui/console_deck.gd" id="11_deck"]
 
 [node name="Main" type="Node2D"]
 script = ExtResource("1_main")
@@ -21,6 +22,7 @@ script = ExtResource("2_sky")
 script = ExtResource("3_island")
 texture_filter = 4
 placeable_scene = ExtResource("4_tower")
+load_saved = true
 
 [node name="Combat" type="Node2D" parent="."]
 script = ExtResource("8_combat")
@@ -46,19 +48,46 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 
+[node name="ConsoleDeck" type="Control" parent="HUD/Root"]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("11_deck")
+
 [node name="InfoPanel" type="PanelContainer" parent="HUD/Root"]
 unique_name_in_owner = true
-layout_mode = 0
-offset_left = 16.0
-offset_top = 16.0
-offset_right = 420.0
-offset_bottom = 60.0
+clip_contents = true
+layout_mode = 1
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -324.0
+offset_top = -219.0
+offset_right = -24.0
+offset_bottom = -30.0
+grow_horizontal = 0
+grow_vertical = 0
 mouse_filter = 2
 
-[node name="Info" type="Label" parent="HUD/Root/InfoPanel"]
-unique_name_in_owner = true
+[node name="InfoClip" type="Control" parent="HUD/Root/InfoPanel"]
+clip_contents = true
 layout_mode = 2
-custom_minimum_size = Vector2(430, 0)
+mouse_filter = 2
+
+[node name="Info" type="Label" parent="HUD/Root/InfoPanel/InfoClip"]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+grow_horizontal = 2
+theme_override_constants/line_spacing = -3
+theme_override_font_sizes/font_size = 12
 autowrap_mode = 2
 
 [node name="Treasury" type="PanelContainer" parent="HUD/Root"]
@@ -70,9 +99,9 @@ anchor_top = 1.0
 anchor_right = 0.5
 anchor_bottom = 1.0
 offset_left = -150.0
-offset_top = -168.0
+offset_top = -178.0
 offset_right = 150.0
-offset_bottom = -132.0
+offset_bottom = -142.0
 grow_horizontal = 2
 grow_vertical = 0
 mouse_filter = 2
@@ -83,134 +112,90 @@ layout_mode = 2
 text = "Gold 0"
 horizontal_alignment = 1
 
-[node name="Notice" type="PanelContainer" parent="HUD/Root"]
-unique_name_in_owner = true
-visible = false
-layout_mode = 1
-anchors_preset = 7
-anchor_left = 0.5
-anchor_top = 1.0
-anchor_right = 0.5
-anchor_bottom = 1.0
-offset_left = -150.0
-offset_top = -214.0
-offset_right = 150.0
-offset_bottom = -176.0
-grow_horizontal = 2
-grow_vertical = 0
-mouse_filter = 2
-
-[node name="NoticeText" type="Label" parent="HUD/Root/Notice"]
-unique_name_in_owner = true
-layout_mode = 2
-theme_override_colors/font_color = Color(0.94, 0.82, 0.54, 1)
-theme_override_font_sizes/font_size = 20
-horizontal_alignment = 1
-
 [node name="TopBar" type="PanelContainer" parent="HUD/Root"]
+unique_name_in_owner = true
 layout_mode = 1
 anchors_preset = 1
 anchor_left = 1.0
 anchor_right = 1.0
-offset_left = -420.0
+offset_left = -160.0
 offset_top = 16.0
 offset_right = -16.0
-offset_bottom = 62.0
+offset_bottom = 54.0
 grow_horizontal = 0
 
 [node name="Row" type="HBoxContainer" parent="HUD/Root/TopBar"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 5
+
+[node name="Stats" type="Label" parent="HUD/Root/TopBar/Row"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(62, 0)
+layout_mode = 2
+mouse_filter = 1
+theme_override_font_sizes/font_size = 10
+text = "Enemies 0
+Killed 0"
+vertical_alignment = 1
+
+[node name="MissionPanel" type="PanelContainer" parent="HUD/Root"]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -120.0
+offset_top = 16.0
+offset_right = 120.0
+offset_bottom = 54.0
+grow_horizontal = 2
+
+[node name="Row" type="HBoxContainer" parent="HUD/Root/MissionPanel"]
 layout_mode = 2
 theme_override_constants/separation = 12
 alignment = 1
 
-[node name="Waves" type="Button" parent="HUD/Root/TopBar/Row"]
+[node name="MissionText" type="Label" parent="HUD/Root/MissionPanel/Row"]
 unique_name_in_owner = true
 layout_mode = 2
-toggle_mode = true
-focus_mode = 0
-tooltip_text = "Turn enemy waves on or off (P)"
-text = "Waves: on"
+text = "Mission starts in 10"
 
-[node name="Spawn" type="Button" parent="HUD/Root/TopBar/Row"]
+[node name="Leave" type="Button" parent="HUD/Root/MissionPanel/Row"]
 unique_name_in_owner = true
+visible = false
 layout_mode = 2
 focus_mode = 0
-tooltip_text = "Spawn a wave now (W)"
-text = "Spawn wave"
-
-[node name="Stats" type="Label" parent="HUD/Root/TopBar/Row"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "Enemies 0 · Killed 0"
-
-[node name="Help" type="Label" parent="HUD/Root"]
-layout_mode = 1
-anchors_preset = 3
-anchor_left = 1.0
-anchor_top = 1.0
-anchor_right = 1.0
-anchor_bottom = 1.0
-offset_left = -330.0
-offset_top = -180.0
-offset_right = -16.0
-offset_bottom = -94.0
-grow_horizontal = 0
-grow_vertical = 0
-theme_override_colors/font_color = Color(1, 1, 1, 0.75)
-theme_override_font_sizes/font_size = 13
-text = "Click a slot, then the island · or drag · Right click: pick up / cancel
-Drag: pan · Wheel: zoom · Esc: menu
-Debug: D damage · +/- tier · F1–F4 enemies · V fog
-G +500 gold · R +5 stones · B all blueprints"
-horizontal_alignment = 2
-vertical_alignment = 2
+metadata/info = "Leave the island: the mission is complete"
+text = "Leave"
 
 [node name="OverlayPanel" type="PanelContainer" parent="HUD/Root"]
-layout_mode = 1
-anchors_preset = 3
-anchor_left = 1.0
-anchor_top = 1.0
-anchor_right = 1.0
-anchor_bottom = 1.0
-offset_left = -340.0
-offset_top = -84.0
-offset_right = -16.0
-offset_bottom = -20.0
-grow_horizontal = 0
-grow_vertical = 0
+unique_name_in_owner = true
+layout_mode = 0
+offset_left = 16.0
+offset_top = 16.0
+offset_right = 200.0
+offset_bottom = 54.0
 
 [node name="Column" type="HBoxContainer" parent="HUD/Root/OverlayPanel"]
 layout_mode = 2
-theme_override_constants/separation = 10
-alignment = 2
-
-[node name="Legend" type="Label" parent="HUD/Root/OverlayPanel/Column"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(76, 0)
-layout_mode = 2
-theme_override_font_sizes/font_size = 13
-text = "Map
-overlays"
-vertical_alignment = 1
-autowrap_mode = 2
+theme_override_constants/separation = 6
 
 [node name="OverlayIcons" type="HBoxContainer" parent="HUD/Root/OverlayPanel/Column"]
 unique_name_in_owner = true
 layout_mode = 2
-theme_override_constants/separation = 8
+theme_override_constants/separation = 5
 
 [node name="InventoryPanel" type="PanelContainer" parent="HUD/Root"]
+unique_name_in_owner = true
 layout_mode = 1
-anchors_preset = 7
-anchor_left = 0.5
+anchors_preset = 2
 anchor_top = 1.0
-anchor_right = 0.5
 anchor_bottom = 1.0
-offset_left = -530.0
-offset_top = -128.0
-offset_right = 160.0
-offset_bottom = -20.0
-grow_horizontal = 2
+offset_left = 24.0
+offset_top = -138.0
+offset_right = 804.0
+offset_bottom = -30.0
 grow_vertical = 0
 
 [node name="Inventory" type="VBoxContainer" parent="HUD/Root/InventoryPanel"]

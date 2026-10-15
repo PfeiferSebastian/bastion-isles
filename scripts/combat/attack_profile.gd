@@ -13,7 +13,7 @@ var color := Color.WHITE
 ## Energy drawn from the tile per projectile.
 var energy_per_shot := 1.0
 
-# Beam part (Desert): continuous damage per second along a piercing line
+# Beam part (Plains): continuous damage per second on the target
 var beam_dps := 0.0
 var beam_count := 0
 var beam_color := Color("ffe9a0")

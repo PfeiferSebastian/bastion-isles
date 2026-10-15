@@ -31,6 +31,11 @@ var cooldown_left := 0.0
 var orbit_direction := 1.0
 ## Bombers: current flight direction.
 var heading := Vector2.ZERO
+## Formation flight (see Combat._fly_in_formation): the ship in front has no offset; the
+## others keep `formation_offset` (x forward, y sideways) from `formation_leader`.
+var in_formation := false
+var formation_leader: Enemy = null
+var formation_offset := Vector2.ZERO
 
 var _thorn_stacks := 0
 var _thorn_dps := 0.0

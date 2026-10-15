@@ -32,7 +32,7 @@ const DESCRIPTIONS := {
 	Type.PLAINS: "Mages · energy, lasers and barriers\n"
 		+ "Tile: +3% shield per tier for itself and its neighbours;\n"
 		+ "passes 10% per tier of the damage it takes on to neighbouring towers.\n"
-		+ "Towers: Attack = piercing laser · Repair = moves HP from healthy to damaged\n"
+		+ "Towers: Attack = laser beam · Repair = moves HP from healthy to damaged\n"
 		+ "Aura = shield · Energy = evens out storage. Best conductor (97%).",
 	Type.SWAMP: "Necrolytes · poison, decay and draining\n"
 		+ "Tile: attacks of itself and its neighbours poison (+3% per tier).\n"

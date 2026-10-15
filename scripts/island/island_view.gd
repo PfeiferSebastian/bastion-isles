@@ -9,6 +9,8 @@ signal message(world_position: Vector2, text: String)
 @export var hex_size := 48.0
 ## Rings of tiles around the HQ at the start (1 = the HQ plus one ring).
 @export var starter_radius := 1
+## Start from the saved island (IslandSave) when there is one; the balance sim leaves it off.
+@export var load_saved := false
 ## Scene spawned for a tower. Its root must expose `tower_type` and `aim_angle` properties.
 @export var placeable_scene: PackedScene
 ## Damage dealt by the debug key, until enemies exist.
@@ -61,7 +63,9 @@ const DRAG_THRESHOLD := 10.0
 
 
 func _ready() -> void:
-	island = Island.create_starter(starter_radius)
+	island = IslandSave.load_island() if load_saved else null
+	if island == null:
+		island = Island.create_starter(starter_radius)
 	island.tower_destroyed.connect(_free_tower_node)
 	island.tile_changed.connect(_on_tile_changed)
 	island.tile_removed.connect(_on_tile_changed)
@@ -73,6 +77,10 @@ func _ready() -> void:
 	add_child(_top)
 	_hex_points = HexMath.corners(hex_size)
 	_font = ThemeDB.fallback_font
+	for coord in island.coords():
+		var tower := island.get_tower(coord)
+		if tower:
+			_spawn_tower_node(coord, tower.type)
 
 
 func _process(delta: float) -> void:
@@ -102,8 +110,7 @@ func aim_tower(coord: Vector2i, angle: float) -> void:
 func handle_tap(world_position: Vector2) -> void:
 	if not held.is_empty():
 		place_item(world_to_hex(world_position), held, world_position)
-		if island.treasury.inventory.count(held) <= 0:
-			release_hold()
+		_keep_or_release()
 
 
 ## Right click: drops the held item, otherwise picks up the top layer of the tile
@@ -115,11 +122,14 @@ func handle_secondary_tap(world_position: Vector2) -> void:
 	pick_up(world_to_hex(world_position), world_position)
 
 
-## Puts `item` from the inventory onto `coord`. Returns true if it was placed.
+## Puts `item` from the inventory onto `coord` (buying one first if none is left and it is
+## buyable). Returns true if it was placed.
 func place_item(coord: Vector2i, item: Dictionary, world_position: Vector2) -> bool:
 	var inventory := island.treasury.inventory
-	if inventory.count(item) <= 0:
-		message.emit(world_position, "No %s left" % Inventory.label_of(item))
+	if not _can_place(coord, item):
+		return false
+	if not Economy.ensure_one(item, island):
+		message.emit(world_position, "No %s left" % Inventory.label_of(item) if Economy.buy_price(item, island) < 0 else "Not enough gold")
 		return false
 	var tile := island.get_tile(coord)
 	match item.kind:
@@ -140,7 +150,7 @@ func place_item(coord: Vector2i, item: Dictionary, world_position: Vector2) -> b
 				# A stone on an empty hex needs a tile to go with it.
 				if not island.can_add_tile(coord):
 					return false
-				if inventory.count(Inventory.tile_item()) <= 0:
+				if not Economy.ensure_one(Inventory.tile_item(), island):
 					message.emit(world_position, "Needs a tile too")
 					return false
 				inventory.take(Inventory.tile_item())
@@ -175,7 +185,8 @@ func pick_up(coord: Vector2i, world_position: Vector2) -> void:
 		inventory.add(Inventory.tile_item())
 
 
-## Selects an inventory item to place with clicks (stays selected while the stack lasts).
+## Selects an inventory item to place with clicks (stays selected while the stack lasts or
+## there is gold to buy more).
 func hold(item: Dictionary) -> void:
 	held = item
 
@@ -202,6 +213,12 @@ func _input(event: InputEvent) -> void:
 	if moved and get_viewport().gui_get_hovered_control() == null:
 		var world := get_global_mouse_position()
 		place_item(world_to_hex(world), held, world)
+		_keep_or_release()
+
+
+## The held item stays selected while there are more in the inventory or gold to buy one.
+func _keep_or_release() -> void:
+	if not held.is_empty() and not Economy.can_get(held, island):
 		release_hold()
 
 

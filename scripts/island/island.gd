@@ -54,6 +54,38 @@ static func create_starter(radius: int) -> Island:
 	return island
 
 
+## Layout and treasury as plain data (for IslandSave): tiles with biome, tier and tower.
+## Battle state (HP, wasteland, energy) is not kept; a loaded island starts repaired.
+func to_dict() -> Dictionary:
+	var tiles: Array = []
+	for coord in _tiles:
+		var tile := _tiles[coord]
+		tiles.append({q = coord.x, r = coord.y, biome = int(tile.biome), tier = tile.tier,
+			hq = tile.is_hq, tower = String(tile.tower.type) if tile.tower else ""})
+	return {tiles = tiles, treasury = treasury.to_dict()}
+
+
+## Island rebuilt from to_dict() data, or null if the data has no HQ.
+static func from_dict(data: Dictionary) -> Island:
+	var island := Island.new()
+	for entry: Dictionary in data.get("tiles", []):
+		var coord := Vector2i(int(entry.q), int(entry.r))
+		var tile := IslandTile.new(coord, int(entry.biome) as Biome.Type)
+		tile.tier = int(entry.tier)
+		tile.is_hq = bool(entry.hq)
+		island._tiles[coord] = tile
+	if not island.has_tile(HQ_COORD) or not island.get_tile(HQ_COORD).is_hq:
+		return null
+	# Towers and HP after all tiles exist, since neighbours change max HP.
+	for entry: Dictionary in data.get("tiles", []):
+		if String(entry.tower) != "":
+			island.place_tower(Vector2i(int(entry.q), int(entry.r)), StringName(entry.tower))
+	for coord in island._tiles:
+		island._tiles[coord].hp = island.tile_max_hp(coord)
+	island.treasury.load_dict(data.get("treasury", {}))
+	return island
+
+
 func has_tile(coord: Vector2i) -> bool:
 	return _tiles.has(coord)
 

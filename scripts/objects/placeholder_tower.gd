@@ -1,6 +1,6 @@
 extends Node2D
-## Tower visual. Uses generated painted sprites where they exist (so far: neutral walls,
-## which connect to neighbouring walls), otherwise a simple placeholder silhouette per type.
+## Tower visual: a simple placeholder silhouette per type. Generated painted wall sprites
+## (neutral, connecting to neighbouring walls) exist but are switched off (USE_WALL_ART).
 ## Pops in when spawned and again whenever its type changes.
 
 @export var tower_type: StringName = &"attack":
@@ -14,6 +14,8 @@ extends Node2D
 ## Must match the island view, so sprites line up with the tile art.
 @export var hex_size := 48.0
 
+## The generated wall sprites don't match the look yet, so the plain wall is drawn instead.
+const USE_WALL_ART := false
 const ART_DIR := "res://assets/generated/towers/"
 ## Sprite canvas in art space (256 px = one tile wide); the tile centre sits at ART_ANCHOR.
 const ART_SIZE := Vector2(256, 320)
@@ -116,12 +118,14 @@ func _draw_base() -> void:
 
 
 func has_art() -> bool:
-	return tower_type == &"wall" and _art("wall_%s_post.png" % String(Biome.Type.find_key(biome)).to_lower()) != null
+	return USE_WALL_ART and tower_type == &"wall" and _art("wall_%s_post.png" % String(Biome.Type.find_key(biome)).to_lower()) != null
 
 
 ## Connected wall: segments toward neighbouring walls behind the post, the post, then the
 ## segments toward the front (so depth reads right). False if no art exists for the biome.
 func _draw_wall_art() -> bool:
+	if not USE_WALL_ART:
+		return false
 	var key := String(Biome.Type.find_key(biome)).to_lower()
 	var post := _art("wall_%s_post.png" % key)
 	if post == null:

@@ -55,7 +55,7 @@ anchor_top = 1.0
 anchor_right = 0.5
 anchor_bottom = 1.0
 offset_left = -140.0
-offset_top = -238.0
+offset_top = -296.0
 offset_right = 140.0
 offset_bottom = -74.0
 grow_horizontal = 2
@@ -69,6 +69,13 @@ script = ExtResource("5_button")
 custom_minimum_size = Vector2(0, 48)
 layout_mode = 2
 text = "Start"
+
+[node name="EditIsland" type="Button" parent="Buttons"]
+unique_name_in_owner = true
+script = ExtResource("5_button")
+custom_minimum_size = Vector2(0, 48)
+layout_mode = 2
+text = "Edit Island"
 
 [node name="Options" type="Button" parent="Buttons"]
 unique_name_in_owner = true

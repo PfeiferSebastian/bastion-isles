@@ -1,6 +1,8 @@
 extends Node2D
-## Prototype sandbox: wires camera input to the island and the island to the HUD.
-## Esc drops the selected item or returns to the main menu.
+## Island scene: wires camera input to the island and the island to the HUD. Plays a mission,
+## or in edit mode (GameSession.edit_mode) just lets the player build without enemies.
+## Esc drops the selected item, otherwise retreats to the main menu; leaving or retreating
+## saves the island (IslandSave).
 
 const MENU_SCENE := "res://scenes/ui/main_menu.tscn"
 
@@ -15,6 +17,11 @@ func _ready() -> void:
 	_camera.secondary_tapped.connect(_island_view.handle_secondary_tap)
 	_hud.view = _island_view
 	_hud.combat = _combat
+	_hud.leave_requested.connect(_leave)
+	if GameSession.edit_mode:
+		_combat.set_process(false)
+		_combat.set_process_unhandled_key_input(false)
+		_hud.show_edit_mode()
 	_hud.get_node("%Inventory").set(&"view", _island_view)
 	_island_view.message.connect(func(at: Vector2, text: String) -> void: _combat.popup(at, text, Color("ffb070")))
 
@@ -26,4 +33,11 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		if not _island_view.held.is_empty():
 			_island_view.release_hold()
 		else:
-			get_tree().change_scene_to_file(MENU_SCENE)
+			_leave()
+
+
+## Saves the island (repaired, as after any fight) and returns to the main menu.
+func _leave() -> void:
+	_island_view.island.restore_tiles()
+	IslandSave.save(_island_view.island)
+	get_tree().change_scene_to_file(MENU_SCENE)

@@ -1,5 +1,5 @@
 extends Control
-## Main menu: title at the top, Start / Options / Exit at the bottom middle,
+## Main menu: title at the top, Start / Edit Island / Options / Exit at the bottom middle,
 ## steampunk frame and a floating island over the cloud sky.
 
 const GAME_SCENE := "res://main.tscn"
@@ -7,6 +7,7 @@ const GAME_SCENE := "res://main.tscn"
 @onready var _island: Node2D = $Island
 @onready var _buttons: Control = $Buttons
 @onready var _start: Button = %Start
+@onready var _edit_island: Button = %EditIsland
 @onready var _options: Button = %Options
 @onready var _exit: Button = %Exit
 @onready var _options_panel: Control = %OptionsPanel
@@ -17,7 +18,8 @@ const GAME_SCENE := "res://main.tscn"
 
 func _ready() -> void:
 	theme = MenuTheme.build()
-	_start.pressed.connect(_on_start)
+	_start.pressed.connect(_open_island.bind(false))
+	_edit_island.pressed.connect(_open_island.bind(true))
 	_options.pressed.connect(_show_options.bind(true))
 	_exit.pressed.connect(get_tree().quit)
 	_back.pressed.connect(_show_options.bind(false))
@@ -40,7 +42,9 @@ func _layout() -> void:
 	_island.call(&"place", Vector2(size.x / 2.0, size.y * 0.38))
 
 
-func _on_start() -> void:
+## Opens the island scene for a mission, or for editing without enemies.
+func _open_island(edit: bool) -> void:
+	GameSession.edit_mode = edit
 	get_tree().change_scene_to_file(GAME_SCENE)
 
 

@@ -25,8 +25,9 @@ const UNDERSIDE := "under/hexUnderDirt00.png"
 ## The HQ: a castle on a mountain (sample tile from the same artist, free to use as-is).
 const HQ := "samples/medieval-fantasy_locations/hexMountainCastle00.png"
 
-## Set to true to always draw plain coloured hexes (e.g. for testing the fallback).
-static var force_colours := false
+## Plain coloured hexes are drawn even when the purchased art is installed (the art stays
+## available for later: set this to false to use it again).
+static var force_colours := true
 
 static var _cache := {}
 static var _available: Variant = null

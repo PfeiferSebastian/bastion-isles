@@ -286,12 +286,16 @@ The Tier 0 behaviour, i.e. the base version on a neutral tile:
 - **Hovering a building tints the tiles it affects**: energy generators by how much arrives, walls their buffed neighbours, attack towers their range. ✅ The same should come for Repair and the other towers once they have effects.
 
 ### 6.5c Combat screen UI ✅ (prototype, 2026-10-15)
-- Top: wave toggle, "spawn wave" and enemy/kill counter. Top left: info panel for the hovered tile. Bottom middle: build bar.
-- **Map overlay icons** (bottom left): **Energy, Repair, Hitpoints, Tiers**. Hovering an icon highlights the matching data on all tiles; clicking locks the overlay on.
+- Top right: compact wave panel (same size as the overlay panel) – pause/resume icon, spawn-wave icon, enemy/kill counter. Top centre: **mission bar**. Bottom: a **steampunk console** (brass rail, bevelled riveted window frames, static gears – drawn in code as a placeholder for real UI art) holding the inventory (left), the gold plaque on its rail and a raised cabinet with the **fixed info window** (bottom right). The console blocks clicks to the map.
+- **Map overlay icons** (top left, compact): **Energy, Repair, Hitpoints, Tiers** – icons only, their names show in the info window on hover. Hovering an icon highlights the matching data on all tiles; clicking locks the overlay on.
 - **Build bar ✅:** hexagon symbols – Tower: light tower on dark hex · Tile: plus on sand · Forest: dark green tree · Mountain: grey mountain on red · Desert: sand dunes · Plains: horizon (beige land, white sky) · Swamp: pond with reeds.
 - **Energy overlay ✅:** storages are saturated by their reserve (grey = empty, full yellow = full) with the % shown.
 - ✅ **Mission progress tube** along the very bottom: a thin brass tube that fills with green liquid, a short tick every 5% (longer every 25%). Placeholder source until zones exist: kills out of 100.
-- ✅ **Find notice:** biome stones and blueprints found show as a notice centred above the gold display.
+- ✅ **Mission flow (placeholder):** enemies only start coming **10 s** after landing (countdown in the mission bar; spawning a wave by hand starts it early). When the goal is reached, **no more enemies spawn**, a notice appears and the mission bar offers **Leave** (back to the main menu for now).
+- ✅ **Saved island:** leaving a mission or retreating (Esc) saves the island – layout, biomes, tiers, towers, gold, blueprints and inventory – repaired, as after any fight (`user://island.json`). Start and Edit Island continue from it.
+- ✅ **Edit Island** (main menu, under Start): the island without enemies – build and rearrange freely, then **Done** saves and returns to the menu.
+- ✅ **Hover info:** there are no floating tooltips – every hover text (tiles, inventory slots and tabs, buttons, overlay icons, mission tube) shows in the fixed info window at the bottom right; with nothing hovered it shows the controls. The window has a fixed size; very long texts are cut off at the bottom.
+- ✅ **Notices:** found biome stones and blueprints (later also level-ups) stack below the overlay icons at the top left, stay about 10 s and then fade out over 1 s.
 - **Tier display (interim) ✅:** colour shades – **light = Tier 0, dark = Tier 7**. Biome tiles get darker with every tier; the Tier overlay shows a light-to-dark ramp with the number.
 
 ### 6.6 Chips & items ✅
@@ -310,7 +314,7 @@ How each biome changes each base tower. Tier 0 has no traits (6.1); the trait gr
 
 | Type | Forest 🟩 (over time, regen) | Mountain 🟥 (defense, range) | Desert 🟧 (speed, light, fragile) | Plains ⬜ (barriers, redistribution) | Swamp 🟪 (poison, weaken, drain) |
 |---|---|---|---|---|---|
-| **Attack** ✅ | Thorns: stacking damage over time | Heavy shells: strong, slow, long range · triangle fusion = Mortar | Laser beam: continuous, fast, pierces | Morph: takes on the attack traits of its neighbours | Strong debuffs (less damage / armour), little damage of its own |
+| **Attack** ✅ | Thorns: stacking damage over time | Heavy shells: strong, slow, long range · triangle fusion = Mortar | Laser beam: continuous, fast, stops at its target | Morph: takes on the attack traits of its neighbours | Strong debuffs (less damage / armour), little damage of its own |
 | **Wall** ✅ | Living hedge: regenerates even while under fire | Fortress: highest HP, self-repair in large chunks | Mirror wall: spreads damage to Desert neighbours, reflects part of it | Kinetic barrier: hits refill its energy, more stored energy = more absorption | Leech beam: drains life from nearby enemies, slows them |
 | **Energy** ✅ | Root network: boosts passive production of the connected forest | Geothermal: highest output, steep distance falloff | Solar: long range with little falloff, output varies with clouds | Aether conduit: balances storage between tiles | Decay: extra energy when enemies die nearby |
 | **Repair** ✅ | Healing over time, later also restores lost tiers | Rebuild: restores big chunks, slowly | Fast pulses that jump to several targets · fusion = healing beam | Moves HP from healthy tiles to damaged ones | Lifesteal: heals by draining enemies |
@@ -331,7 +335,7 @@ How each biome changes each base tower. Tier 0 has no traits (6.1); the trait gr
 | **Plains** | **Morph:** copies the attack traits of its **neighbouring biomes**. The more neighbours of one biome, the stronger that part | T3: draws from tiles 2 hexes away · T6: ❓ |
 | **Swamp** | **Strong debuffs** on the target (less damage, less armour) instead of high damage | T3: debuff spreads to nearby enemies · T6: debuffed enemies take extra damage from all towers |
 
-- ✅ **Rebalanced (2026-10-15):** every biome aims at ~12 sustained damage/s on one target and ~0.1 energy per damage; default range 4.5 hexes (Mountain 6). Neutral 11/0.9 s · Mountain 36/3 s · Desert laser 10/s piercing · Forest 4/0.8 s + 1.5/s per thorn stack (max 5) · Swamp 5/1 s + 40% weaken.
+- ✅ **Rebalanced (2026-10-15):** every biome aims at ~12 sustained damage/s on one target and ~0.1 energy per damage; default range 4.5 hexes (Mountain 6). Neutral 11/0.9 s · Mountain 36/3 s · Desert laser 10/s (stops at its target since 2026-10-15) · Forest 4/0.8 s + 1.5/s per thorn stack (max 5) · Swamp 5/1 s + 40% weaken.
 - **Forest vs. Swamp ✅:** Forest wins through **stacking damage over time**, Swamp through **weakening** the target. ❓ Should be confirmed in playtesting; maybe Forest changes instead.
 - **Plains morph – examples ✅:**
   - 1 Desert + 3 Swamp neighbours → 1 laser with a heavy debuff/damage-over-time part
@@ -541,7 +545,9 @@ Enemies fly, so they can cross the island without collision. They pick targets b
 | **Corsair** | **Circles the island** just inside weapon range of the outer buildings, shooting whatever is in range | 40 HP, very fast, range 2.5 hexes, 4 dmg / 0.8 s |
 | **Bomber** | **Flies over the island** in straight passes, bombing the tile below; turns and comes back | 120 HP, medium, 15 dmg bomb / 0.7 s |
 
-- Waves are mixed: 💡 40% Rammer, 25% Gunboat, 20% Corsair, 15% Bomber. Debug keys F1–F4 spawn one of each.
+- ✅ **Wave plan (first level):** waves only grow in **size**, enemies don't get stronger. Wave 1 = 3 light ships, +1 ship per wave. Light (Rammer, Corsair) only at first – one type per wave in waves 1–2, both mixed later; **mediums** (Gunboat) are sprinkled in from wave 3 (10% rising to 35%), **bombers** from wave 6 (8% rising to 20%). Waves 1–12 together bring ~100 enemies, the placeholder mission goal. Next wave after 20 s, or 4 s after the sky is clear.
+- ✅ **Formations:** each type in a wave flies as its own **V formation** (up to 6 ships, bigger groups split), all from roughly the same side. The leader heads for the island; ~320 px outside the island's edge, or when the leader dies, the formation breaks up and every ship follows its own behaviour.
+- Debug keys F1–F4 spawn one of each type; the balance simulation still uses a random mix (💡 40% Rammer, 25% Gunboat, 20% Corsair, 15% Bomber).
 - Enemy shots fly to the point they were aimed at (not homing) and hit the building there, or the ground.
 - ❓ Later: more types (artillery with long range, carriers, shielded ships), formations, bosses.
 
@@ -569,12 +575,12 @@ Enemies fly, so they can cross the island without collision. They pick targets b
 ---
 
 ### 9.1 Prototype economy ✅ (2026-10-15)
-- **Gold** is unlimited and comes from **destroyed enemies** (and later from destroyed enemy buildings and hex tiles). 💡 Rammer 5, Corsair 6, Gunboat 8, Bomber 12, scaled with enemy strength.
+- **Gold** is unlimited and comes from **destroyed enemies** (and later from destroyed enemy buildings and hex tiles). ✅ **Normalised:** 1 gold per light enemy (Rammer, Corsair), 3 per normal (Gunboat), 5 per heavy (Bomber).
 - **Rare drops = biome stones** (one per faction biome). Enemies have a **chance** to drop one; **the stronger the enemy, the likelier**. 💡 6% × strength. (Faction resources like Wood, Ore, Aether, Life Essence and Pearls stay as an idea for faction abilities.)
 - **Blueprints** can drop too (💡 2.5% × strength), preferring tower types not unlocked yet. **Attack, Wall and Energy** are available from the start; the others need their first blueprint.
 - The **HQ holds** blueprints and rare resources, **unlimited for now**. The Warehouse keeps its escape-loot role for later.
-- **Costs:** towers cost gold (💡 Attack 50, Wall 40, Energy 60, Repair 70, Aura 80, Scout 50, Warehouse 60); new tiles cost gold (💡 20 + 2 per existing tile). Both are bought into the inventory (9.2).
-- Start: 💡 300 gold. Debug keys: G +500 gold, R +5 biome stones each, B all blueprints.
+- **Costs** on the normalised scale 💡: Attack 10, Wall 8, Energy 12, Repair 14, Aura 16, Scout 10, Warehouse 12; new tiles 3 + 1 per 3 existing tiles. Start: 30 gold.
+- Debug keys: G +500 gold, R +5 biome stones each, B all blueprints.
 
 - ✅ **Start island:** only the HQ and **one ring of tiles** around it (7 tiles).
 - ✅ **Start kit:** a fresh island starts with **one Attack, Wall, Energy and Repair tower** in the inventory (Repair can be placed even though buying more needs its blueprint).
@@ -583,8 +589,8 @@ Enemies fly, so they can cross the island without collision. They pick targets b
 ### 9.2 Inventory ✅ (2026-10-15)
 - Placeable things live in a **stackable inventory**: **towers** (one tab per tower type, **stacked by level** – towers will gain levels later), **neutral tiles** and **biome stones**.
 - **Rare drops are biome stones** directly (Forest, Mountain, Plains, Swamp, Lake stones).
-- **Buying:** towers (unlocked types) and tiles are **bought with gold into the inventory**. Locked tower tabs show "needs a blueprint".
-- **Placing:** **click** a slot to select it, then click tiles (stays selected while the stack lasts), **or drag** a slot onto the island. Right click or Esc cancels.
+- **Buying:** buyable slots (basic tiles, unlocked level-1 towers) show their **price with a gold coin** (bottom left). Pressing a slot you have **none** of **buys one** if you have the gold, then selects it. No separate buy buttons. Tabs show how many items they hold, e.g. "Attack (2)".
+- **Placing:** **click** a slot to select it, then click tiles (stays selected while you have more or the gold to buy one – buyable items are bought automatically when the stack is empty), **or drag** a slot onto the island. Right click or Esc cancels.
 - **Picking up:** right click (with nothing selected) returns the top layer of a tile to the inventory: tower first, then biome stone (tile turns neutral), then the tile itself. Replacing a biome with another stone returns the old stone. No gold refunds.
 - A biome stone on an empty spot needs a tile from the inventory too.
 

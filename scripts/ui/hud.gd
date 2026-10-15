@@ -1,8 +1,13 @@
 class_name Hud
 extends CanvasLayer
-## Combat screen UI in the steampunk theme: wave controls and stats at the top, info about
-## the hovered tile at the top left, map overlay icons at the bottom left, build bar at the
-## bottom middle.
+## Combat screen UI in the steampunk theme: map overlay icons at the top left with find
+## notices below them, the mission bar (start countdown, then Leave) at the top centre,
+## compact wave controls and stats at the top right, and a brass console along
+## the bottom holding the inventory, the gold plaque and the fixed info window (bottom right)
+## that shows every hover text.
+
+## Shown in the info window while nothing with a description is hovered.
+const HELP := "Click a slot, then the island · or drag a slot onto it\nRight click: pick up / cancel\nDrag: pan · Wheel: zoom · Esc: menu\nP: waves on/off · W: spawn a wave\n\nDebug: D damage · +/- tier · F1–F4 enemies · V fog\nG +500 gold · R +5 stones · B all blueprints"
 
 const OVERLAYS := [
 	[&"energy", "Energy: generators bright, storages by fill (red = empty), empty tiles show how much they let through"],
@@ -11,96 +16,180 @@ const OVERLAYS := [
 	[&"tier", "Tiers: light = Tier 0, dark = Tier 7"],
 ]
 
+## The player chose to leave: after completing the mission, or "Done" in edit mode.
+signal leave_requested
+
 ## Set by main; the HUD reads hover state and island data from it every frame.
 var view: IslandView
 var combat: Combat:
 	set(value):
 		combat = value
 		combat.item_found.connect(notify)
+		combat.mission_completed.connect(func() -> void: notify("Mission complete! No more enemies are coming."))
 
-## How long a find notice stays, and queued notices still to show.
-const NOTICE_TIME := 3.0
-var _notices: PackedStringArray = []
-var _notice_left := 0.0
+## Find and level-up notices stack below the overlay icons; each stays NOTICE_TIME seconds,
+## then fades out over NOTICE_FADE.
+const NOTICE_TIME := 10.0
+const NOTICE_FADE := 1.0
+var _notices := VBoxContainer.new()
+
+## Wave controls in the top right panel (icons; the symbol shows what a click does).
+var _waves := OverlayIcon.new(&"pause", "")
+var _spawn := OverlayIcon.new(&"spawn", "Spawn a wave now (W)")
+
+## Editing the island from the main menu: no waves, the mission bar offers "Done".
+var _edit_mode := false
 
 ## Overlay locked on by clicking an icon; hovering another icon previews it temporarily.
 var _locked_overlay: StringName = &""
 
 @onready var _root: Control = $Root
+@onready var _deck: ConsoleDeck = %ConsoleDeck
+@onready var _overlay_panel: PanelContainer = %OverlayPanel
+@onready var _inventory_panel: Control = %InventoryPanel
 @onready var _info_panel: Control = %InfoPanel
 @onready var _info: Label = %Info
-@onready var _waves: Button = %Waves
-@onready var _spawn: Button = %Spawn
+@onready var _top_bar: PanelContainer = %TopBar
+@onready var _wave_row: HBoxContainer = %Row
 @onready var _stats: Label = %Stats
+@onready var _mission_panel: Control = %MissionPanel
+@onready var _mission_text: Label = %MissionText
+@onready var _leave: Button = %Leave
 @onready var _treasury_panel: Control = %Treasury
 @onready var _treasury_text: Label = %TreasuryText
-@onready var _notice: Control = %Notice
-@onready var _notice_text: Label = %NoticeText
 @onready var _mission_tube: ProgressTube = %MissionTube
-@onready var _legend: Label = %Legend
 @onready var _overlay_icons: HBoxContainer = %OverlayIcons
 @onready var _inventory: InventoryBar = %Inventory
 
 
 func _ready() -> void:
 	_root.theme = MenuTheme.build_hud()
-	_waves.toggled.connect(func(on: bool) -> void:
+	_waves.toggle_mode = false
+	_waves.pressed.connect(func() -> void:
 		if combat:
-			combat.waves_enabled = on)
+			combat.waves_enabled = not combat.waves_enabled)
+	_spawn.toggle_mode = false
 	_spawn.pressed.connect(func() -> void:
 		if combat:
 			combat.spawn_wave())
+	_wave_row.add_child(_waves)
+	_wave_row.add_child(_spawn)
+	_wave_row.move_child(_stats, -1)
+	_leave.pressed.connect(leave_requested.emit)
 	for entry in OVERLAYS:
 		var icon := OverlayIcon.new(entry[0], entry[1])
 		icon.preview_started.connect(_set_overlay)
 		icon.preview_ended.connect(func() -> void: _set_overlay(_locked_overlay))
 		icon.toggled.connect(_on_overlay_toggled.bind(icon))
 		_overlay_icons.add_child(icon)
+	# Compact overlay and wave panels: thinner margins than the other HUD panels.
+	var panel := _root.theme.get_stylebox("panel", "PanelContainer").duplicate() as StyleBoxFlat
+	panel.content_margin_left = 7
+	panel.content_margin_right = 7
+	panel.content_margin_top = 4
+	panel.content_margin_bottom = 4
+	_overlay_panel.add_theme_stylebox_override("panel", panel)
+	_top_bar.add_theme_stylebox_override("panel", panel)
+	_deck.windows = [_inventory_panel, _info_panel, _treasury_panel]
+	_notices.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_notices.add_theme_constant_override("separation", 4)
+	_root.add_child(_notices)
 
 
-## Shows a short notice above the gold display (finds queue up and show one after another).
+## Shows a notice below the overlay icons, e.g. a find or a level-up (newest at the bottom).
 func notify(text: String) -> void:
-	_notices.append(text)
+	var panel := PanelContainer.new()
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var label := Label.new()
+	label.text = text
+	label.add_theme_color_override("font_color", Color(0.94, 0.82, 0.54))
+	label.add_theme_font_size_override("font_size", 18)
+	panel.add_child(label)
+	panel.set_meta(&"left", NOTICE_TIME + NOTICE_FADE)
+	_notices.add_child(panel)
 
 
-func _update_notice(delta: float) -> void:
-	_notice_left -= delta
-	if _notice_left <= 0.0:
-		if _notices.is_empty():
-			_notice.visible = false
-			return
-		_notice_text.text = _notices[0]
-		_notices.remove_at(0)
-		_notice_left = NOTICE_TIME
-		_notice.visible = true
-	_notice.reset_size()
-	_notice.position.x = (_root.size.x - _notice.size.x) / 2.0
-	# Fade out over the last half second.
-	_notice.modulate.a = clampf(_notice_left / 0.5, 0.0, 1.0)
+func _update_notices(delta: float) -> void:
+	for panel: Control in _notices.get_children():
+		var left: float = panel.get_meta(&"left") - delta
+		panel.set_meta(&"left", left)
+		panel.modulate.a = clampf(left / NOTICE_FADE, 0.0, 1.0)
+		if left <= 0.0:
+			panel.queue_free()
+	_notices.reset_size()
 
 
 func _process(delta: float) -> void:
-	_update_notice(delta)
+	_update_notices(delta)
 	if combat:
-		_waves.set_pressed_no_signal(combat.waves_enabled)
-		_waves.text = "Waves: on" if combat.waves_enabled else "Waves: off"
-		_stats.text = "Enemies %d · Killed %d" % [combat.enemies().size(), combat.kills]
+		_waves.mode = &"pause" if combat.waves_enabled else &"play"
+		_waves.set_meta(&"info", "Waves are on – click to pause them (P)" if combat.waves_enabled else "Waves are paused – click to resume them (P)")
+		_stats.text = "Wave %d\nEnemies %d" % [combat.wave, combat.enemies().size()]
+		_stats.set_meta(&"info", "Wave %d · enemies in the sky: %d · killed so far: %d" % [combat.wave, combat.enemies().size(), combat.kills])
+		if not _edit_mode:
+			_update_mission()
 		_mission_tube.value = combat.mission_progress()
-		_mission_tube.tooltip_text = "Mission progress: %d / %d kills (placeholder until zones)" % [mini(combat.kills, combat.mission_kill_goal), combat.mission_kill_goal]
+		_mission_tube.set_meta(&"info", "Mission progress: %d / %d kills (placeholder until zones)" % [mini(combat.kills, combat.mission_kill_goal), combat.mission_kill_goal])
 	if view == null:
 		return
 	_treasury_text.text = _describe_treasury(view.island.treasury)
 	_treasury_panel.reset_size()
-	_treasury_panel.position.x = (_root.size.x - _treasury_panel.size.x) / 2.0
-	_info.text = _describe_tile(view.hovered_coord)
-	_info_panel.visible = _info.text != ""
-	_info_panel.reset_size()
+	_treasury_panel.position.x = _inventory_panel.position.x + (_inventory_panel.size.x - _treasury_panel.size.x) / 2.0
+	_info.text = _hover_text()
+	_overlay_panel.reset_size()
+	_notices.position = _overlay_panel.position + Vector2(0, _overlay_panel.size.y + 8.0)
+
+
+## Every hover text goes into the info window (no floating tooltips): an inventory slot,
+## any control with an "info" meta, an inventory tab, the tile under the mouse, or the
+## controls help when nothing is hovered.
+func _hover_text() -> String:
+	if not _inventory.hovered_item.is_empty():
+		return InventoryBar.describe(_inventory.hovered_item, view.island)
+	var hovered := get_viewport().gui_get_hovered_control()
+	var control := hovered
+	while control:
+		if control.has_meta(&"info"):
+			return control.get_meta(&"info")
+		control = control.get_parent_control()
+	var tab := _inventory.hovered_tab_info()
+	if tab != "":
+		return tab
+	# Over the UI (e.g. the console) the map below doesn't count as hovered.
+	var text := _describe_tile(view.hovered_coord) if hovered == null else ""
+	return text if text != "" else HELP
+
+
+## Edit mode: hides the wave controls and mission tube; the mission bar says what's going on
+## and its button saves and returns to the menu.
+func show_edit_mode() -> void:
+	_edit_mode = true
+	_top_bar.visible = false
+	_mission_tube.visible = false
+	_mission_panel.visible = true
+	_mission_text.text = "Editing island"
+	_leave.text = "Done"
+	_leave.visible = true
+	_leave.set_meta(&"info", "Save the island and return to the main menu")
+	_mission_panel.reset_size()
+	_mission_panel.position.x = (_root.size.x - _mission_panel.size.x) / 2.0
+
+
+## Top centre: countdown before the mission starts, then nothing, then "complete" with Leave.
+func _update_mission() -> void:
+	_leave.visible = combat.mission_done
+	if combat.mission_done:
+		_mission_text.text = "Mission complete"
+	elif combat.mission_countdown > 0.0:
+		_mission_text.text = "Mission starts in %d" % ceili(combat.mission_countdown)
+	_mission_panel.visible = combat.mission_done or combat.mission_countdown > 0.0
+	_mission_panel.reset_size()
+	_mission_panel.position.x = (_root.size.x - _mission_panel.size.x) / 2.0
 
 
 func _set_overlay(mode: StringName) -> void:
 	if view:
 		view.overlay = mode
-	_legend.text = "Map\noverlays" if mode == &"" else _legend_for(mode)
 
 
 func _on_overlay_toggled(on: bool, icon: OverlayIcon) -> void:
@@ -110,13 +199,6 @@ func _on_overlay_toggled(on: bool, icon: OverlayIcon) -> void:
 			(other as Button).set_pressed_no_signal(false)
 	_locked_overlay = icon.mode if on else &""
 	_set_overlay(_locked_overlay)
-
-
-static func _legend_for(mode: StringName) -> String:
-	for entry in OVERLAYS:
-		if entry[0] == mode:
-			return String(entry[1]).get_slice(":", 0)
-	return ""
 
 
 static func _describe_treasury(t: Treasury) -> String:

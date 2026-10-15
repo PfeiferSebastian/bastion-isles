@@ -10,12 +10,17 @@ const LIGHT := Color("e8e2d0")
 
 var kind: StringName
 var caption := ""
+## Gold price shown bottom left with a coin, or -1 for none.
+var price := -1
+## Small text in the top-left corner (e.g. a tower's level).
+var badge := ""
 
 
 func _init(icon_kind: StringName, caption_text: String, tooltip: String) -> void:
 	kind = icon_kind
 	caption = caption_text
-	tooltip_text = tooltip
+	if tooltip != "":
+		set_meta(&"info", tooltip)
 	toggle_mode = true
 	focus_mode = Control.FOCUS_NONE
 	custom_minimum_size = Vector2(SIZE, SIZE)
@@ -44,6 +49,12 @@ func _draw() -> void:
 		_:
 			_tower_symbol(c, r)
 	draw_polyline(hex + PackedVector2Array([hex[0]]), Color(0, 0, 0, 0.55), 1.5, true)
+	if price >= 0:
+		_draw_price()
+	if badge != "":
+		var bfont := get_theme_default_font()
+		draw_string_outline(bfont, Vector2(3, 13), badge, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, 4, Color(0, 0, 0, 0.85))
+		draw_string(bfont, Vector2(3, 13), badge, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, MenuTheme.CREAM)
 	if caption != "":
 		var font := get_theme_default_font()
 		var pos := Vector2(0, size.y - 4)
@@ -171,3 +182,16 @@ func _tower_symbol(c: Vector2, r: float) -> void:
 			draw_line(Vector2(box.position.x, box.end.y), Vector2(box.end.x, box.position.y), DARK, 1.5)
 		_:
 			_tower(c, r)
+
+
+## Gold coin with the price in the bottom-left corner.
+func _draw_price() -> void:
+	var coin := Vector2(9, size.y - 10)
+	draw_circle(coin + Vector2(0.5, 1), 6.5, Color(0, 0, 0, 0.5))
+	draw_circle(coin, 6.5, Color("8a6414"))
+	draw_circle(coin, 5.2, Color("f2c94c"))
+	draw_circle(coin + Vector2(-1.5, -1.5), 1.8, Color("fff3c4"))
+	var font := get_theme_default_font()
+	var pos := coin + Vector2(8, 4.5)
+	draw_string_outline(font, pos, str(price), HORIZONTAL_ALIGNMENT_LEFT, -1, 12, 4, Color(0, 0, 0, 0.85))
+	draw_string(font, pos, str(price), HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("f2c94c"))

@@ -26,7 +26,41 @@ const TYPES := {
 	},
 }
 
-## Share of each type in a mixed wave.
+## Light enemies make up the early waves; mediums are sprinkled in from MEDIUM_FROM_WAVE,
+## heavies (bombers) from HEAVY_FROM_WAVE. Waves only grow in size, never in strength.
+const LIGHT: Array[StringName] = [&"corsair", &"rammer"]
+const MEDIUM: Array[StringName] = [&"gunboat"]
+const HEAVY: Array[StringName] = [&"bomber"]
+const FIRST_WAVE_SIZE := 3
+const MEDIUM_FROM_WAVE := 3
+const HEAVY_FROM_WAVE := 6
+
+
+## Enemy types of wave `wave` (1-based), grouped by type so each group can fly as one
+## formation: e.g. wave 1 = 3 light, wave 3 = 4 light + 1 medium, wave 6 = 6 light, 1-2
+## medium, 1 heavy.
+static func wave_plan(wave: int) -> Array[StringName]:
+	var size := FIRST_WAVE_SIZE + (wave - 1)
+	var mediums := 0
+	var heavies := 0
+	if wave >= MEDIUM_FROM_WAVE:
+		mediums = maxi(1, int(size * minf(0.1 + 0.04 * (wave - MEDIUM_FROM_WAVE), 0.35)))
+	if wave >= HEAVY_FROM_WAVE:
+		heavies = maxi(1, int(size * minf(0.08 + 0.03 * (wave - HEAVY_FROM_WAVE), 0.2)))
+	var lights := size - mediums - heavies
+	var plan: Array[StringName] = []
+	# Light enemies come as one type per wave early on, both types mixed later.
+	for i in lights:
+		plan.append(LIGHT[(wave + (i * 2 / maxi(lights, 1) if wave >= MEDIUM_FROM_WAVE else 0)) % LIGHT.size()])
+	for i in mediums:
+		plan.append(MEDIUM[i % MEDIUM.size()])
+	for i in heavies:
+		plan.append(HEAVY[i % HEAVY.size()])
+	plan.sort()
+	return plan
+
+
+## Share of each type in a mixed random pick (debug keys, balance simulation).
 const WAVE_MIX := {&"rammer": 0.4, &"gunboat": 0.25, &"corsair": 0.2, &"bomber": 0.15}
 
 

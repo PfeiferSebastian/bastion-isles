@@ -1,14 +1,19 @@
 class_name Combat
 extends Node2D
-## Milestone 3 combat sandbox: spawns dummy enemies around the island, moves them
-## to the nearest tower, and lets Attack towers aim and fire based on their tile.
-## Keys: P toggles waves, W spawns a wave right away, F1-F4 spawn one enemy of each type.
+## Combat: sends waves of enemies (EnemyDefs.wave_plan) at the island in formations, moves
+## them by their behaviour, and lets the towers aim, fire and repair based on their tile.
+## Keys: P toggles waves, W spawns the next wave right away, F1-F4 spawn one enemy of each type.
 
 @export var island_view_path: NodePath
-@export var spawn_interval := 3.0
+## Seconds between waves; once the sky is clear the next wave comes after wave_gap_when_clear.
+@export var wave_interval := 20.0
+@export var wave_gap_when_clear := 4.0
 @export var spawn_distance := 700.0
-@export var wave_size := 5
-@export var max_enemies := 30
+@export var max_enemies := 60
+## Most ships in one formation; bigger groups split into several.
+@export var formation_size := 6
+## Formations break up and attack on their own this far (px) outside the island's edge.
+@export var formation_break_distance := 320.0
 ## Enemies stop and attack at this distance from a tower's centre.
 @export var contact_range := 38.0
 ## Enemies with nothing to attack hover at this distance from the HQ.
@@ -17,21 +22,28 @@ extends Node2D
 @export var building_seek_range := 340.0
 ## Placeholder mission until zones exist: progress is kills out of this many.
 @export var mission_kill_goal := 100
+## Seconds before the first enemies come, so the player can look around and build.
+@export var mission_start_delay := 10.0
 ## Seconds without enemies after which the fight counts as over and the ground is repaired.
 @export var battle_end_delay := 5.0
-## How close an enemy must be to a laser's line to get hit.
-@export var beam_hit_radius := 12.0
 
 ## A rare drop was found (biome stone or blueprint), for the HUD notice.
 signal item_found(text: String)
+## The mission goal is reached: no more enemies spawn and the player may leave.
+signal mission_completed
 
 var waves_enabled := true
 var kills := 0
+## Seconds until the mission starts (enemies spawn only after that).
+var mission_countdown := 0.0
+var mission_done := false
 ## Fog of war; when set, towers only target enemies in open sky. Null = everything visible.
 var fog: FogOfWar
 
 var _view: IslandView
-var _spawn_timer := 0.0
+## Waves sent so far.
+var wave := 0
+var _wave_timer := 0.0
 var _quiet_time := 0.0
 var _enemy_layer := Node2D.new()
 var _projectile_layer := Node2D.new()
@@ -56,14 +68,18 @@ func _ready() -> void:
 	_view = get_node(island_view_path)
 	add_child(_enemy_layer)
 	add_child(_projectile_layer)
+	mission_countdown = mission_start_delay
 
 
 func _process(delta: float) -> void:
-	if waves_enabled:
-		_spawn_timer -= delta
-		if _spawn_timer <= 0.0:
-			_spawn_timer = spawn_interval
-			spawn_enemy()
+	if mission_countdown > 0.0:
+		mission_countdown = maxf(mission_countdown - delta, 0.0)
+	elif waves_enabled and not mission_done:
+		_wave_timer -= delta
+		if enemies().is_empty():
+			_wave_timer = minf(_wave_timer, wave_gap_when_clear)
+		if _wave_timer <= 0.0:
+			spawn_wave()
 	_beams.clear()
 	_beam_colors.clear()
 	for enemy in enemies():
@@ -115,20 +131,57 @@ func enemies() -> Array[Enemy]:
 	return result
 
 
+## Sends the next wave right away (also ends the start countdown early). Each type flies in
+## its own formations, coming from roughly the same side of the sky.
 func spawn_wave() -> void:
-	for i in wave_size:
-		spawn_enemy()
+	if mission_done:
+		return
+	mission_countdown = 0.0
+	_wave_timer = wave_interval
+	wave += 1
+	var groups: Array = []
+	for kind in EnemyDefs.wave_plan(wave):
+		if groups.is_empty() or groups[-1][0] != kind or groups[-1].size() >= formation_size:
+			groups.append([kind])
+		else:
+			groups[-1].append(kind)
+	var side := randf() * TAU
+	for i in groups.size():
+		var angle := side + (i - (groups.size() - 1) / 2.0) * 0.45 + randf_range(-0.1, 0.1)
+		_spawn_formation(groups[i], angle)
 
 
-## Spawns one enemy of `kind` (random mix if empty) on a ring around the island.
-func spawn_enemy(kind: StringName = &"", factor := 1.0) -> Enemy:
-	if enemies().size() >= max_enemies:
+## Ships of `kinds` in a V, the first one leading, coming in from `angle`.
+func _spawn_formation(kinds: Array, angle: float) -> void:
+	var leader: Enemy = null
+	var inward := Vector2.from_angle(angle + PI)
+	for i in kinds.size():
+		# V shape: rows behind the leader, alternating left and right.
+		var row := (i + 1) / 2
+		var offset := Vector2(-row * 40.0, (1 if i % 2 == 1 else -1) * row * 34.0) if i > 0 else Vector2.ZERO
+		var at := _view.global_position + Vector2.from_angle(angle) * spawn_distance + offset.rotated(inward.angle())
+		var enemy := spawn_enemy(kinds[i], 1.0, at)
+		if enemy == null:
+			return
+		if kinds.size() > 1:
+			enemy.in_formation = true
+			enemy.formation_leader = leader
+			enemy.formation_offset = offset
+			enemy.face(inward.angle())
+		if leader == null:
+			leader = enemy
+
+
+## Spawns one enemy of `kind` (random mix if empty) on a ring around the island; none once
+## the mission is done.
+func spawn_enemy(kind: StringName = &"", factor := 1.0, at: Variant = null) -> Enemy:
+	if mission_done or enemies().size() >= max_enemies:
 		return null
 	var enemy := Enemy.new()
 	enemy.setup(kind if kind != &"" else EnemyDefs.pick_random(), factor)
 	enemy.died.connect(_on_enemy_died)
 	_enemy_layer.add_child(enemy)
-	enemy.global_position = _view.global_position + Vector2.from_angle(randf() * TAU) * spawn_distance
+	enemy.global_position = at if at != null else _view.global_position + Vector2.from_angle(randf() * TAU) * spawn_distance
 	return enemy
 
 
@@ -164,6 +217,9 @@ func _on_enemy_died(enemy: Enemy) -> void:
 		treasury.add_blueprint(loot.blueprint)
 		popup(at + Vector2(0, -32), "Blueprint: " + String(loot.blueprint).capitalize(), Color("f0d28a"))
 		item_found.emit("Blueprint found: %s" % String(loot.blueprint).capitalize())
+	if not mission_done and kills >= mission_kill_goal:
+		mission_done = true
+		mission_completed.emit()
 
 
 ## Short floating text in the world (loot, "not enough gold"…).
@@ -175,6 +231,8 @@ func popup(world_position: Vector2, text: String, color: Color) -> void:
 
 func _move_and_attack(enemy: Enemy, delta: float) -> void:
 	enemy.cooldown_left = maxf(enemy.cooldown_left - delta, 0.0)
+	if enemy.in_formation and _fly_in_formation(enemy, delta):
+		return
 	match enemy.behaviour:
 		&"standoff":
 			_standoff(enemy, delta)
@@ -184,6 +242,30 @@ func _move_and_attack(enemy: Enemy, delta: float) -> void:
 			_flyover(enemy, delta)
 		_:
 			_ram(enemy, delta)
+
+
+## Formation flight: the leader heads straight for the island, the others keep their place
+## in the V. Near the island (or when the leader is gone) the formation breaks up and every
+## ship follows its own behaviour. Returns false once `enemy` has left the formation.
+func _fly_in_formation(enemy: Enemy, delta: float) -> bool:
+	var center := _view.global_position
+	var leader := enemy.formation_leader
+	if enemy.formation_offset == Vector2.ZERO:   # the leader
+		if enemy.global_position.distance_to(center) <= _island_radius_px() + formation_break_distance:
+			enemy.in_formation = false
+			return false
+		_approach(enemy, center, 0.0, delta)
+		return true
+	if not is_instance_valid(leader) or leader.is_dead or not leader.in_formation:
+		enemy.in_formation = false
+		enemy.formation_leader = null
+		return false
+	var goal := leader.global_position + enemy.formation_offset.rotated(leader.rotation)
+	var to := goal - enemy.global_position
+	# Catch up a little faster than the leader flies, so the V stays tight.
+	enemy.global_position += to.limit_length(enemy.speed * 1.25 * delta)
+	enemy.face(leader.rotation)
+	return true
 
 
 ## Target for an enemy at `from`: a building within seek reach, otherwise the nearest ground.
@@ -339,7 +421,7 @@ func _towers_attack(delta: float) -> void:
 		if beams > 0:
 			var beam_power := EnergyGrid.draw_energy(island, coord, profile.beam_energy * beams * delta)
 			for i in beams:
-				_fire_beam(origin, targets[i], range_px, profile, beam_power, delta)
+				_fire_beam(origin, targets[i], profile, beam_power, delta)
 		if profile.has_projectile() and tower.attack_cooldown <= 0.0:
 			var power := EnergyGrid.draw_energy(island, coord, profile.energy_per_shot)
 			if power > 0.0:
@@ -374,16 +456,12 @@ func _targets_in_range(origin: Vector2, range_px: float) -> Array[Enemy]:
 	return result
 
 
-## The laser pierces: it runs to full range and hits every enemy along the line.
-func _fire_beam(origin: Vector2, target: Enemy, range_px: float, profile: AttackProfile, power: float, delta: float) -> void:
+## The laser stops at its target and only damages that enemy.
+func _fire_beam(origin: Vector2, target: Enemy, profile: AttackProfile, power: float, delta: float) -> void:
 	if power <= 0.0:
 		return
-	var end := origin + (target.global_position - origin).normalized() * range_px
-	for enemy in enemies():
-		var closest := Geometry2D.get_closest_point_to_segment(enemy.global_position, origin, end)
-		if closest.distance_to(enemy.global_position) <= beam_hit_radius:
-			enemy.take_damage(profile.beam_dps * power * delta)
-	_beams.append(PackedVector2Array([origin, end]))
+	target.take_damage(profile.beam_dps * power * delta)
+	_beams.append(PackedVector2Array([origin, target.global_position]))
 	_beam_colors.append(profile.beam_color)
 
 

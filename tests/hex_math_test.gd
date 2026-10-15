@@ -428,7 +428,8 @@ func _test_economy() -> void:
 	_check(inv.take(Inventory.tower_item(&"wall", 1)) and inv.count(Inventory.tower_item(&"wall", 1)) == 1, "take one from a stack")
 	_check(not inv.take(Inventory.stone_item(Biome.Type.FOREST)), "no forest stone yet")
 	var island := Island.create_starter(2)
-	_check(Economy.tile_cost(island) == Economy.TILE_BASE_COST + Economy.TILE_COST_PER_TILE * 19, "tile price grows with the island")
+	_check(Economy.tile_cost(island) == Economy.TILE_BASE_COST + 19 / Economy.TILES_PER_EXTRA_GOLD, "tile price grows with the island")
+	_check(Economy.price_of(Inventory.stone_item(Biome.Type.FOREST), island) == -1, "biome stones cannot be bought")
 	_check(island.treasury.gold == Economy.STARTING_GOLD, "island starts with gold")
 	for type in [&"attack", &"wall", &"energy", &"repair"]:
 		_check(island.treasury.inventory.count(Inventory.tower_item(type)) == 1, "island starts with one %s" % type)
@@ -445,7 +446,8 @@ func _test_economy() -> void:
 	for i in 400:
 		weak_drops += 1 if Economy.roll_loot(weak, t, rng).stone >= 0 else 0
 		strong_drops += 1 if Economy.roll_loot(strong, t, rng).stone >= 0 else 0
-	_check(Economy.roll_loot(weak, t, rng).gold == 5, "rammer gives 5 gold")
+	_check(Economy.roll_loot(weak, t, rng).gold == 1, "light enemy gives 1 gold")
+	_check(Economy.kill_gold(strong) == 5, "heavy enemy gives 5 gold")
 	_check(Economy.kill_gold(strong) > Economy.kill_gold(weak), "stronger enemies give more gold")
 	_check(strong_drops > weak_drops * 3, "stronger enemies drop stones more often")
 	weak.free()

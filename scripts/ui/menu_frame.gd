@@ -104,33 +104,17 @@ func _draw_pipes() -> void:
 
 ## Straight pipe from `a` to `b` with a dark outline, highlight and shadow side.
 func _pipe(a: Vector2, b: Vector2, width: float) -> void:
-	var d := (b - a).normalized()
-	var n := Vector2(-d.y, d.x)
-	if n.x + n.y < 0.0:
-		n = -n   # shading side: right / bottom
-	draw_line(a, b, COPPER.darkened(0.55), width + 3.0)
-	draw_line(a, b, COPPER, width)
-	draw_line(a + n * width * 0.28, b + n * width * 0.28, COPPER.darkened(0.3), width * 0.35)
-	draw_line(a - n * width * 0.22, b - n * width * 0.22, COPPER.lightened(0.45), maxf(1.5, width * 0.18))
+	SteamParts.pipe(self, a, b, width)
 
 
 ## Quarter bend around `center` from angle `from` to `to`.
 func _elbow(center: Vector2, radius: float, from: float, to: float, width: float) -> void:
-	draw_arc(center, radius, from, to, 12, COPPER.darkened(0.55), width + 3.0, true)
-	draw_arc(center, radius, from, to, 12, COPPER, width, true)
-	draw_arc(center, radius - width * 0.22, from, to, 12, COPPER.lightened(0.45), maxf(1.5, width * 0.18), true)
+	SteamParts.elbow(self, center, radius, from, to, width)
 
 
 ## Bolted ring around a pipe.
 func _flange(at: Vector2, width: float, vertical_pipe: bool) -> void:
-	var size_v := Vector2(width + 10.0, 7.0) if vertical_pipe else Vector2(7.0, width + 10.0)
-	var r := Rect2(at - size_v / 2.0, size_v)
-	draw_rect(r.grow(1.0), BRASS_DARK)
-	draw_rect(r, BRASS)
-	draw_line(r.position + Vector2(1, 1), Vector2(r.end.x - 1, r.position.y + 1), BRASS_LIGHT, 1.0)
-	var bolts := [r.position + Vector2(2.5, 2.5), r.end - Vector2(2.5, 2.5)]
-	for b in bolts:
-		draw_circle(b, 1.4, IRON)
+	SteamParts.flange(self, at, width, vertical_pipe)
 
 
 ## Riveted brass box the pipe comes out of.
@@ -258,19 +242,5 @@ func _draw_gears() -> void:
 
 
 func _gear(center: Vector2, radius: float, teeth: int, angle: float, color: Color) -> void:
-	var points := PackedVector2Array()
-	var tooth := TAU / teeth
-	for t in teeth:
-		var a := angle + t * tooth
-		points.append(center + Vector2.from_angle(a) * radius * 0.82)
-		points.append(center + Vector2.from_angle(a + tooth * 0.15) * radius)
-		points.append(center + Vector2.from_angle(a + tooth * 0.45) * radius)
-		points.append(center + Vector2.from_angle(a + tooth * 0.6) * radius * 0.82)
-	draw_colored_polygon(points, color)
-	draw_polyline(points + PackedVector2Array([points[0]]), color.darkened(0.45), 2.0, true)
-	draw_circle(center, radius * 0.6, color.darkened(0.15))
-	for s in 4:
-		var a := angle + s * TAU / 4.0
-		draw_line(center, center + Vector2.from_angle(a) * radius * 0.6, color.darkened(0.45), radius * 0.12, true)
-	draw_circle(center, radius * 0.2, color.lightened(0.2))
-	draw_circle(center, radius * 0.08, IRON)
+	SteamParts.gear(self, center, radius, teeth, angle, color)
+

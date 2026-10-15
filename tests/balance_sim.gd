@@ -92,6 +92,7 @@ func _simulate(biome: Biome.Type, config: Dictionary, run_seed: int) -> Dictiona
 	combat.battle_end_delay = INF  # one long fight: damage carries over between waves
 	combat.spawn_distance = SPAWN_DISTANCE
 	combat.max_enemies = 100000
+	combat.mission_kill_goal = 1 << 30  # never ends the mission (it would stop spawning)
 	world.add_child(combat)
 	root.add_child(world)
 	await process_frame  # _ready() runs once the world is inside the tree
