@@ -7,7 +7,7 @@ var type: StringName
 var hp: float
 var shield := 0.0
 var time_since_damage := 0.0
-## Seconds until an Attack tower may fire its next projectile.
+## Seconds until the tower may act again (Attack: next projectile, Repair: next heal).
 var attack_cooldown := 0.0
 
 

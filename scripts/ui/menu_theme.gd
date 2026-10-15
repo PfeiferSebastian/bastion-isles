@@ -55,6 +55,30 @@ static func build() -> Theme:
 	return theme
 
 
+## Smaller variant for the in-game HUD: compact buttons and panels, smaller lettering.
+static func build_hud() -> Theme:
+	var theme := build()
+	theme.default_font_size = 17
+	for state in ["normal", "hover", "pressed"]:
+		var box := (theme.get_stylebox(state, "Button") as StyleBoxFlat).duplicate() as StyleBoxFlat
+		box.content_margin_left = 10
+		box.content_margin_right = 10
+		box.content_margin_top = 5 + (2 if state == "pressed" else 0)
+		box.content_margin_bottom = 5 - (2 if state == "pressed" else 0)
+		box.set_corner_radius_all(7)
+		theme.set_stylebox(state, "Button", box)
+	var panel := (theme.get_stylebox("panel", "PanelContainer") as StyleBoxFlat).duplicate() as StyleBoxFlat
+	panel.bg_color = Color(MenuTheme.PANEL, 0.88)
+	panel.set_border_width_all(3)
+	panel.content_margin_left = 12
+	panel.content_margin_right = 12
+	panel.content_margin_top = 8
+	panel.content_margin_bottom = 8
+	theme.set_stylebox("panel", "PanelContainer", panel)
+	theme.set_constant("outline_size", "Label", 3)
+	return theme
+
+
 ## Brass-rimmed plate: dark fill, metal border, rounded corners, soft drop shadow.
 static func _plate(fill: Color, rim: Color, shift_down := 0, border := 3) -> StyleBoxFlat:
 	var box := StyleBoxFlat.new()

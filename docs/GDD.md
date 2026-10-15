@@ -256,6 +256,13 @@ The Tier 0 behaviour, i.e. the base version on a neutral tile:
 - **HP, shield and energy share the hex edge**, each on its own arc of **at least 2 sides**: shield top → lower right (dashed blue), energy along the bottom (yellow, red track when empty), HP on the remaining sides. Without shield or storage, HP takes over those sides.
 - **Hovering a building tints the tiles it affects**: energy generators by how much arrives, walls their buffed neighbours, attack towers their range. ✅ The same should come for Repair and the other towers once they have effects.
 
+### 6.5c Combat screen UI ✅ (prototype, 2026-10-15)
+- Top: wave toggle, "spawn wave" and enemy/kill counter. Top left: info panel for the hovered tile. Bottom middle: build bar.
+- **Map overlay icons** (bottom left): **Energy, Repair, Hitpoints, Tiers**. Hovering an icon highlights the matching data on all tiles; clicking locks the overlay on.
+- **Build bar ✅:** hexagon symbols – Tower: light tower on dark hex · Tile: plus on sand · Forest: dark green tree · Mountain: grey mountain on red · Desert: sand dunes · Plains: horizon (beige land, white sky) · Swamp: pond with reeds.
+- **Energy overlay ✅:** storages are saturated by their reserve (grey = empty, full yellow = full) with the % shown.
+- **Tier display (interim) ✅:** colour shades – **light = Tier 0, dark = Tier 7**. Biome tiles get darker with every tier; the Tier overlay shows a light-to-dark ramp with the number.
+
 ### 6.6 Chips & items ✅
 - **Chips** are rule sets slotted into **one specific tower or fused complex**. They do not affect other towers of the same type.
 - A chip works like a **priority table**. Examples:
@@ -331,6 +338,13 @@ How each biome changes each base tower. Tier 0 has no traits (6.1); the trait gr
 | **Desert** | **Jumping pulses:** fast, small heals that jump to several targets | ✅ A **continuous healing beam** is a bigger fused Repair tower (e.g. 3 or more tiles/biomes) |
 | **Plains** | **Redistribution:** moves HP from healthy tiles to damaged ones; very cheap in energy | 💡 T3: larger radius · T6: also redistributes energy |
 | **Swamp** | **Lifesteal:** heals by draining life from enemies | 💡 T3: several enemies at once · T6: surplus is stored as energy |
+
+- ✅ **Prototype implementation (2026-10-15)**, numbers 💡 placeholders:
+  - Repair towers heal **towers and ground**, weakest (lowest HP share) first, and only pay energy when they actually heal.
+  - Neutral: 15 HP / 1 s, reach 2 (100/100/60%), 3 energy · Forest: 50 HP over 8 s / 2 s, 1 energy · Mountain: 70 HP / 5 s, 6 energy · Desert: 5 HP × 3 targets / 0.4 s, 1 energy · Plains: moves 12 HP / 1 s from a clearly healthier target (stays above 50%), 0.5 energy · Swamp: drains 10 HP / 1 s from the nearest enemy and heals with it, 1 energy.
+  - Amount +25% per tier above 1; Desert efficiency shortens the cooldown.
+  - Repaired **Wasteland turns back into ground at 50% HP**.
+  - Not yet: Tier 3/6 milestones (e.g. Forest restoring tiers), the Desert healing-beam fusion.
 
 #### Aura in detail ✅
 
@@ -446,6 +460,10 @@ How long battle damage to tiers lasts (8.4) could **define the difficulty**, or 
 | **Plains** | ❓ |
 
 - Tiles can be **repaired** during combat (Forest effects, skills).
+- ✅ **Ground HP (prototype, 2026-10-15):** every tile and the HQ have their own structure HP – **a lot**, so the ground outlasts buildings. 💡 HQ 2000, tiles 300 + 100 per tier.
+- ✅ **Enemy priority:** enemies attack **buildings within reach first**; tiles and the HQ are only attacked when no building is in reach (💡 reach ≈ 4 hexes).
+- Prototype: a tile at 0 HP becomes Wasteland (no aura, blocks energy, nothing can be built). The HQ stays at 0 HP for now (❓ game over later). Simplified until tier loss (above) is built: HP loss doesn't lower tiers yet.
+- Prototype: the fight counts as over after 5 s without enemies; then Wasteland turns back and all ground is repaired.
 
 ### 8.5 Player control
 - Units and towers act on their own according to their scripts.

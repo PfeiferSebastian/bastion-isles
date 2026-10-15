@@ -11,6 +11,10 @@ var is_hq := false
 var tower: Tower = null
 ## Stored energy; capacity comes from EnergyGrid.capacity().
 var energy := 0.0
+## Structure of the ground itself; max comes from Island.tile_max_hp().
+var hp := 0.0
+## Wasteland: destroyed in battle, until the fight is over (GDD §4.6).
+var destroyed := false
 
 
 func _init(at: Vector2i, type: Biome.Type = Biome.Type.NEUTRAL) -> void:
@@ -23,10 +27,10 @@ func set_biome(type: Biome.Type) -> void:
 	tier = 0 if type == Biome.Type.NEUTRAL else 1
 
 
-## Destroyed tiles will block the energy layer once tile damage exists (milestone 5).
+## Wasteland blocks the energy layer.
 func blocks_energy() -> bool:
-	return false
+	return destroyed
 
 
 func is_free() -> bool:
-	return not is_hq and tower == null
+	return not is_hq and not destroyed and tower == null

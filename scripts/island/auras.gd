@@ -54,6 +54,8 @@ static func describe(effects: Dictionary) -> String:
 
 
 static func _add(result: Dictionary, table: Dictionary, tile: IslandTile) -> void:
+	if tile.destroyed:
+		return
 	var effects: Dictionary = table.get(tile.biome, {})
 	for key in effects:
 		result[key] = result.get(key, 0.0) + effects[key] * tile.tier
