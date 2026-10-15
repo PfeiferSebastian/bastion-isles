@@ -72,7 +72,7 @@ func _rebuild() -> void:
 
 func _add_slot(kind: StringName, item: Dictionary, prefix := "") -> void:
 	var amount := view.island.treasury.inventory.count(item)
-	var slot := ToolIcon.new(kind, "%s×%d" % [prefix, amount], Inventory.label_of(item) + "\nClick to select, or drag onto the island")
+	var slot := ToolIcon.new(kind, "%s×%d" % [prefix, amount], _tooltip(item))
 	slot.set_meta(&"item", item)
 	slot.button_group = _group
 	slot.modulate = Color.WHITE if amount > 0 else Color(1, 1, 1, 0.4)
@@ -88,3 +88,14 @@ func _add_buy(text: String, item: Dictionary, price: int) -> void:
 	button.disabled = view.island.treasury.gold < price
 	button.pressed.connect(func() -> void: view.island.treasury.buy(item, price))
 	_slots.add_child(button)
+
+
+## Name, what it does (biome stones and tiles) and how to place it.
+static func _tooltip(item: Dictionary) -> String:
+	var text := Inventory.label_of(item)
+	match item.kind:
+		&"stone":
+			text += "\n" + Biome.description_of(item.biome)
+		&"tile":
+			text += "\nNew neutral ground next to the island.\n" + Biome.description_of(Biome.Type.NEUTRAL)
+	return text + "\n\nClick to select, or drag onto the island."
