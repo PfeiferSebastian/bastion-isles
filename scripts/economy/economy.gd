@@ -17,8 +17,8 @@ const KILL_GOLD := {&"corsair": 1, &"rammer": 1, &"gunboat": 3, &"bomber": 5}
 ## ships a little more). Biome stones are very rare; blueprints of something the player has
 ## none of are a little likelier.
 const STONE_DROP_CHANCE := 0.001
-const BLUEPRINT_DROP_CHANCE := 0.01
-const MISSING_BLUEPRINT_DROP_CHANCE := 0.012
+const BLUEPRINT_DROP_CHANCE := 0.02
+const MISSING_BLUEPRINT_DROP_CHANCE := 0.024
 const MAX_DROP_CHANCE := 0.6
 
 
