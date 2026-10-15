@@ -1,3 +1,6 @@
 # Godot 4+ specific ignores
 .godot/
 /android/
+
+# Purchased art (Unity Asset Store license): not for redistribution, each collaborator adds their own copy
+assets/third_party/
