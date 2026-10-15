@@ -112,6 +112,8 @@ func _describe_tile(coord: Vector2i) -> String:
 		lines.append("Attack: " + _describe_attack(AttackProfiles.for_tile(view.island, coord)))
 	if tower and tower.type == &"aura":
 		lines.append("Aura: " + _describe_aura(AuraProfiles.for_tile(view.island, coord), tower.aura_power))
+	if tower and tower.type == &"scout":
+		lines.append("Scout: " + _describe_scout(ScoutProfiles.for_tile(view.island, coord), tower.aura_power))
 	if tower and tower.type == &"repair":
 		lines.append("Repair: " + _describe_repair(RepairProfiles.for_tile(view.island, coord)))
 	return "\n".join(lines)
@@ -169,3 +171,8 @@ static func _describe_aura(p: AuraProfile, power: float) -> String:
 		parts.append("tile auras +%d%%" % roundi(p.tile_aura_boost * 100.0))
 	var state := "no energy – off" if power <= 0.0 else ("%d%% power" % roundi(power * 100.0))
 	return "%s · radius %d · %.1f energy/s · %s" % [" · ".join(parts), p.radius, p.energy_per_second, state]
+
+
+static func _describe_scout(p: ScoutProfile, power: float) -> String:
+	var state := "no energy – blind" if power <= 0.0 else ("%d%% power" % roundi(power * 100.0))
+	return "keeps radius %d open · sky stays open ×%.1f after · %.1f energy/s · %s" % [p.radius, p.hold_factor, p.energy_per_second, state]

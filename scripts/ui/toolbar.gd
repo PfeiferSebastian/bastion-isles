@@ -5,7 +5,7 @@ extends HBoxContainer
 signal tool_selected(tool: IslandView.Tool, biome: Biome.Type)
 
 const BIOMES: Array[Biome.Type] = [
-	Biome.Type.FOREST, Biome.Type.MOUNTAIN, Biome.Type.DESERT, Biome.Type.PLAINS, Biome.Type.SWAMP,
+	Biome.Type.FOREST, Biome.Type.MOUNTAIN, Biome.Type.PLAINS, Biome.Type.SWAMP, Biome.Type.LAKE,
 ]
 
 var _group := ButtonGroup.new()

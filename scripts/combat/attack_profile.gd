@@ -6,7 +6,7 @@ extends RefCounted
 # Projectile part
 var damage := 0.0
 var cooldown := 1.0
-var range_hexes := 3.0
+var range_hexes := 4.5
 var projectile_speed := 420.0
 var projectile_size := 4.0
 var color := Color.WHITE

@@ -15,11 +15,6 @@ static func base(biome: Biome.Type) -> EnergyProfile:
 			# Geothermal: highest output, 100% to neighbours, 40% at 2 hexes, 10% at 3.
 			p.output = 10.0
 			p.falloff = PackedFloat32Array([1.0, 1.0, 0.4, 0.1])
-		Biome.Type.DESERT:
-			# Solar: long reach with little loss (cloud dependence comes with fog of war).
-			p.output = 6.0
-			p.falloff = PackedFloat32Array([1.0, 1.0, 0.9, 0.8, 0.7])
-			p.special = &"solar"
 		Biome.Type.FOREST:
 			# Root network: little output, boosts passive production of its connected forest.
 			p.output = 2.0

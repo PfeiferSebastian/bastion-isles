@@ -9,7 +9,7 @@ var shield := 0.0
 var time_since_damage := 0.0
 ## Seconds until the tower may act again (Attack: next projectile, Repair: next heal).
 var attack_cooldown := 0.0
-## Aura towers: how strongly the aura works right now (0 = no energy, 1 = full).
+## Aura and Scout towers: how strongly they work right now (0 = no energy, 1 = full).
 var aura_power := 0.0
 
 

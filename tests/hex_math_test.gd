@@ -18,6 +18,8 @@ func _init() -> void:
 	_test_ground_damage()
 	_test_healing()
 	_test_aura_towers()
+	_test_enemy_types()
+	_test_fog_of_war()
 	print("hex_math_test: %s" % ("OK" if _failures == 0 else "%d FAILED" % _failures))
 	quit(1 if _failures > 0 else 0)
 
@@ -79,7 +81,7 @@ func _test_biomes_and_auras() -> void:
 	_check(island.set_biome(c, Biome.Type.MOUNTAIN), "biome stone on neutral tile")
 	_check(island.get_tile(c).tier == 1, "biome tile starts at tier 1")
 	_check(not island.set_biome(Island.HQ_COORD, Biome.Type.FOREST), "hq stays neutral")
-	_check(island.add_tile(Vector2i(3, 0), Biome.Type.DESERT), "biome stone as new tile")
+	_check(island.add_tile(Vector2i(3, 0), Biome.Type.LAKE), "biome stone as new tile")
 	_check(island.get_tile(Vector2i(3, 0)).tier == 1, "new biome tile is tier 1")
 	# Mountain aura reaches the tile itself and its neighbours, scaled by tier.
 	_check(is_equal_approx(island.aura_at(c).get(&"max_hp", 0.0), 0.05), "own mountain aura")
@@ -100,18 +102,18 @@ func _test_health() -> void:
 	_check(is_equal_approx(island.tower_max_hp(c), 105.0), "mountain raises max hp")
 	island.damage_tower(c, 30.0)
 	_check(is_equal_approx(island.get_tower(c).hp, 75.0), "damage lowers hp")
-	# Forest neighbour regenerates 1% of max hp per second.
+	# Forest tiles give no healing aura (their trait is passive energy).
 	island.set_biome(Vector2i(2, 0), Biome.Type.FOREST)
 	island.tick(10.0)
-	_check(is_equal_approx(island.get_tower(c).hp, 75.0 + 10.5), "forest regen")
-	# Desert spreads 10% per tier of incoming damage to neighbouring towers.
+	_check(is_equal_approx(island.get_tower(c).hp, 75.0), "forest tiles do not heal neighbours")
+	# Plains spreads 10% per tier of incoming damage to neighbouring towers.
 	var d := Vector2i(-1, 0)
-	island.set_biome(d, Biome.Type.DESERT)
+	island.set_biome(d, Biome.Type.PLAINS)
 	island.place_tower(d, &"attack")
 	island.place_tower(Vector2i(-2, 0), &"attack")
 	island.damage_tower(d, 50.0)
-	_check(is_equal_approx(island.get_tower(Vector2i(-2, 0)).hp, 95.0), "desert spread to neighbour")
-	_check(is_equal_approx(island.get_tower(d).hp, 55.0), "desert keeps the rest")
+	_check(is_equal_approx(island.get_tower(Vector2i(-2, 0)).hp, 95.0), "plains spreads damage to neighbour")
+	_check(is_equal_approx(island.get_tower(d).hp, 55.0), "plains keeps the rest")
 	# Plains shield absorbs damage first.
 	var p := Vector2i(0, 2)
 	island.set_biome(p, Biome.Type.PLAINS)
@@ -142,39 +144,17 @@ func _test_attack_profiles() -> void:
 	var island := Island.create_starter(2)
 	var c := Vector2i(1, 0)
 	var neutral := AttackProfiles.for_tile(island, c)
-	_check(neutral.damage == 10.0 and neutral.beam_dps == 0.0, "neutral shoots plain projectiles")
+	_check(neutral.damage == 11.0 and neutral.beam_dps == 0.0, "neutral shoots plain projectiles")
 	island.set_biome(c, Biome.Type.MOUNTAIN)
 	var mountain := AttackProfiles.for_tile(island, c)
 	_check(mountain.damage > neutral.damage and mountain.range_hexes > neutral.range_hexes, "mountain shells hit harder and further")
 	island.set_tier(c, 3)
-	_check(is_equal_approx(AttackProfiles.for_tile(island, c).damage, 45.0), "damage scales with tier")
-	island.set_biome(c, Biome.Type.DESERT)
-	var desert := AttackProfiles.for_tile(island, c)
-	_check(desert.beam_dps > 0.0 and not desert.has_projectile(), "desert fires a laser")
-	# Desert efficiency aura speeds up a neighbour's attack.
-	_check(AttackProfiles.for_tile(island, Vector2i(2, 0)).cooldown < neutral.cooldown, "desert efficiency shortens cooldown")
-	# Plains morph: 3 Desert + 1 Swamp neighbours -> 3 lasers plus a light weaken.
-	var morph_island := Island.create_starter(2)
-	var p := Vector2i(1, -1)
-	morph_island.set_biome(p, Biome.Type.PLAINS)
-	var ring := HexMath.neighbors(p)
-	for i in 3:
-		_paint(morph_island, ring[i], Biome.Type.DESERT)
-	_paint(morph_island, ring[3], Biome.Type.SWAMP)
-	var morph := AttackProfiles.morph(morph_island, p)
-	_check(morph.beam_count == 3, "plains morph: one laser per desert neighbour")
-	_check(is_equal_approx(morph.weaken, 0.1), "plains morph: swamp share of weaken")
-	var lonely := Island.create_starter(2)
-	lonely.set_biome(Vector2i(2, 0), Biome.Type.PLAINS)
-	_check(AttackProfiles.morph(lonely, Vector2i(2, 0)).damage == 10.0, "plains without biome neighbours shoots like neutral")
-
-
-## Biome stone on an existing tile, or a new biome tile if the hex is empty.
-func _paint(island: Island, coord: Vector2i, biome: Biome.Type) -> void:
-	if island.has_tile(coord):
-		island.set_biome(coord, biome)
-	else:
-		island.add_tile(coord, biome)
+	_check(is_equal_approx(AttackProfiles.for_tile(island, c).damage, 54.0), "damage scales with tier")
+	island.set_biome(c, Biome.Type.PLAINS)
+	var plains := AttackProfiles.for_tile(island, c)
+	_check(plains.beam_dps > 0.0 and not plains.has_projectile(), "plains fires a laser")
+	island.set_biome(c, Biome.Type.LAKE)
+	_check(AttackProfiles.for_tile(island, c).damage == 11.0, "lake attack is a neutral placeholder")
 
 
 func _test_enemy_statuses() -> void:
@@ -274,13 +254,13 @@ func _test_ground_damage() -> void:
 	_check(island.get_tile(Island.HQ_COORD).hp == Island.HQ_MAX_HP, "hq starts with full hp")
 	var c := Vector2i(2, 0)
 	_check(island.get_tile(c).hp == Island.TILE_BASE_HP, "tier 0 tile has ground hp")
-	island.set_biome(c, Biome.Type.FOREST)
+	island.set_biome(c, Biome.Type.MOUNTAIN)
 	_check(island.tile_max_hp(c) == Island.TILE_BASE_HP + Island.TILE_HP_PER_TIER, "biome tiles are sturdier")
 	island.damage_tile(c, 10000.0)
 	var tile := island.get_tile(c)
 	_check(tile.destroyed and tile.blocks_energy(), "tile at 0 hp becomes wasteland and blocks energy")
 	_check(not island.can_place(c), "nothing can be built on wasteland")
-	_check(not island.aura_at(Vector2i(1, 0)).has(&"regen"), "wasteland gives no aura")
+	_check(not island.aura_at(Vector2i(1, 0)).has(&"max_hp"), "wasteland gives no aura")
 	island.damage_tile(Island.HQ_COORD, 10000.0)
 	_check(not island.get_tile(Island.HQ_COORD).destroyed, "hq never turns into wasteland")
 	_check(island.has_battle_damage(), "battle damage is tracked")
@@ -321,7 +301,6 @@ func _test_healing() -> void:
 	# Profiles.
 	_check(RepairProfiles.base(Biome.Type.NEUTRAL).reach() == 2, "neutral repair reach 2")
 	_check(RepairProfiles.base(Biome.Type.FOREST).mode == &"over_time", "forest heals over time")
-	_check(RepairProfiles.base(Biome.Type.DESERT).targets == 3, "desert pulses reach several targets")
 	_check(RepairProfiles.base(Biome.Type.PLAINS).mode == &"redistribute", "plains redistributes")
 	_check(RepairProfiles.base(Biome.Type.SWAMP).mode == &"lifesteal", "swamp drains enemies")
 
@@ -369,9 +348,60 @@ func _test_aura_towers() -> void:
 	swamp.tick(0.1)
 	_check(not swamp.aura_at(neighbour).has(&"output"), "swamp aura gives allies nothing")
 	_check(AuraProfiles.for_tile(swamp, aura).enemy_weaken > 0.0, "swamp aura weakens enemies")
-	# Forest regen also mends the ground.
+	# Forest Aura regen also mends the ground.
 	var forest := Island.create_starter(2)
 	forest.set_biome(Vector2i(1, 0), Biome.Type.FOREST)
+	forest.place_tower(Vector2i(1, 0), &"aura")
+	forest.get_tile(Vector2i(1, 0)).energy = 30.0
 	forest.damage_tile(Vector2i(2, 0), 100.0)
-	forest.tick(10.0)
-	_check(forest.get_tile(Vector2i(2, 0)).hp > Island.TILE_BASE_HP - 100.0, "forest regen mends ground")
+	forest.tick(5.0)
+	_check(forest.get_tile(Vector2i(2, 0)).hp > Island.TILE_BASE_HP - 100.0, "forest aura regen mends ground")
+
+
+func _test_enemy_types() -> void:
+	for kind in EnemyDefs.TYPES:
+		var enemy := Enemy.new()
+		enemy.setup(kind, 1.1)
+		_check(enemy.kind == kind and is_equal_approx(enemy.max_hp, EnemyDefs.TYPES[kind].hp * 1.1), "%s setup scales hp" % kind)
+		enemy.free()
+	var gunboat := Enemy.new()
+	gunboat.setup(&"gunboat")
+	_check(gunboat.behaviour == &"standoff" and gunboat.weapon_range_hexes > 0.0, "gunboat shoots from range")
+	gunboat.add_weaken(0.5)
+	_check(is_equal_approx(gunboat.shot_damage(), EnemyDefs.TYPES[&"gunboat"].damage * 0.5), "weaken lowers shot damage")
+	gunboat.free()
+	var total := 0.0
+	for kind in EnemyDefs.WAVE_MIX:
+		total += EnemyDefs.WAVE_MIX[kind]
+	_check(is_equal_approx(total, 1.0), "wave mix adds up to 100%")
+
+
+func _test_fog_of_war() -> void:
+	var island := Island.create_starter(2)
+	var fog := FogOfWar.new(island)
+	var outside := Vector2i(5, 0)
+	_check(fog.level_at(outside) == FogOfWar.Level.THICK, "sky starts in thick fog")
+	_check(fog.is_visible(Vector2i(1, 0)), "own island is always visible")
+	fog.reveal_step(outside)
+	_check(fog.level_at(outside) == FogOfWar.Level.GREY, "first shot: thick to grey")
+	fog.reveal_step(outside)
+	_check(fog.level_at(outside) == FogOfWar.Level.OPEN, "second shot: grey to open")
+	fog.tick(FogOfWar.OPEN_HOLD + 0.1)
+	_check(fog.level_at(outside) == FogOfWar.Level.GREY, "open sky clouds over to grey")
+	fog.tick(FogOfWar.GREY_HOLD + 0.1)
+	_check(fog.level_at(outside) == FogOfWar.Level.THICK, "grey clouds over to thick")
+	# Scouts keep a circle open while powered; biomes change the radius.
+	var scout := Vector2i(2, 0)
+	island.place_tower(scout, &"scout")
+	island.get_tile(scout).energy = 20.0
+	fog.tick(0.1)
+	_check(fog.is_visible(Vector2i(5, 0)), "scout opens its radius")
+	_check(fog.level_at(Vector2i(6, 0)) == FogOfWar.Level.THICK, "beyond scout radius stays thick")
+	# Without energy the scout is blind.
+	var blind := Island.create_starter(2)
+	var blind_fog := FogOfWar.new(blind)
+	blind.place_tower(scout, &"scout")
+	blind_fog.tick(1.0)
+	_check(blind_fog.level_at(Vector2i(4, 0)) == FogOfWar.Level.THICK, "unpowered scout reveals nothing")
+	_check(ScoutProfiles.base(Biome.Type.MOUNTAIN).radius > ScoutProfiles.base(Biome.Type.NEUTRAL).radius, "mountain scout sees further")
+	_check(ScoutProfiles.base(Biome.Type.FOREST).hold_factor > 1.0, "forest keeps the sky open longer")

@@ -79,15 +79,20 @@
   - **Level-up rewards:** the player picks one stone out of a few choices.
   - **Drops** from zones.
 
-### 4.3 Starter biomes ✅
+### 4.3 Starter biomes ✅ (updated 2026-10-15)
 
-| Biome | Colour | Faction | Theme | Focus |
-|---|---|---|---|---|
-| **Forest** | 🟩 Green | Wardens | Nature | Effects over time (damage/healing over time), restoration |
-| **Mountain** | 🟥 Red | Bastion | Stone & steel | Defense, structure, technology, long range |
-| **Desert** | 🟧 Orange | Wanderers | Light | Attack/fire rate, fragile, spreads damage |
-| **Plains** | ⬜ White | Mages | Wind & aether | Versatility, manipulation / redistribution, barriers, illusions |
-| **Swamp** | 🟪 Violet | Necrolytes | Shadow | Poison, traps, weakening, scouting; tied to Necropolis buildings |
+| Biome | Colour | Faction | Core (see 10.0) |
+|---|---|---|---|
+| **Forest** | 🟩 Green | Wardens | Symbiosis & growth: fragile but regenerative, retaliation, energy network |
+| **Mountain** | 🟥 Red | Bastion | Fortress & firepower: compact, slow, "repel, then annihilate" |
+| **Plains** | ⬜ White | Mages | Energy, lasers & barriers: absorb damage → energy → lasers; redistribution & control |
+| **Swamp** | 🟪 Violet | Necrolytes | Attrition: poison, decay and draining; tied to Necropolises |
+| **Lake** | 🟦 Blue | Seafolk | Water: arcs and waves, hydro power along lines (core still open) |
+
+- ✅ **Desert merged into Plains** (2026-10-15): Desert and Plains felt too similar; their light/laser/precision ideas now belong to the Plains Mages. **Lake / Seafolk** takes the free starter slot.
+- ✅ **Prototype code switched (2026-10-15):** Desert removed. Plains took over the **laser** (attack) and **damage spread** (tile trait) and keeps its shield aura, conduit Energy tower, redistribution Repair and shield Aura tower. Dropped with Desert for now: solar Energy tower, multi-target repair pulses, efficiency aura and tile efficiency. The **Plains neighbour morph is parked** until Plains weapons are redesigned.
+- ✅ **Lake** is in the build bar (blue, wave symbol). Until the Seafolk are designed it behaves like **neutral** for every tower type; only its empty tiles conduct energy well (95%).
+- ⚠️ Sections below still mention Desert (tower tables, potentials). Treat Desert content as **Plains material to be merged** until those sections are reworked.
 
 ### 4.4 Lake 🕓
 - **Lake** (🟦 blue, water) is a later base biome, home of the **Seafolk** (❓ faction not designed yet).
@@ -161,7 +166,7 @@ Each biome has its own rule for the **highest tier a tile can be merged to**. Th
 | Biome | Aura (per tier) |
 |---|---|
 | **Mountain** | +5% hit points ✅ |
-| **Forest** | 💡 +1% structure regeneration per tick |
+| **Forest** | ✅ **None** – Forest's tile trait is **passive energy** (6.5). Healing comes only from Forest walls, Repair and Aura towers. |
 | **Desert** | 💡 **+5% efficiency** ✅ (general output: fire rate, energy, healing… – exact value for balancing). Also passes on **10% of the damage it receives** to its neighbours, spread evenly ✅ |
 | **Plains** | 💡 Shield worth +3% of structure |
 | **Swamp** | 💡 Attacks apply poison worth +3% of damage over time |
@@ -189,22 +194,46 @@ Each biome has its own rule for the **highest tier a tile can be merged to**. Th
 - Super-structures need the minimum tier set by their recipe. If a tile drops **below** it (e.g. from battle damage), the tower works **less efficiently**.
 
 ### 6.3 Tower fusion – super-structures ✅
-- Towers in a certain **layout** can be **fused** into a new, more powerful tower type that covers several hexes.
-- Rules:
-  - Every tile in the layout must meet the recipe's **minimum tier**.
-  - The **biome majority** under the fused tower decides its **faction type**.
-  - Fusions can mix biomes. Normal fusions may combine **at most 2 different biomes**.
-  - **Desert-majority** fusions may combine **one extra biome** (up to 3). That is the Wanderers' faction trait.
-- Examples:
-  - 3 × Mountain Tier 3 in a triangle, each with an Attack tower → **Mortar tower**
-  - 2 Mountain + 1 Swamp + 1 Desert → **invalid** (Mountain majority, 3 biomes)
-  - 2 Desert + 1 Swamp + 1 Mountain → **valid** Desert tower (❓ type not defined yet)
-- 💡 Layout patterns: a triangle (3 tiles all touching each other) for the first tier of fusions. Bigger patterns (V, W, M, X, Y) for higher ones:
-  - Long and narrow → attack
-  - Wide and short → defensive
-  - Round → regenerators and shields
+- Towers in a certain **layout** can be **fused** into a new, more powerful tower that covers several hexes.
+- ✅ **Sizes:** **2 hexes** (pair), **3 hexes** (triangle, line…), **4–5 hexes** (rhombus, line, Y/star, V, X…) and **7 hexes** (flower: centre + full ring, endgame).
+- ✅ **Fusions grow step by step:** a pair plus an adjacent identical tower becomes a 3-hex fusion, and so on.
+- ✅ **Pairs:** a combined version that **looks better** than the single buildings and gains an **extra function** (e.g. double shots, a machine gun for weapons). ❓ To be defined type by type.
+- ✅ **Shape matters**, but what a shape means **depends on tower type and faction** – e.g. a line could be a bigger gun, a stronger wall, a long directional cannon or beam, a very strong drive, or something that channels. ❓ Not a fixed shape-role table.
+- ⚠️ **Prerequisite:** the **faction/class philosophy needs sharpening** first, so shapes, pairs and variants follow a clear design.
+
+**Rules (updated 2026-10-15):**
+- ✅ Only **identical tower types** fuse (3 Attack, 3 Wall…). No mixed-type fusions.
+- ✅ **Patterns also work with neutral towers**: a neutral fusion is the **base version** of the super-structure, possibly **without tier requirements**.
+- ✅ The three tiles stay; the fused tower covers all three. Energy storage, HP and auras are pooled. Un-fusing gives back the three base towers.
+- ✅ On biome tiles the fusion gets its **biome variant** (below). The biome majority decides the variant; at most 2 biomes (Desert majority: 3).
+- 💡 Biome tiers could unlock **capstone talents** for the fused towers instead of being a requirement. ❓ To be settled together with the biome fantasy later; the earlier "Tier 2 for the first fusion" answer applies to biome variants until then.
 - Fusion recipes are discovered the first time the player builds one.
-- ❓ The full recipe list: base tower × biome mix × pattern × minimum tier.
+
+**Neutral base fusions (triangle) ✅**
+
+| Base tower ×3 | Super-structure | What it does |
+|---|---|---|
+| Attack | **Heavy Cannon** | One big barrel: very high single-target damage, slow, long range |
+| Wall | **Bulwark** | HP of all three plus a bonus; draws enemy fire (taunt) and shields the tiles behind it |
+| Energy | **Power Plant** | More than three times the output, longer reach, less loss over distance |
+| Repair | **Workshop** | Repairs several targets at once over a long reach; can rebuild destroyed towers |
+| Aura | **Resonator** | Radius 2 instead of 1 and a stronger buff; still no chaining with other auras |
+| Scout | **Observatory** | Much larger radius; revealed sky stays open longer |
+| Warehouse | **Depot** | Much more capacity and a bigger loot share when escaping |
+
+**Biome variants of the Attack fusion ✅**
+
+| Biome | Variant | What it does |
+|---|---|---|
+| Mountain | **Mortar** | Heavy shells with splash, longest range |
+| Forest | **Thorn Thrower** | Thorn volleys on several targets at once; thorns stack higher and last longer |
+| Desert | **Prism Laser** | A beam that splits at the first target onto several more |
+| Plains | **Chain Lightning** | Arcane bolt jumping from target to target; also takes on traits of neighbouring biomes |
+| Swamp | **Plague Sling** | Weaken jumps to nearby enemies on hit; weakened enemies take more damage from all towers |
+
+- ✅ Desert's **healing beam** is the Desert variant of the Repair fusion.
+- ❓ Biome variants for Wall, Energy, Repair, Aura, Scout and Warehouse fusions – later, with the biome fantasy.
+- ❓ Numbers for all super-structures.
 
 ### 6.4 Base tower types ✅
 
@@ -293,13 +322,14 @@ How each biome changes each base tower. Tier 0 has no traits (6.1); the trait gr
 
 | Biome | Trait | Tier 3 / Tier 6 milestones 💡 |
 |---|---|---|
-| **Neutral (Tier 0)** | Single projectile at the highest-priority target. 💡 Starting values: 10 damage, 1 shot/s, range 3 hexes, 1 energy per shot | – |
+| **Neutral (Tier 0)** | Single projectile at the highest-priority target. 💡 11 damage every 0.9 s, range 4.5 hexes, 1.1 energy per shot | – |
 | **Forest** | Thorns deal damage over time that **stacks** – the longer a target is hit, the stronger the effect | T3: higher stack cap · T6: thorns jump to a nearby enemy when the target dies |
 | **Mountain** | Heavy shells: high damage, slow fire rate, long range. Triangle fusion → **Mortar** | T3: small splash damage · T6: shells knock enemies back |
 | **Desert** | Continuous laser: fast, pierces targets | T3: pierces +1 target · T6: blinds targets briefly |
 | **Plains** | **Morph:** copies the attack traits of its **neighbouring biomes**. The more neighbours of one biome, the stronger that part | T3: draws from tiles 2 hexes away · T6: ❓ |
 | **Swamp** | **Strong debuffs** on the target (less damage, less armour) instead of high damage | T3: debuff spreads to nearby enemies · T6: debuffed enemies take extra damage from all towers |
 
+- ✅ **Rebalanced (2026-10-15):** every biome aims at ~12 sustained damage/s on one target and ~0.1 energy per damage; default range 4.5 hexes (Mountain 6). Neutral 11/0.9 s · Mountain 36/3 s · Desert laser 10/s piercing · Forest 4/0.8 s + 1.5/s per thorn stack (max 5) · Swamp 5/1 s + 40% weaken.
 - **Forest vs. Swamp ✅:** Forest wins through **stacking damage over time**, Swamp through **weakening** the target. ❓ Should be confirmed in playtesting; maybe Forest changes instead.
 - **Plains morph – examples ✅:**
   - 1 Desert + 3 Swamp neighbours → 1 laser with a heavy debuff/damage-over-time part
@@ -489,6 +519,29 @@ There are three levels of visibility, shown as clouds:
 - A **Scout** aura keeps turning thick fog into grey fog. It also clears grey fog to open sky **hex by hex, one per tick**.
 - Revealed areas **cloud over again** after a while. Too few, damaged or unpowered Scouts leave the island **blind**.
 - **Enemy fire gives away its position.** Each shot clears its hex by one level: thick → grey → open.
+- ✅ **Prototype implementation (2026-10-15)**, numbers 💡 placeholders:
+  - Fog covers 13 hexes around the HQ; the island itself is always open sky.
+  - **Towers only target enemies in open sky.** Grey fog shows dark shadows where enemies are; thick fog hides everything.
+  - ✅ **Simplified (2026-10-15, too confusing before):** every Scout keeps a **circle** around itself open while it has energy (1 energy/s). Biomes only change radius and open time: Neutral/Plains radius 3 · Forest radius 3, sky stays open 2.5× longer · Mountain radius 5 · Desert and Swamp radius 4. +1 radius per tier above 1. Cone, beam and flash come back later.
+  - Opened sky stays open **15 s**, grey **20 s** (was 6/8 s – fog returned too quickly).
+  - Debug key V toggles the fog.
+  - Not yet: Forest "Listener" milestone, Desert blinding, Desert solar output dropping in clouds, Veil towers.
+
+---
+
+### 8.7 Enemy types & behaviour ✅ (prototype, 2026-10-15)
+Enemies fly, so they can cross the island without collision. They pick targets by the same rule as before: buildings in reach first, otherwise the nearest ground or the HQ.
+
+| Type | Behaviour | 💡 Stats (wave 1) |
+|---|---|---|
+| **Rammer** | Flies to its target and damages it on contact | 60 HP, fast, 6 dps contact |
+| **Gunboat** | Closes in until its target is **in weapon range**, then holds position and shoots | 80 HP, slow, range 3 hexes, 8 dmg / 1.6 s |
+| **Corsair** | **Circles the island** just inside weapon range of the outer buildings, shooting whatever is in range | 40 HP, very fast, range 2.5 hexes, 4 dmg / 0.8 s |
+| **Bomber** | **Flies over the island** in straight passes, bombing the tile below; turns and comes back | 120 HP, medium, 15 dmg bomb / 0.7 s |
+
+- Waves are mixed: 💡 40% Rammer, 25% Gunboat, 20% Corsair, 15% Bomber. Debug keys F1–F4 spawn one of each.
+- Enemy shots fly to the point they were aimed at (not homing) and hit the building there, or the ground.
+- ❓ Later: more types (artillery with long range, carriers, shielded ships), formations, bosses.
 
 ---
 
@@ -513,6 +566,26 @@ There are three levels of visibility, shown as clouds:
 ---
 
 ## 10. Factions & Archetypes
+
+### 10.0 Faction philosophy ✅ (sharpened 2026-10-15)
+
+Each faction has one clear core, one clear weakness, a shape language for its buildings and fusions, and its own relationship to energy.
+
+| | Wardens (Forest) | Bastion (Mountain) | Mages (Plains) | Necrolytes (Swamp) | Seafolk (Lake) |
+|---|---|---|---|---|---|
+| **Core** | **Symbiosis & growth**: buildings support each other through the root network. **Fragile but regenerative**, with **retaliation**: "hurt me and you hurt yourself; I come back and heal, you don't." | **Fortress & firepower**: survive, endure, and strike at the right moment – **"repel, then annihilate"**. Classic steampunk: fortresses, cannons, rockets; sluggish, slow, rigid. | **Energy, lasers & barriers**: barriers absorb attacks and turn them into energy, which powers strong lasers. **Redistribution & control**. Precision and light (from Desert). Possibly a **glass-cannon ramp-up** faction. | **Attrition**: poison, decay and draining – damage over time through poison-like attacks or draining beams. ❓ Whether it is a ramp-up faction is still open. | ❓ Core still open. |
+| **Weakness** | Little instant damage – counter damage instead; little absorption, more healing. If it **loses channels and energy it withers faster and faster**; single tiles heal quickly. It must be **hit in the right spot** to dry up its network. | **Slow & expensive**: high energy and resource needs, slow fire – weak against fast swarms and orbiters. | **Shields break without energy**; weapons need a lot of energy that must first be built up by absorbing attacks. More dependent on its network than Forest. ❓ How the network becomes unstable and collapses. | **Depends on Necropolises**: when one falls, nearby Swamp tiles lose strength. | **Needs lines**: its power depends on water lines; broken lines weaken it badly. |
+| **Shapes** | **Branching** (roots, branches: Y, star) – effects spread in many directions and connect the island. | **Wall lines & blocks**: lines = ramparts and long guns, compact blocks = fortresses. Everything close together. | **Circles & spheres**: round, compact shapes and rings – barriers, force fields. (Lines for lasers, from Desert.) | **Ziggurats (compact)**: tall, compact stepped buildings, necropolises. | **Arcs & waves**: curved arcs and half circles like wave fronts. |
+| **Energy** | **Energy network** with weak self-supply (photosynthesis). Lower storage per building because every forest produces. The **flow must be kept up**, otherwise output drops quickly, though it always regenerates a little. Higher tiers let more energy through. | Compact, very reduced, **supply lines**. Generators send energy through the ground to **Aura towers acting as energy banks** with large storage; the other towers hold little. ❓ May be too close to Forest. | **Damage → energy** (barriers) and **best conductor**: a better network than Forest, but more dependent on it. | **Draining**: takes energy from neighbours, enemies and the dead; weak own production. | **Hydro power**: energy flows along water lines almost without loss; the longer the line, the more output. |
+
+**Neutral** stays the **base version** of everything: plain towers and plain fusions, no faction traits.
+
+❓ Open after this pass:
+- Seafolk core.
+- Mages: how the energy network turns unstable and collapses.
+- Bastion vs. Forest energy model (too similar?).
+- Swamp as a ramp-up faction?
+- Rework the Desert content in auras, tower tables, potentials and code into Plains.
 
 ### 10.1 How faction is decided ✅
 - The **dominant biome** (or biome mix) on your island sets your archetype.
@@ -653,3 +726,8 @@ Content, to design when the time comes:
 | 2026-10-15 | Chips = per-tower priority tables (targeting, repair, refill, loss order); item slot per tower |
 | 2026-10-15 | Fog of war: thick fog → grey fog → open sky; Scouts reveal per tick, sky clouds over again; enemy fire reveals its hex |
 | 2026-10-15 | Tower follow-ups: Mountain wall = most HP + damage reduction; Swamp wall slow by enemy type; Mountain energy 100/40/10% at distance 1/2/3; Mountain scout 90° cone; Unique level 9 only on Tier 7; Plains morph shares by biome neighbours; Necropolis = faction tower; each faction has its own resource (Swamp: Life Essence) |
+| 2026-10-15 | Forest tiles give no neighbour aura (the earlier +1% regen was an unconfirmed proposal); their trait is passive energy |
+| 2026-10-15 | Scouts simplified to circles; fog stays open 15 s / grey 20 s; attack range 4.5 hexes; attacks rebalanced to ~12 dps |
+| 2026-10-15 | Fusion: identical tower types only; patterns work with neutral towers as base versions (Heavy Cannon, Bulwark, Power Plant, Workshop, Resonator, Observatory, Depot); Attack biome variants Mortar / Thorn Thrower / Prism Laser / Chain Lightning / Plague Sling; biome tiers may unlock capstone talents instead |
+| 2026-10-15 | Fusion sizes 2 / 3 / 4–5 / 7 hexes, growing step by step; pairs = better-looking combined version with an extra function; shape meaning depends on type and faction; faction philosophy to be sharpened first |
+| 2026-10-15 | Faction philosophy sharpened (10.0); Desert merged into Plains (energy-laser-barrier faction); Lake/Seafolk becomes the fifth starter faction |

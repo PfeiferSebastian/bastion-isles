@@ -26,9 +26,9 @@ const WALL_NEIGHBOUR_HP := {
 	Biome.Type.NEUTRAL: 0.10,
 	Biome.Type.FOREST: 0.10,
 	Biome.Type.MOUNTAIN: 0.20,
-	Biome.Type.DESERT: 0.08,
 	Biome.Type.PLAINS: 0.10,
 	Biome.Type.SWAMP: 0.10,
+	Biome.Type.LAKE: 0.10,
 }
 
 ## Largest radius any Aura profile has.

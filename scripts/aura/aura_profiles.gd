@@ -19,10 +19,6 @@ static func base(biome: Biome.Type) -> AuraProfile:
 			# Armour and more HP.
 			p.effects = {&"max_hp": 0.20, &"armor": 0.10}
 			p.color = Color("c9a24a")
-		Biome.Type.DESERT:
-			# Acceleration: speeds up whatever it touches.
-			p.effects = {&"efficiency": 0.25}
-			p.color = Color("ffd23f")
 		Biome.Type.PLAINS:
 			# Energy shield, regenerating from each tower's own storage.
 			p.effects = {&"shield": 0.25}

@@ -4,18 +4,17 @@ extends RefCounted
 ## whatever their biome, scaled by its tier. Everything stacks.
 ## Values are shares (0.05 = +5%) per tier; placeholder numbers until playtesting.
 
+## Forest has no neighbour aura: its tile trait is passive energy (EnergyGrid).
 const PER_TIER := {
-	Biome.Type.FOREST: {&"regen": 0.01},
 	Biome.Type.MOUNTAIN: {&"max_hp": 0.05},
-	# Efficiency = general output (fire rate, energy, healing…), like the Desert Aura tower.
-	Biome.Type.DESERT: {&"efficiency": 0.05},
 	Biome.Type.PLAINS: {&"shield": 0.03},
 	Biome.Type.SWAMP: {&"poison": 0.03},
 }
 
 ## Effects that belong to the tile itself and are not shared with neighbours.
 const SELF_PER_TIER := {
-	Biome.Type.DESERT: {&"damage_spread": 0.10},
+	# Redistribution (from the former Desert): passes part of incoming damage to neighbours.
+	Biome.Type.PLAINS: {&"damage_spread": 0.10},
 }
 
 const LABELS := {

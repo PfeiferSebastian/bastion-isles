@@ -15,9 +15,10 @@ const CONDUIT_EFFICIENCY := {
 	Biome.Type.NEUTRAL: 0.85,
 	Biome.Type.FOREST: 0.92,
 	Biome.Type.MOUNTAIN: 0.80,
-	Biome.Type.DESERT: 0.85,
 	Biome.Type.PLAINS: 0.97,
 	Biome.Type.SWAMP: 0.88,
+	# Hydro power: water carries energy well (placeholder until the Seafolk are designed).
+	Biome.Type.LAKE: 0.95,
 }
 ## Forest tiles produce this much per second and tier, feeding themselves and their neighbours.
 const FOREST_PASSIVE := 0.3

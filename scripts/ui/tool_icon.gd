@@ -1,7 +1,7 @@
 class_name ToolIcon
 extends Button
 ## Build bar button: a coloured hexagon with a symbol for what it builds, plus its hotkey.
-## Kinds: &"tower", &"tile" or a biome (&"forest", &"mountain", &"desert", &"plains", &"swamp").
+## Kinds: &"tower", &"tile" or a biome (&"forest", &"mountain", &"plains", &"swamp", &"lake").
 
 const SIZE := 58.0
 const DARK := Color("2f2a26")
@@ -34,8 +34,8 @@ func _draw() -> void:
 			_tree(c, r)
 		&"mountain":
 			_mountain(c, r)
-		&"desert":
-			_dunes(c, r)
+		&"lake":
+			_waves(c, r)
 		&"plains":
 			_horizon(c, r, hex)
 		&"swamp":
@@ -56,8 +56,8 @@ func _fill() -> Color:
 			return Biome.color_of(Biome.Type.FOREST)
 		&"mountain":
 			return Biome.color_of(Biome.Type.MOUNTAIN)
-		&"desert":
-			return Biome.color_of(Biome.Type.DESERT)
+		&"lake":
+			return Biome.color_of(Biome.Type.LAKE)
 		&"plains":
 			return Color.WHITE
 		&"swamp":
@@ -107,21 +107,11 @@ func _mountain(c: Vector2, r: float) -> void:
 	draw_colored_polygon(PackedVector2Array([c + Vector2(-r * 0.24, -r * 0.27), c + Vector2(-r * 0.05, -r * 0.55), c + Vector2(r * 0.14, -r * 0.27)]), Color("f2f2f2"))
 
 
-## Two sand dunes with a shaded side.
-func _dunes(c: Vector2, r: float) -> void:
-	var light := Color("f6cf8a")
-	var shade := Color("c97a2a")
-	draw_colored_polygon(_dune(c + Vector2(-r * 0.15, r * 0.2), r * 0.6, r * 0.45), light)
-	draw_colored_polygon(_dune(c + Vector2(r * 0.25, r * 0.45), r * 0.55, r * 0.35), light.darkened(0.08))
-	draw_line(c + Vector2(-r * 0.15, -r * 0.25), c + Vector2(r * 0.2, r * 0.2), shade, 2.0, true)
-
-
-static func _dune(base: Vector2, half_width: float, height: float) -> PackedVector2Array:
-	var points := PackedVector2Array()
-	for i in 13:
-		var t := i / 12.0
-		points.append(base + Vector2(lerpf(-half_width, half_width, t), -sin(t * PI) * height * (1.0 - t * 0.35)))
-	return points
+## Wave arcs on deep blue water.
+func _waves(c: Vector2, r: float) -> void:
+	for i in 3:
+		var centre := c + Vector2(0, r * (0.55 - i * 0.38))
+		draw_arc(centre, r * 0.42, PI * 1.15, PI * 1.85, 12, Color(1, 1, 1, 0.9 - i * 0.2), 2.5, true)
 
 
 ## Horizon: light beige land below, white sky above.

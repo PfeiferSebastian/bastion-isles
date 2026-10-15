@@ -23,13 +23,6 @@ static func base(biome: Biome.Type) -> RepairProfile:
 			p.cooldown = 5.0
 			p.energy_per_heal = 6.0
 			p.color = Color("c9a24a")
-		Biome.Type.DESERT:
-			# Fast small pulses jumping to several targets.
-			p.amount = 5.0
-			p.cooldown = 0.4
-			p.targets = 3
-			p.energy_per_heal = 1.0
-			p.color = Color("ffe9a0")
 		Biome.Type.PLAINS:
 			# Redistribution: moves HP from healthy to damaged, very cheap.
 			p.mode = &"redistribute"

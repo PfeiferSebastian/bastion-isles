@@ -22,6 +22,18 @@ const TILE_HP_PER_TIER := 100.0
 var _tiles: Dictionary[Vector2i, IslandTile] = {}
 ## Active heals over time: {coord, tower (bool), rate (HP/s), time (s left)}.
 var _heals_over_time: Array[Dictionary] = []
+## aura_at() results, cleared every tick and whenever a tile or tower changes.
+var _aura_cache: Dictionary = {}
+
+
+func _init() -> void:
+	# Bound methods, not lambdas: a lambda would keep this RefCounted alive forever.
+	for change in [tile_added, tile_removed, tile_changed, tower_destroyed, tile_destroyed]:
+		change.connect(_on_tiles_changed)
+
+
+func _on_tiles_changed(_coord: Vector2i) -> void:
+	_aura_cache.clear()
 
 ## Wasteland turns back into usable ground once repaired to this share of its HP.
 const WASTELAND_RESTORE_SHARE := 0.5
@@ -236,8 +248,11 @@ func _tick_heals_over_time(delta: float) -> void:
 			_heals_over_time.remove_at(i)
 
 
+## Summed effects on `coord` (read-only; shared with the cache).
 func aura_at(coord: Vector2i) -> Dictionary:
-	return Auras.collect(self, coord)
+	if not _aura_cache.has(coord):
+		_aura_cache[coord] = Auras.collect(self, coord)
+	return _aura_cache[coord]
 
 
 func _stays_connected_without(removed: Vector2i) -> bool:
@@ -343,9 +358,12 @@ func _apply_damage(coord: Vector2i, amount: float) -> void:
 
 ## Advances energy, regeneration and shields. Called every frame by the view.
 func tick(delta: float) -> void:
+	_aura_cache.clear()
 	EnergyGrid.tick(self, delta)
 	_tick_heals_over_time(delta)
 	_power_auras(delta)
+	# Aura power may have changed.
+	_aura_cache.clear()
 	for coord in _tiles:
 		var tower := get_tower(coord)
 		if tower == null:

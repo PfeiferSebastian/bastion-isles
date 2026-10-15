@@ -364,6 +364,12 @@ func _draw_tower_reach() -> void:
 		for coord in HexMath.area(hovered_coord, aura.radius + (1 if aura.enemy_weaken > 0.0 else 0)):
 			if island.has_tile(coord):
 				shares[coord] = 1.0 if HexMath.distance(coord, hovered_coord) <= aura.radius else 0.4
+	elif tile.tower and tile.tower.type == &"scout":
+		var scout := ScoutProfiles.for_tile(island, hovered_coord)
+		color = scout.color
+		for coord in HexMath.area(hovered_coord, scout.radius):
+			if coord != hovered_coord:
+				shares[coord] = 0.6
 	elif tile.tower and tile.tower.type == &"repair":
 		color = REPAIR_COLOR
 		var repair := RepairProfiles.for_tile(island, hovered_coord)

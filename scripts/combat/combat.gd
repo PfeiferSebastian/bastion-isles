@@ -2,7 +2,7 @@ class_name Combat
 extends Node2D
 ## Milestone 3 combat sandbox: spawns dummy enemies around the island, moves them
 ## to the nearest tower, and lets Attack towers aim and fire based on their tile.
-## Keys: P toggles waves, W spawns a wave right away.
+## Keys: P toggles waves, W spawns a wave right away, F1-F4 spawn one enemy of each type.
 
 @export var island_view_path: NodePath
 @export var spawn_interval := 3.0
@@ -22,6 +22,8 @@ extends Node2D
 
 var waves_enabled := true
 var kills := 0
+## Fog of war; when set, towers only target enemies in open sky. Null = everything visible.
+var fog: FogOfWar
 
 var _view: IslandView
 var _spawn_timer := 0.0
@@ -32,8 +34,11 @@ var _beams: Array[PackedVector2Array] = []
 var _beam_colors: Array[Color] = []
 ## Short-lived heal lines: {from, to, color, time}.
 var _heal_flashes: Array[Dictionary] = []
+## Bomb impacts: {position, time}.
+var _bursts: Array[Dictionary] = []
 
 const HEAL_FLASH_TIME := 0.35
+const BURST_TIME := 0.4
 
 
 func _ready() -> void:
@@ -47,7 +52,7 @@ func _process(delta: float) -> void:
 		_spawn_timer -= delta
 		if _spawn_timer <= 0.0:
 			_spawn_timer = spawn_interval
-			_spawn_enemy()
+			spawn_enemy()
 	_beams.clear()
 	_beam_colors.clear()
 	for enemy in enemies():
@@ -79,6 +84,14 @@ func _unhandled_key_input(event: InputEvent) -> void:
 			waves_enabled = not waves_enabled
 		KEY_W:
 			spawn_wave()
+		KEY_F1:
+			spawn_enemy(&"rammer")
+		KEY_F2:
+			spawn_enemy(&"gunboat")
+		KEY_F3:
+			spawn_enemy(&"corsair")
+		KEY_F4:
+			spawn_enemy(&"bomber")
 
 
 func enemies() -> Array[Enemy]:
@@ -92,16 +105,29 @@ func enemies() -> Array[Enemy]:
 
 func spawn_wave() -> void:
 	for i in wave_size:
-		_spawn_enemy()
+		spawn_enemy()
 
 
-func _spawn_enemy() -> void:
+## Spawns one enemy of `kind` (random mix if empty) on a ring around the island.
+func spawn_enemy(kind: StringName = &"", factor := 1.0) -> Enemy:
 	if enemies().size() >= max_enemies:
-		return
+		return null
 	var enemy := Enemy.new()
+	enemy.setup(kind if kind != &"" else EnemyDefs.pick_random(), factor)
 	enemy.died.connect(_on_enemy_died)
 	_enemy_layer.add_child(enemy)
 	enemy.global_position = _view.global_position + Vector2.from_angle(randf() * TAU) * spawn_distance
+	return enemy
+
+
+func is_enemy_visible(enemy: Enemy) -> bool:
+	return fog == null or fog.is_visible(_view.world_to_hex(enemy.global_position))
+
+
+## Firing gives an enemy's position away: its hex clears one fog level.
+func _reveal_shooter(enemy: Enemy) -> void:
+	if fog:
+		fog.reveal_step(_view.world_to_hex(enemy.global_position))
 
 
 func _on_enemy_died(enemy: Enemy) -> void:
@@ -112,24 +138,129 @@ func _on_enemy_died(enemy: Enemy) -> void:
 # --- Enemies -------------------------------------------------------------
 
 func _move_and_attack(enemy: Enemy, delta: float) -> void:
-	var tower: Variant = _nearest(enemy.global_position, true, building_seek_range)
+	enemy.cooldown_left = maxf(enemy.cooldown_left - delta, 0.0)
+	match enemy.behaviour:
+		&"standoff":
+			_standoff(enemy, delta)
+		&"orbit":
+			_orbit(enemy, delta)
+		&"flyover":
+			_flyover(enemy, delta)
+		_:
+			_ram(enemy, delta)
+
+
+## Target for an enemy at `from`: a building within seek reach, otherwise the nearest ground.
+func _pick_target(from: Vector2) -> Variant:
+	var tower: Variant = _nearest(from, true, building_seek_range)
 	# Ground (tiles, HQ) has lots of HP but is only attacked when no building is in reach.
-	var target: Variant = tower if tower != null else _nearest(enemy.global_position, false, INF)
-	var goal := _view.global_position
-	var stop := idle_range
+	return tower if tower != null else _nearest(from, false, INF)
+
+
+## Rammer: flies to its target and damages it on contact.
+func _ram(enemy: Enemy, delta: float) -> void:
+	var target: Variant = _pick_target(enemy.global_position)
+	var goal := _view.global_position if target == null else _view.hex_center_world(target)
+	var stop := idle_range if target == null else contact_range
+	if _approach(enemy, goal, stop, delta) and target != null:
+		_hit(target, enemy.damage_output() * delta)
+
+
+## Gunboat: closes in until its target is in weapon range, then holds position and shoots.
+func _standoff(enemy: Enemy, delta: float) -> void:
+	var target: Variant = _pick_target(enemy.global_position)
+	if target == null:
+		_approach(enemy, _view.global_position, idle_range, delta)
+		return
+	var range_px := _weapon_range_px(enemy)
+	if _approach(enemy, _view.hex_center_world(target), range_px * 0.85, delta):
+		_shoot(enemy, target)
+
+
+## Corsair: circles the island just inside weapon range of the outer buildings and shoots
+## whatever is in range.
+func _orbit(enemy: Enemy, delta: float) -> void:
+	var center := _view.global_position
+	var range_px := _weapon_range_px(enemy)
+	var desired := _island_radius_px() + range_px * 0.6
+	var offset := enemy.global_position - center
+	var r := maxf(offset.length(), 0.01)
+	var radial := offset / r
+	var tangent := Vector2(-radial.y, radial.x) * enemy.orbit_direction
+	var correction := clampf((desired - r) / 60.0, -1.0, 1.0)
+	var velocity := (tangent + radial * correction).normalized() * enemy.speed
+	enemy.global_position += velocity * delta
+	enemy.face(velocity.angle())
+	var target: Variant = _nearest(enemy.global_position, true, range_px)
+	if target == null:
+		target = _nearest(enemy.global_position, false, range_px)
 	if target != null:
-		goal = _view.hex_center_world(target)
-		stop = contact_range
+		_shoot(enemy, target)
+
+
+## Bomber: straight passes over the island, bombing the tile below; turns and comes back.
+func _flyover(enemy: Enemy, delta: float) -> void:
+	var center := _view.global_position
+	var turn_radius := _island_radius_px() + 300.0
+	var away := enemy.global_position - center
+	if enemy.heading == Vector2.ZERO or (away.length() > turn_radius and away.dot(enemy.heading) > 0.0):
+		# New pass through the island, slightly off-centre.
+		var aim := center + Vector2.from_angle(randf() * TAU) * randf() * _view.hex_size * 1.5
+		enemy.heading = (aim - enemy.global_position).normalized()
+	enemy.global_position += enemy.heading * enemy.speed * delta
+	enemy.face(enemy.heading.angle())
+	var below := _view.world_to_hex(enemy.global_position)
+	var tile := _view.island.get_tile(below)
+	if tile and not tile.destroyed and enemy.cooldown_left <= 0.0:
+		enemy.cooldown_left = enemy.weapon_cooldown
+		_reveal_shooter(enemy)
+		_hit(below, enemy.shot_damage())
+		_bursts.append({position = _view.hex_center_world(below), time = BURST_TIME})
+
+
+## Moves toward `goal` until within `stop`; returns true once there.
+func _approach(enemy: Enemy, goal: Vector2, stop: float, delta: float) -> bool:
 	var to := goal - enemy.global_position
 	var distance := to.length()
 	if distance > 0.01:
 		enemy.face(to.angle())
-	if distance > stop:
-		enemy.global_position += to / distance * minf(enemy.speed * delta, distance - stop)
-	elif tower != null:
-		_view.island.damage_tower(target, enemy.damage_output() * delta)
-	elif target != null:
-		_view.island.damage_tile(target, enemy.damage_output() * delta)
+	if distance <= stop:
+		return true
+	enemy.global_position += to / distance * minf(enemy.speed * delta, distance - stop)
+	return false
+
+
+func _shoot(enemy: Enemy, target: Vector2i) -> void:
+	if enemy.cooldown_left > 0.0:
+		return
+	enemy.cooldown_left = enemy.weapon_cooldown
+	_reveal_shooter(enemy)
+	var shot := EnemyProjectile.new()
+	shot.target_position = _view.hex_center_world(target) + Vector2(randf_range(-8, 8), randf_range(-8, 8))
+	shot.speed = enemy.projectile_speed
+	shot.on_hit = _hit.bind(target, enemy.shot_damage())
+	_projectile_layer.add_child(shot)
+	shot.global_position = enemy.global_position
+
+
+## Damage lands on the building of `coord`, or on the ground if there is none.
+func _hit(coord: Vector2i, amount: float) -> void:
+	if _view.island.get_tower(coord) != null:
+		_view.island.damage_tower(coord, amount)
+	else:
+		_view.island.damage_tile(coord, amount)
+
+
+func _weapon_range_px(enemy: Enemy) -> float:
+	return enemy.weapon_range_hexes * HexMath.SQRT3 * _view.hex_size
+
+
+## Distance from the HQ to the outer edge of the island.
+func _island_radius_px() -> float:
+	var furthest := 0.0
+	for coord in _view.island.coords():
+		furthest = maxf(furthest, _view.hex_center_world(coord).distance_to(_view.global_position))
+	return furthest + _view.hex_size
 
 
 ## Closest coord within `max_distance` px: a tower when `towers`, otherwise standing ground
@@ -181,11 +312,11 @@ func _towers_attack(delta: float) -> void:
 				_fire_projectile(origin, targets[0], profile)
 
 
-## Enemies within range, nearest first.
+## Visible enemies within range, nearest first.
 func _targets_in_range(origin: Vector2, range_px: float) -> Array[Enemy]:
 	var result: Array[Enemy] = []
 	for enemy in enemies():
-		if origin.distance_to(enemy.global_position) <= range_px:
+		if origin.distance_to(enemy.global_position) <= range_px and is_enemy_visible(enemy):
 			result.append(enemy)
 	result.sort_custom(func(a: Enemy, b: Enemy) -> bool:
 		return origin.distance_squared_to(a.global_position) < origin.distance_squared_to(b.global_position))
@@ -233,10 +364,11 @@ func _aura_debuffs() -> void:
 # --- Repair --------------------------------------------------------------
 
 func _towers_repair(delta: float) -> void:
-	for i in range(_heal_flashes.size() - 1, -1, -1):
-		_heal_flashes[i].time -= delta
-		if _heal_flashes[i].time <= 0.0:
-			_heal_flashes.remove_at(i)
+	for list in [_heal_flashes, _bursts]:
+		for i in range(list.size() - 1, -1, -1):
+			list[i].time -= delta
+			if list[i].time <= 0.0:
+				list.remove_at(i)
 	var island := _view.island
 	for coord in island.coords():
 		var tower := island.get_tower(coord)
@@ -331,7 +463,7 @@ func _nearest_enemy(origin: Vector2, reach_hexes: int) -> Enemy:
 	var best_distance := range_px
 	for enemy in enemies():
 		var d := origin.distance_to(enemy.global_position)
-		if d <= best_distance:
+		if d <= best_distance and is_enemy_visible(enemy):
 			best_distance = d
 			best = enemy
 	return best
@@ -342,6 +474,11 @@ func _flash(from: Vector2i, to: Vector2i, color: Color) -> void:
 
 
 func _draw() -> void:
+	for burst in _bursts:
+		var t: float = burst.time / BURST_TIME
+		var at := to_local(burst.position)
+		draw_circle(at, 22.0 * (1.0 - t) + 6.0, Color(1, 0.55, 0.15, 0.55 * t))
+		draw_circle(at, 9.0 * t, Color(1, 0.9, 0.5, t))
 	for flash in _heal_flashes:
 		var alpha: float = flash.time / HEAL_FLASH_TIME
 		var a := to_local(flash.from)

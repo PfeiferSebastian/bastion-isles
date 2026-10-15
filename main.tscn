@@ -8,6 +8,7 @@
 [ext_resource type="Script" path="res://scripts/ui/hud.gd" id="6_hud"]
 [ext_resource type="Script" path="res://scripts/ui/toolbar.gd" id="7_toolbar"]
 [ext_resource type="Script" path="res://scripts/combat/combat.gd" id="8_combat"]
+[ext_resource type="Script" path="res://scripts/fog/fog_layer.gd" id="9_fog"]
 
 [node name="Main" type="Node2D"]
 script = ExtResource("1_main")
@@ -22,6 +23,11 @@ placeable_scene = ExtResource("4_tower")
 [node name="Combat" type="Node2D" parent="."]
 script = ExtResource("8_combat")
 island_view_path = NodePath("../IslandView")
+
+[node name="FogLayer" type="Node2D" parent="."]
+script = ExtResource("9_fog")
+island_view_path = NodePath("../IslandView")
+combat_path = NodePath("../Combat")
 
 [node name="Camera" type="Camera2D" parent="."]
 script = ExtResource("5_camera")
@@ -106,7 +112,7 @@ theme_override_colors/font_color = Color(1, 1, 1, 0.75)
 theme_override_font_sizes/font_size = 13
 text = "Left click: build / cycle · Right click: remove
 Drag: pan · Wheel: zoom · Esc: menu
-Debug: D damage · +/- tier"
+Debug: D damage · +/- tier · F1–F4 enemy types · V fog"
 horizontal_alignment = 2
 vertical_alignment = 2
 
