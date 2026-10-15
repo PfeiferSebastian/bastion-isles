@@ -13,26 +13,25 @@ const STARTING_TILES := 4
 ## Gold per kill, normalised by weight class: light 1, normal 3, heavy 5. (Nothing to spend
 ## it on yet.)
 const KILL_GOLD := {&"corsair": 1, &"rammer": 1, &"gunboat": 3, &"bomber": 5}
-## Drop chances per kill; stones and blueprints get likelier with enemy strength (max HP
-## relative to a basic rammer). Biome stones are very rare; blueprints of something the
-## player has none of are a little likelier.
+## Drop chances per kill, times the enemy type's EnemyDefs.DROP_FACTOR (swarmers less, big
+## ships a little more). Biome stones are very rare; blueprints of something the player has
+## none of are a little likelier.
 const STONE_DROP_CHANCE := 0.001
 const BLUEPRINT_DROP_CHANCE := 0.01
 const MISSING_BLUEPRINT_DROP_CHANCE := 0.012
 const MAX_DROP_CHANCE := 0.6
-const REFERENCE_HP := 60.0
-
-
-static func strength(enemy: Enemy) -> float:
-	return enemy.max_hp / REFERENCE_HP
 
 
 static func kill_gold(enemy: Enemy) -> int:
 	return KILL_GOLD.get(enemy.kind, 1)
 
 
+static func drop_factor(enemy: Enemy) -> float:
+	return EnemyDefs.DROP_FACTOR.get(enemy.kind, 1.0)
+
+
 static func stone_chance(enemy: Enemy) -> float:
-	return minf(STONE_DROP_CHANCE * strength(enemy), MAX_DROP_CHANCE)
+	return minf(STONE_DROP_CHANCE * drop_factor(enemy), MAX_DROP_CHANCE)
 
 
 ## Things blueprints exist for: every tower type and neutral tiles.
@@ -44,7 +43,7 @@ static func blueprint_kinds() -> Array[StringName]:
 
 ## Chance that `enemy` drops a blueprint of one kind: higher if the player has none.
 static func blueprint_chance(enemy: Enemy, missing: bool) -> float:
-	return minf((MISSING_BLUEPRINT_DROP_CHANCE if missing else BLUEPRINT_DROP_CHANCE) * strength(enemy), MAX_DROP_CHANCE)
+	return minf((MISSING_BLUEPRINT_DROP_CHANCE if missing else BLUEPRINT_DROP_CHANCE) * drop_factor(enemy), MAX_DROP_CHANCE)
 
 
 ## Loot of one kill: {gold, stone (Biome.Type or -1), blueprint (a tower type, &"tile" or

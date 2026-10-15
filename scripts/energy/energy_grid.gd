@@ -10,6 +10,11 @@ extends RefCounted
 
 const BASE_CAPACITY := 20.0
 const CAPACITY_PER_TIER := 10.0
+## Storehouses work as batteries for now: they hold what a basic generator makes in 50 s
+## (5 × 10 s), take only what generators have left over, and hand it out again to buildings
+## in reach that run low, as fast as a basic generator.
+const STORAGE_CAPACITY := 5.0 * 10.0 * 6.0
+const STORAGE_OUTPUT := 6.0
 ## Share of energy an empty tile of this biome lets through (factions differ). Water and
 ## wood carry energy best, plain ground and rock poorly.
 const CONDUIT_EFFICIENCY := {
@@ -39,9 +44,16 @@ const FOREST_SLOW_EFFICIENCY := 0.33
 
 
 static func capacity(tile: IslandTile) -> float:
+	if is_storage(tile):
+		return STORAGE_CAPACITY
 	if tile.tower == null or not TowerDefs.ENERGY_CONSUMERS.has(tile.tower.type):
 		return 0.0
 	return BASE_CAPACITY + CAPACITY_PER_TIER * tile.tier
+
+
+## Storehouse tiles store energy for others (see STORAGE_CAPACITY).
+static func is_storage(tile: IslandTile) -> bool:
+	return tile.tower != null and tile.tower.type == &"warehouse"
 
 
 static func fill(tile: IslandTile) -> float:
@@ -113,16 +125,29 @@ static func tick(island: Island, delta: float) -> void:
 		distribute(island, coord, profile, profile.output * delta)
 		if profile.special == &"conduit":
 			_balance(island, coord, profile, delta)
+	# Storehouses hand their energy on to buildings that run low (never to other storehouses).
+	var storage_profile := EnergyProfile.new()
+	for coord in island.coords():
+		var tile := island.get_tile(coord)
+		if is_storage(tile) and tile.energy > 0.0:
+			var spend := minf(tile.energy, STORAGE_OUTPUT * delta)
+			tile.energy -= spend - distribute(island, coord, storage_profile, spend, false)
 
 
-## Sends `budget` energy from `source` to the storages it reaches, best-connected first.
-static func distribute(island: Island, source: Vector2i, profile: EnergyProfile, budget: float) -> void:
+## Sends `budget` energy from `source` to the storages it reaches: buildings first (best-
+## connected, then emptiest), storehouses only with what is left – and none at all unless
+## `to_storehouses`. Returns the unused budget.
+static func distribute(island: Island, source: Vector2i, profile: EnergyProfile, budget: float, to_storehouses := true) -> float:
 	var shares := delivery_map(island, source, profile)
 	var targets: Array[Vector2i] = []
 	for coord in shares:
-		if capacity(island.get_tile(coord)) > 0.0:
+		var target := island.get_tile(coord)
+		if capacity(target) > 0.0 and (to_storehouses or not is_storage(target)):
 			targets.append(coord)
 	targets.sort_custom(func(a: Vector2i, b: Vector2i) -> bool:
+		var a_store := is_storage(island.get_tile(a))
+		if a_store != is_storage(island.get_tile(b)):
+			return not a_store
 		if not is_equal_approx(shares[a], shares[b]):
 			return shares[a] > shares[b]
 		return fill(island.get_tile(a)) < fill(island.get_tile(b)))
@@ -137,6 +162,7 @@ static func distribute(island: Island, source: Vector2i, profile: EnergyProfile,
 		var give := minf(missing, budget * arrives)
 		tile.energy += give
 		budget -= give / arrives
+	return budget
 
 
 ## Takes `amount` from the tile's storage. Returns the efficiency the tower may work at:

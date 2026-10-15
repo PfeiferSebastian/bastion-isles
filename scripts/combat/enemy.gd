@@ -45,14 +45,15 @@ var _weaken := 0.0
 var _weaken_time := 0.0
 
 
-## Applies the stats of `type_kind`, scaled by `factor` (wave growth).
-func setup(type_kind: StringName, factor := 1.0) -> void:
+## Applies the stats of `type_kind`, HP and damage scaled by `factor`, speed by `speed_factor`
+## (the same as `factor` when left out, e.g. for the balance simulation's wave growth).
+func setup(type_kind: StringName, factor := 1.0, speed_factor := -1.0) -> void:
 	var def: Dictionary = EnemyDefs.TYPES[type_kind]
 	kind = type_kind
 	behaviour = def.behaviour
 	max_hp = def.hp * factor
 	hp = max_hp
-	speed = def.speed * factor
+	speed = def.speed * (factor if speed_factor < 0.0 else speed_factor)
 	dps = def.get("contact_dps", 0.0) * factor
 	weapon_range_hexes = def.get("range_hexes", 0.0)
 	weapon_damage = def.get("damage", 0.0) * factor

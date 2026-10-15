@@ -26,6 +26,10 @@ const TYPES := {
 	},
 }
 
+## Loot multiplier per type (blueprints and biome stones): swarmers drop less, big ships a
+## little more. Fixed per type, so stronger rounds don't change it.
+const DROP_FACTOR := {&"corsair": 0.5, &"rammer": 0.8, &"gunboat": 1.1, &"bomber": 1.2}
+
 ## Light enemies make up the early waves; mediums are sprinkled in from MEDIUM_FROM_WAVE,
 ## heavies (bombers) from HEAVY_FROM_WAVE. Waves only grow in size, never in strength.
 const LIGHT: Array[StringName] = [&"corsair", &"rammer"]
@@ -39,8 +43,9 @@ const HEAVY_FROM_WAVE := 6
 ## Enemy types of wave `wave` (1-based), grouped by type so each group can fly as one
 ## formation: e.g. wave 1 = 3 light, wave 3 = 4 light + 1 medium, wave 6 = 6 light, 1-2
 ## medium, 1 heavy.
-static func wave_plan(wave: int) -> Array[StringName]:
-	var size := FIRST_WAVE_SIZE + (wave - 1)
+## `count_factor` scales the wave size (higher rounds bring more enemies).
+static func wave_plan(wave: int, count_factor := 1.0) -> Array[StringName]:
+	var size := maxi(1, roundi((FIRST_WAVE_SIZE + (wave - 1)) * count_factor))
 	var mediums := 0
 	var heavies := 0
 	if wave >= MEDIUM_FROM_WAVE:

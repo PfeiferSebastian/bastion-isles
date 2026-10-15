@@ -56,6 +56,13 @@ func _draw() -> void:
 		&"pause":
 			draw_rect(Rect2(c + Vector2(-10, -12), Vector2(7, 24)), MenuTheme.BRASS_LIGHT)
 			draw_rect(Rect2(c + Vector2(3, -12), Vector2(7, 24)), MenuTheme.BRASS_LIGHT)
+		&"flee":
+			# Open door with an arrow running out of it.
+			draw_rect(Rect2(c + Vector2(-14, -14), Vector2(14, 28)), Color("6b4a2e"))
+			draw_rect(Rect2(c + Vector2(-14, -14), Vector2(14, 28)), MenuTheme.BRASS_DARK, false, 2.0)
+			draw_circle(c + Vector2(-4, 1), 1.8, MenuTheme.BRASS_LIGHT)
+			draw_line(c + Vector2(-2, 0), c + Vector2(13, 0), Color("e05545"), 4.0)
+			draw_colored_polygon(PackedVector2Array([c + Vector2(17, 0), c + Vector2(8, -8), c + Vector2(8, 8)]), Color("e05545"))
 		&"spawn":
 			# Enemy airship: balloon over a small hull, with a red plus.
 			draw_circle(c + Vector2(-3, -5), 10.0, Color("8a8f98"))

@@ -53,6 +53,7 @@ var _spawn := OverlayIcon.new(&"spawn", "Spawn a wave now (W)")
 
 ## Editing the island from the main menu: no waves, the mission bar offers "Done".
 var _edit_mode := false
+var _flee: OverlayIcon
 
 ## Overlay locked on by clicking an icon; hovering another icon previews it temporarily.
 var _locked_overlay: StringName = &""
@@ -69,6 +70,7 @@ var _locked_overlay: StringName = &""
 @onready var _mission_panel: Control = %MissionPanel
 @onready var _mission_text: Label = %MissionText
 @onready var _leave: Button = %Leave
+@onready var _proceed: Button = %Proceed
 @onready var _treasury_panel: Control = %Treasury
 @onready var _treasury_text: Label = %TreasuryText
 @onready var _mission_tube: ProgressTube = %MissionTube
@@ -90,6 +92,18 @@ func _ready() -> void:
 	_wave_row.add_child(_spawn)
 	_wave_row.move_child(_stats, -1)
 	_leave.pressed.connect(leave_requested.emit)
+	_proceed.pressed.connect(func() -> void:
+		if combat:
+			combat.proceed()
+			notify("Round %d: enemies +%d%% stronger, %d%% more of them" % [combat.mission_round + 1,
+				roundi((combat.strength_factor() - 1.0) * 100.0), roundi((combat.count_factor() - 1.0) * 100.0)]))
+	# Flee: leave the island at once (it is saved, as with Leave).
+	var flee := OverlayIcon.new(&"flee", "Flee: leave the island now and return to the menu (the island is saved)")
+	flee.toggle_mode = false
+	flee.pressed.connect(leave_requested.emit)
+	_overlay_icons.get_parent().add_child(VSeparator.new())
+	_overlay_icons.get_parent().add_child(flee)
+	_flee = flee
 	for entry in OVERLAYS:
 		var icon := OverlayIcon.new(entry[0], entry[1])
 		icon.preview_started.connect(_set_overlay)
@@ -185,17 +199,22 @@ func show_edit_mode() -> void:
 	_leave.text = "Done"
 	_leave.visible = true
 	_leave.set_meta(&"info", "Save the island and return to the main menu")
+	_proceed.visible = false
+	_flee.visible = false
 	_mission_panel.reset_size()
 	_mission_panel.position.x = (_root.size.x - _mission_panel.size.x) / 2.0
 
 
-## Top centre: countdown before the mission starts, then nothing, then "complete" with Leave.
+## Top centre: countdown before the mission starts, then nothing, then "complete" with Leave
+## and Proceed (a harder next round).
 func _update_mission() -> void:
 	_leave.visible = combat.mission_done
+	_proceed.visible = combat.mission_done
 	if combat.mission_done:
-		_mission_text.text = "Mission complete"
+		_mission_text.text = "Round %d complete" % (combat.mission_round + 1) if combat.mission_round > 0 else "Mission complete"
 	elif combat.mission_countdown > 0.0:
-		_mission_text.text = "Mission starts in %d" % ceili(combat.mission_countdown)
+		_mission_text.text = ("Round %d starts in %d" % [combat.mission_round + 1, ceili(combat.mission_countdown)]) if combat.mission_round > 0 \
+			else "Mission starts in %d" % ceili(combat.mission_countdown)
 	_mission_panel.visible = combat.mission_done or combat.mission_countdown > 0.0
 	_mission_panel.reset_size()
 	_mission_panel.position.x = (_root.size.x - _mission_panel.size.x) / 2.0

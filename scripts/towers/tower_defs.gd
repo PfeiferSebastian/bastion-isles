@@ -15,7 +15,8 @@ const DESCRIPTIONS := {
 	&"repair": "Workshop. Repairs damaged buildings and ground in reach, using energy.",
 	&"aura": "Obelisk. Buffs the buildings around it while it has energy;\nthe biome decides the buff.",
 	&"scout": "Watchtower. Clears the fog of war around it while it has energy.",
-	&"warehouse": "Storehouse. Will hold resources and keep loot when escaping (no effect yet).",
+	&"warehouse": "Storehouse – a battery for now. Stores leftover energy from generators
+(up to 300) and hands it to buildings in reach that run low.",
 }
 
 const BASE_HP := {

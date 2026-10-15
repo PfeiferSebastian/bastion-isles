@@ -169,6 +169,14 @@ focus_mode = 0
 metadata/info = "Leave the island: the mission is complete"
 text = "Leave"
 
+[node name="Proceed" type="Button" parent="HUD/Root/MissionPanel/Row"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+focus_mode = 0
+metadata/info = "Proceed: another round here – enemies 20% stronger (HP and damage) and 10% more of them, compounding each round"
+text = "Proceed +20%"
+
 [node name="OverlayPanel" type="PanelContainer" parent="HUD/Root"]
 unique_name_in_owner = true
 layout_mode = 0

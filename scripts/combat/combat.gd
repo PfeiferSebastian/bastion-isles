@@ -22,6 +22,10 @@ extends Node2D
 @export var building_seek_range := 340.0
 ## Placeholder mission until zones exist: progress is kills out of this many.
 @export var mission_kill_goal := 100
+## Each further round ("Proceed" after a won mission): enemies this much stronger (HP and
+## damage) and this many more of them, compounding.
+const ROUND_STRENGTH := 1.2
+const ROUND_COUNT := 1.1
 ## Seconds before the first enemies come, so the player can look around and build.
 @export var mission_start_delay := 10.0
 ## Seconds without enemies after which the fight counts as over and the ground is repaired.
@@ -37,6 +41,9 @@ var kills := 0
 ## Seconds until the mission starts (enemies spawn only after that).
 var mission_countdown := 0.0
 var mission_done := false
+## Rounds proceeded past the first (0 = the first round).
+var mission_round := 0
+var _base_kill_goal := 0
 ## Fog of war; when set, towers only target enemies in open sky. Null = everything visible.
 var fog: FogOfWar
 
@@ -69,6 +76,7 @@ func _ready() -> void:
 	add_child(_enemy_layer)
 	add_child(_projectile_layer)
 	mission_countdown = mission_start_delay
+	_base_kill_goal = mission_kill_goal
 
 
 func _process(delta: float) -> void:
@@ -140,7 +148,7 @@ func spawn_wave() -> void:
 	_wave_timer = wave_interval
 	wave += 1
 	var groups: Array = []
-	for kind in EnemyDefs.wave_plan(wave):
+	for kind in EnemyDefs.wave_plan(wave, count_factor()):
 		if groups.is_empty() or groups[-1][0] != kind or groups[-1].size() >= formation_size:
 			groups.append([kind])
 		else:
@@ -160,7 +168,7 @@ func _spawn_formation(kinds: Array, angle: float) -> void:
 		var row := (i + 1) / 2
 		var offset := Vector2(-row * 40.0, (1 if i % 2 == 1 else -1) * row * 34.0) if i > 0 else Vector2.ZERO
 		var at := _view.global_position + Vector2.from_angle(angle) * spawn_distance + offset.rotated(inward.angle())
-		var enemy := spawn_enemy(kinds[i], 1.0, at)
+		var enemy := spawn_enemy(kinds[i], strength_factor(), at, 1.0)
 		if enemy == null:
 			return
 		if kinds.size() > 1:
@@ -174,15 +182,40 @@ func _spawn_formation(kinds: Array, angle: float) -> void:
 
 ## Spawns one enemy of `kind` (random mix if empty) on a ring around the island; none once
 ## the mission is done.
-func spawn_enemy(kind: StringName = &"", factor := 1.0, at: Variant = null) -> Enemy:
+func spawn_enemy(kind: StringName = &"", factor := 1.0, at: Variant = null, speed_factor := -1.0) -> Enemy:
 	if mission_done or enemies().size() >= max_enemies:
 		return null
 	var enemy := Enemy.new()
-	enemy.setup(kind if kind != &"" else EnemyDefs.pick_random(), factor)
+	enemy.setup(kind if kind != &"" else EnemyDefs.pick_random(), factor, speed_factor)
 	enemy.died.connect(_on_enemy_died)
 	_enemy_layer.add_child(enemy)
 	enemy.global_position = at if at != null else _view.global_position + Vector2.from_angle(randf() * TAU) * spawn_distance
 	return enemy
+
+
+## Enemy HP and damage multiplier of the current round.
+func strength_factor() -> float:
+	return pow(ROUND_STRENGTH, mission_round)
+
+
+## Enemy count multiplier of the current round.
+func count_factor() -> float:
+	return pow(ROUND_COUNT, mission_round)
+
+
+## Starts the next, harder round after a won mission: enemies 20% stronger, 10% more of them
+## (more per wave and a higher kill goal), after the usual countdown. Towers gain XP again.
+func proceed() -> void:
+	if not mission_done:
+		return
+	mission_round += 1
+	mission_done = false
+	kills = 0
+	wave = 0
+	_wave_timer = 0.0
+	mission_kill_goal = roundi(_base_kill_goal * count_factor())
+	mission_countdown = mission_start_delay
+	_view.island.gains_xp = not GameSession.edit_mode
 
 
 ## Mission progress from 0 to 1 (placeholder: kills toward mission_kill_goal).
