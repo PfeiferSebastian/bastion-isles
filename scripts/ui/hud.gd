@@ -231,56 +231,73 @@ func _describe_tile(coord: Vector2i) -> String:
 	if tile == null:
 		return _describe_price(coord)
 	var lines: PackedStringArray = []
+	var price := _describe_price(coord)
+	if price != "":
+		lines.append(price)
+	if tile.tower:
+		lines.append_array(_describe_building(coord, tile))
 	var what := "HQ" if tile.is_hq else "%s · Tier %d" % [Biome.name_of(tile.biome), tile.tier]
 	if tile.destroyed:
 		what += " · WASTELAND"
-	lines.append("%s · Ground HP %d / %d" % [what, ceili(tile.hp), roundi(view.island.tile_max_hp(coord))])
-	var cap := EnergyGrid.capacity(tile)
-	if cap > 0.0:
-		lines.append("Energy %.1f / %.0f" % [tile.energy, cap])
-	elif tile.tower == null and not tile.is_hq:
-		lines.append("Energy conduit: lets %d%% through" % roundi(EnergyGrid.pass_through(tile, view.island) * 100.0))
+	lines.append("%s%s · Ground HP %d / %d" % ["Ground: " if tile.tower else "", what, ceili(tile.hp), roundi(view.island.tile_max_hp(coord))])
+	if tile.tower == null and not tile.is_hq:
+		lines.append("Conducts %d%% of passing energy" % roundi(EnergyGrid.pass_through(tile, view.island) * 100.0))
+	if tile.is_hq:
+		var cannon := AttackProfiles.hq()
+		lines.append("Cannon: %.0f dmg every %.1fs · range %.1f hex · no energy" % [cannon.damage, cannon.cooldown, cannon.range_hexes])
 	var generator := EnergyGrid.generator_at(view.island, coord)
 	if generator:
 		lines.append("Generator: %.1f/s · reach %d · %s" % [generator.output, generator.reach(), _describe_falloff(generator)])
 	var effects := view.island.aura_at(coord)
 	if not effects.is_empty():
 		lines.append("Auras: " + Auras.describe(effects))
-	if tile.is_hq:
-		var cannon := AttackProfiles.hq()
-		lines.append("HQ cannon: %.0f dmg every %.1fs · range %.1f hex · no energy" % [cannon.damage, cannon.cooldown, cannon.range_hexes])
+	return "
+".join(lines)
+
+
+## The building on `coord`: name, level and combined size; its (shared) pools; what it does
+## right now; and where its effect bonus comes from.
+func _describe_building(coord: Vector2i, tile: IslandTile) -> PackedStringArray:
+	var island := view.island
 	var tower := tile.tower
-	if tower:
-		# Combined buildings show their shared pools.
-		var hp := view.island.group_pool(coord, &"hp")
-		var shield := view.island.group_pool(coord, &"shield")
-		var line := "%s · HP %d / %d" % [String(tower.type).capitalize(), ceili(hp.x), roundi(hp.y)]
-		if shield.y > 0.0:
-			line += " · Shield %d / %d" % [ceili(shield.x), roundi(shield.y)]
-		lines.append(line)
-		var level := tower.level()
-		if level >= Tower.MAX_LEVEL:
-			lines.append("Level %d (max) · +%d%% effect" % [level, roundi((tower.level_bonus() - 1.0) * 100.0)])
-		else:
-			var from := Tower.xp_for_level(level)
-			lines.append("Level %d · XP %d / %d · +%d%% effect · ground +1 tier every %d levels" % [level,
-				floori(tower.xp - from), ceili(Tower.xp_for_level(level + 1) - from),
-				roundi((tower.level_bonus() - 1.0) * 100.0), Island.LEVELS_PER_TIER])
-		var size := view.island.group_of(coord).size()
+	var lines: PackedStringArray = []
+	var level := tower.level()
+	var head := "%s · Level %d" % [String(tower.type).capitalize(), level]
+	if level < Tower.MAX_LEVEL:
+		var from := Tower.xp_for_level(level)
+		head += " (%d / %d XP)" % [floori(tower.xp - from), ceili(Tower.xp_for_level(level + 1) - from)]
+	var size := island.group_of(coord).size()
+	if size >= 2:
+		head += " · combined ×%d" % size
+	lines.append(head)
+	var pools: PackedStringArray = []
+	var hp := island.group_pool(coord, &"hp")
+	pools.append("HP %d / %d" % [ceili(hp.x), roundi(hp.y)])
+	var shield := island.group_pool(coord, &"shield")
+	if shield.y > 0.0:
+		pools.append("Shield %d / %d" % [ceili(shield.x), roundi(shield.y)])
+	var energy := island.group_pool(coord, &"energy")
+	if energy.y > 0.0:
+		pools.append("Energy %.0f / %.0f" % [energy.x, energy.y])
+	lines.append(" · ".join(pools))
+	match tower.type:
+		&"attack":
+			lines.append(_describe_attack(AttackProfiles.for_tile(island, coord)))
+		&"repair":
+			lines.append(_describe_repair(RepairProfiles.for_tile(island, coord)))
+		&"aura":
+			lines.append(_describe_aura(AuraProfiles.for_tile(island, coord), tower.aura_power))
+		&"scout":
+			lines.append(_describe_scout(ScoutProfiles.for_tile(island, coord), tower.aura_power))
+	var bonus := roundi((island.effect_bonus(coord) - 1.0) * 100.0)
+	if bonus > 0:
+		var parts: PackedStringArray = []
+		if level > 1:
+			parts.append("level +%d%%" % roundi((tower.level_bonus() - 1.0) * 100.0))
 		if size >= 2:
-			lines.append("Combined building of %d · +%d%% effect each · shared HP, shield and energy" % [size, roundi(Island.MERGE_BONUS * 100.0)])
-	if tower and tower.type == &"attack":
-		lines.append("Attack: " + _describe_attack(AttackProfiles.for_tile(view.island, coord)))
-	var price := _describe_price(coord)
-	if price != "":
-		lines.append(price)
-	if tower and tower.type == &"aura":
-		lines.append("Aura: " + _describe_aura(AuraProfiles.for_tile(view.island, coord), tower.aura_power))
-	if tower and tower.type == &"scout":
-		lines.append("Scout: " + _describe_scout(ScoutProfiles.for_tile(view.island, coord), tower.aura_power))
-	if tower and tower.type == &"repair":
-		lines.append("Repair: " + _describe_repair(RepairProfiles.for_tile(view.island, coord)))
-	return "\n".join(lines)
+			parts.append("combined +%d%%" % roundi(Island.MERGE_BONUS * 100.0))
+		lines.append("Effect +%d%% (%s)" % [bonus, ", ".join(parts)])
+	return lines
 
 
 static func _describe_attack(p: AttackProfile) -> String:

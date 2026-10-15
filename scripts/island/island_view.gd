@@ -25,17 +25,17 @@ const WASTELAND_TINT := Color(0.38, 0.28, 0.22)
 const TIER_SHADE_PER_LEVEL := 0.06
 ## Base tint for all tile art: slightly muted so towers, rings and overlays stand out.
 const ART_TINT := Color(0.86, 0.86, 0.86)
-## Dark plate under every building, so it reads against busy terrain.
-const BUILDING_PLATE := Color(0, 0, 0, 0.38)
 const REPAIR_COLOR := Color("5fd068")
 const HP_RING_SCALE := 0.84
-const HP_RING_WIDTH := 4.0
+const HP_RING_WIDTH := 3.0
 const HP_LOW_COLOR := Color("e05545")
 const HP_FULL_COLOR := Color("5fd068")
 const SHIELD_COLOR := Color("1e7bff")
 const ENERGY_COLOR := Color("ffd23f")
 const ENERGY_EMPTY_COLOR := Color("c0392b")
-const TRACK_COLOR := Color(0, 0, 0, 0.72)
+const TRACK_COLOR := Color(0, 0, 0, 0.55)
+## Bars only appear when they matter (see _draw_group_status): energy below this share.
+const ENERGY_SHOWN_BELOW := 0.5
 ## Gap (in hex sides) at both ends of each status arc.
 const ARC_GAP := 0.08
 const WALL_REACH_COLOR := Color("9fb4d8")
@@ -63,8 +63,10 @@ const DRAG_THRESHOLD := 10.0
 
 
 func _ready() -> void:
-	island = IslandSave.load_island() if load_saved else null
-	if island == null:
+	if load_saved:
+		island = IslandSave.load_island(starter_radius)
+		island.persist_blueprints = true
+	else:
 		island = Island.create_starter(starter_radius)
 	island.tower_destroyed.connect(_free_tower_node)
 	island.tile_changed.connect(_on_tile_changed)
@@ -360,8 +362,6 @@ func _draw() -> void:
 			_canvas.draw_texture_rect(TerrainArt.for_tile(tile), TerrainArt.tile_rect(center, hex_size), false, shade)
 		else:
 			_draw_plain_tile(tile, center, shade)
-		if tile.tower:
-			_canvas.draw_colored_polygon(_offset(_scaled(_hex_points, 0.62), center), BUILDING_PLATE)
 		if tile.destroyed:
 			_draw_wasteland(center)
 		elif tile.tier > 1:
@@ -550,7 +550,8 @@ func _can_place(coord: Vector2i, item: Dictionary) -> bool:
 ## HP, shield and energy of a building group run along its outer edge (a combined building
 ## shares one pool of each). Measured in sixths of that edge, clockwise from the top corner
 ## like a single hex: shield top → lower right (2/6), energy lower right → lower left (2/6),
-## HP the rest.
+## HP the rest. To keep the map calm, a bar only shows while it matters – HP when damaged,
+## shield when not full, energy when running low – and all of them while hovered.
 func _draw_group_status(group: Array[Vector2i]) -> void:
 	var ring := GroupShape.inset(GroupShape.outline(group, hex_size), HexMath.SQRT3 / 2.0 * hex_size * (1.0 - HP_RING_SCALE))
 	if ring.size() < 3:
@@ -563,13 +564,15 @@ func _draw_group_status(group: Array[Vector2i]) -> void:
 	var hp_start := 4 if energy.y > 0.0 else 2
 	var hp_edges := 6 - (2 if shield.y > 0.0 else 0) - (2 if energy.y > 0.0 else 0)
 	var hp_ratio := clampf(hp.x / maxf(hp.y, 0.001), 0.0, 1.0)
-	_draw_ring_bar(ring, sixth, hp_start, hp_edges, hp_ratio, HP_LOW_COLOR.lerp(HP_FULL_COLOR, hp_ratio), TRACK_COLOR)
-	if shield.y > 0.0:
-		_canvas.draw_polyline(_ring_piece(ring, sixth, 0, 2, 1.0), TRACK_COLOR, HP_RING_WIDTH + 3.0, true)
+	var hovered := group.has(hovered_coord)
+	if hovered or hp_ratio < 0.995:
+		_draw_ring_bar(ring, sixth, hp_start, hp_edges, hp_ratio, HP_LOW_COLOR.lerp(HP_FULL_COLOR, hp_ratio), TRACK_COLOR)
+	if shield.y > 0.0 and (hovered or shield.x < shield.y * 0.995):
+		_canvas.draw_polyline(_ring_piece(ring, sixth, 0, 2, 1.0), TRACK_COLOR, HP_RING_WIDTH + 2.0, true)
 		var points := _ring_piece(ring, sixth, 0, 2, clampf(shield.x / shield.y, 0.0, 1.0))
 		for i in points.size() - 1:
 			_canvas.draw_dashed_line(points[i], points[i + 1], SHIELD_COLOR, HP_RING_WIDTH, 6.0)
-	if energy.y > 0.0:
+	if energy.y > 0.0 and (hovered or energy.x < energy.y * ENERGY_SHOWN_BELOW):
 		var ratio := clampf(energy.x / energy.y, 0.0, 1.0)
 		var track := ENERGY_EMPTY_COLOR if ratio < 0.05 else TRACK_COLOR
 		# Anchored at the lower left, so energy drains from right to left.
@@ -577,7 +580,7 @@ func _draw_group_status(group: Array[Vector2i]) -> void:
 
 
 func _draw_ring_bar(ring: PackedVector2Array, sixth: float, start: int, edges: int, ratio: float, color: Color, track: Color, from_end := false) -> void:
-	_canvas.draw_polyline(_ring_piece(ring, sixth, start, edges, 1.0), track, HP_RING_WIDTH + 3.0, true)
+	_canvas.draw_polyline(_ring_piece(ring, sixth, start, edges, 1.0), track, HP_RING_WIDTH + 2.0, true)
 	if ratio > 0.0:
 		_canvas.draw_polyline(_ring_piece(ring, sixth, start, edges, ratio, from_end), color, HP_RING_WIDTH, true)
 
@@ -591,7 +594,7 @@ static func _ring_piece(ring: PackedVector2Array, sixth: float, start: int, edge
 
 func _draw_arc(center: Vector2, start: int, edges: int, ratio: float, color: Color, track: Color, from_end := false) -> void:
 	# The dark track is wider than the bar, so the bar keeps an outline on busy terrain.
-	_canvas.draw_polyline(_arc(center, start, edges, 1.0), track, HP_RING_WIDTH + 3.0, true)
+	_canvas.draw_polyline(_arc(center, start, edges, 1.0), track, HP_RING_WIDTH + 2.0, true)
 	if ratio > 0.0:
 		_canvas.draw_polyline(_arc(center, start, edges, ratio, from_end), color, HP_RING_WIDTH, true)
 

@@ -23,7 +23,8 @@ const TILE_HP_PER_TIER := 100.0
 ## Every tower in a combined building (2+ neighbouring towers of one type) works this much
 ## better: two towers count as 2.6, three as 3.9 and so on.
 const MERGE_BONUS := 0.3
-## Blueprints for a tower: this many, plus one for every tower of that type already owned.
+## Blueprints for a tower: this many, plus one for every tower of that type already owned
+## (for tiles: one for every unused tile in the inventory).
 const BLUEPRINTS_BASE := 2
 ## Longest wall section (connected walls) that may be built.
 const MAX_WALL_SECTION := 3
@@ -47,6 +48,10 @@ var _aura_cache: Dictionary = {}
 var _group_cache: Dictionary = {}
 ## Towers only gain experience while this is on (off when editing the island).
 var gains_xp := true
+## Save found blueprints right away (IslandSave); only the player's island in the game does.
+var persist_blueprints := false
+## Tower types completed from blueprints since the island was last saved.
+var unsaved_towers: Array[String] = []
 
 
 func _init() -> void:
@@ -550,23 +555,33 @@ func towers_owned(type: StringName) -> int:
 	return owned
 
 
-## Blueprints of `type` needed for the next tower: more the more of them the player owns.
-func blueprints_needed(type: StringName) -> int:
-	return BLUEPRINTS_BASE + towers_owned(type)
+## How many of a blueprint kind the player has: towers of that type, or unused tiles.
+func owned_of(kind: StringName) -> int:
+	return treasury.inventory.tiles if kind == &"tile" else towers_owned(kind)
 
 
-## Tower types the player has none of (their blueprints drop a little more often).
-func missing_tower_types() -> Array[StringName]:
+## Blueprints of `kind` needed for the next one: more the more of them the player owns.
+func blueprints_needed(kind: StringName) -> int:
+	return BLUEPRINTS_BASE + owned_of(kind)
+
+
+## Blueprint kinds the player has none of (their blueprints drop a little more often).
+func missing_blueprint_kinds() -> Array[StringName]:
 	var result: Array[StringName] = []
-	for type in TowerDefs.TYPES:
-		if towers_owned(type) == 0:
-			result.append(type)
+	for kind in Economy.blueprint_kinds():
+		if owned_of(kind) == 0:
+			result.append(kind)
 	return result
 
 
 ## Adds a found blueprint; true when it completed a set and a tower went into the inventory.
 func add_blueprint(type: StringName) -> bool:
-	return treasury.add_blueprint(type, blueprints_needed(type))
+	var built := treasury.add_blueprint(type, blueprints_needed(type))
+	if built:
+		unsaved_towers.append(String(type))
+	if persist_blueprints:
+		IslandSave.save_blueprints(self)
+	return built
 
 
 ## Every building group on the island (single towers are groups of one).

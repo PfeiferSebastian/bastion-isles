@@ -12,6 +12,11 @@ var kind: StringName
 var caption := ""
 ## Small text in the top-left corner (e.g. a tower's level).
 var badge := ""
+## Progress toward the next one (blueprints), 0–1, or -1 for none. With none in stock the
+## icon is covered by a dark clock wipe that clears as progress grows, like a build timer.
+var progress := -1.0
+## Small text in the bottom-left corner (e.g. blueprints "1/3").
+var corner_text := ""
 
 
 func _init(icon_kind: StringName, caption_text: String, tooltip: String) -> void:
@@ -47,6 +52,13 @@ func _draw() -> void:
 		_:
 			_tower_symbol(c, r)
 	draw_polyline(hex + PackedVector2Array([hex[0]]), Color(0, 0, 0, 0.55), 1.5, true)
+	if progress >= 0.0 and caption == "×0":
+		_draw_build_wipe(hex, c, r)
+	if corner_text != "":
+		var cfont := get_theme_default_font()
+		var cpos := Vector2(3, size.y - 4)
+		draw_string_outline(cfont, cpos, corner_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, 4, Color(0, 0, 0, 0.85))
+		draw_string(cfont, cpos, corner_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, MenuTheme.BRASS_LIGHT)
 	if badge != "":
 		var bfont := get_theme_default_font()
 		draw_string_outline(bfont, Vector2(3, 13), badge, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, 4, Color(0, 0, 0, 0.85))
@@ -156,3 +168,24 @@ func _tower_symbol(c: Vector2, r: float) -> void:
 		TowerArt.draw(self, kind, Biome.Type.NEUTRAL, c + Vector2(0, -r * 0.05), r * 0.6)
 	else:
 		_tower(c, r)
+
+
+## Dark wipe over the part still missing, sweeping clockwise from the top, with a bright
+## edge on the hex rim for the part already done.
+func _draw_build_wipe(hex: PackedVector2Array, c: Vector2, r: float) -> void:
+	var done := clampf(progress, 0.0, 1.0)
+	var pie := _pie(c, r * 1.5, done, 1.0)
+	for part in Geometry2D.intersect_polygons(hex, pie):
+		draw_colored_polygon(part, Color(0.05, 0.04, 0.03, 0.72))
+	if done > 0.0:
+		draw_arc(c, r * 0.9, -PI / 2.0, -PI / 2.0 + TAU * done, 32, MenuTheme.BRASS_LIGHT, 2.0, true)
+
+
+## Pie slice from `from` to `to` (shares of a full turn, clockwise from the top).
+static func _pie(c: Vector2, radius: float, from: float, to: float) -> PackedVector2Array:
+	var points := PackedVector2Array([c])
+	var steps := maxi(2, int(ceil((to - from) * 32.0)))
+	for i in steps + 1:
+		var a := -PI / 2.0 + TAU * lerpf(from, to, float(i) / steps)
+		points.append(c + Vector2.from_angle(a) * radius)
+	return points

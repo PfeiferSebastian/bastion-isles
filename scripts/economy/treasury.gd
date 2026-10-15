@@ -1,8 +1,9 @@
 class_name Treasury
 extends RefCounted
 ## What the player owns (GDD §9): gold (unlimited), blueprint pieces, and the inventory of
-## placeable items. A full set of blueprints of one type (see Island.blueprints_needed)
-## becomes a tower of that type in the inventory; that is the only way to get new towers.
+## placeable items. A full set of blueprints of one kind (see Island.blueprints_needed)
+## becomes a tower of that type, or a neutral tile, in the inventory; that is the only way to
+## get new towers and tiles.
 
 signal changed
 
@@ -37,6 +38,11 @@ func load_dict(data: Dictionary) -> void:
 	changed.emit()
 
 
+## The inventory item a blueprint set of `kind` becomes.
+static func blueprint_item(kind: StringName) -> Dictionary:
+	return Inventory.tile_item() if kind == &"tile" else Inventory.tower_item(kind)
+
+
 func add_gold(amount: int) -> void:
 	gold += amount
 	changed.emit()
@@ -50,12 +56,13 @@ func spend_gold(amount: int) -> bool:
 	return true
 
 
-## Adds a blueprint; with `needed` of them the set becomes a tower. Returns true then.
-func add_blueprint(tower_type: StringName, needed: int) -> bool:
-	blueprints[tower_type] = blueprints.get(tower_type, 0) + 1
-	var built := blueprints[tower_type] >= needed
+## Adds a blueprint of `kind` (a tower type or &"tile"); with `needed` of them the set
+## becomes one of that kind in the inventory. Returns true then.
+func add_blueprint(kind: StringName, needed: int) -> bool:
+	blueprints[kind] = blueprints.get(kind, 0) + 1
+	var built := blueprints[kind] >= needed
 	if built:
-		blueprints[tower_type] -= needed
-		inventory.add(Inventory.tower_item(tower_type))
+		blueprints[kind] -= needed
+		inventory.add(blueprint_item(kind))
 	changed.emit()
 	return built

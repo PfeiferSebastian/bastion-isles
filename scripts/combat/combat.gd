@@ -204,7 +204,7 @@ func _on_enemy_died(enemy: Enemy) -> void:
 	kills += 1
 	EnergyGrid.notify_enemy_died(_view.island, _view.world_to_hex(enemy.global_position))
 	var treasury := _view.island.treasury
-	var loot := Economy.roll_loot(enemy, _loot_rng, _view.island.missing_tower_types())
+	var loot := Economy.roll_loot(enemy, _loot_rng, _view.island.missing_blueprint_kinds())
 	var at := enemy.global_position
 	treasury.add_gold(loot.gold)
 	popup(at, "+%d gold" % loot.gold, Color("ffd23f"))
@@ -213,22 +213,30 @@ func _on_enemy_died(enemy: Enemy) -> void:
 		treasury.inventory.add(stone)
 		popup(at + Vector2(0, -16), "+1 " + Inventory.label_of(stone), Color("8fd3ff"))
 		item_found.emit("Found: %s" % Inventory.label_of(stone))
-	if loot.tile:
-		treasury.inventory.add(Inventory.tile_item())
-		popup(at + Vector2(0, -48), "+1 Tile", Color("e8dcb8"))
 	if loot.blueprint != &"":
 		var name := String(loot.blueprint).capitalize()
 		var built := _view.island.add_blueprint(loot.blueprint)
 		popup(at + Vector2(0, -32), "Blueprint: " + name, Color("f0d28a"))
 		if built:
-			item_found.emit("Blueprints complete: +1 %s tower" % name)
+			item_found.emit("Blueprints complete: +1 %s" % (name if loot.blueprint == &"tile" else name + " tower"))
 		else:
 			item_found.emit("Blueprint found: %s (%d/%d)" % [name, treasury.blueprints[loot.blueprint], _view.island.blueprints_needed(loot.blueprint)])
 	if not mission_done and kills >= mission_kill_goal:
 		mission_done = true
 		# The fight is won: towers stop gaining experience.
 		_view.island.gains_xp = false
+		_clear_sky()
 		mission_completed.emit()
+
+
+## Mission won: the remaining enemies vanish in a puff (no loot) and all shots in flight go.
+func _clear_sky() -> void:
+	for enemy in enemies():
+		_bursts.append({position = enemy.global_position, time = BURST_TIME})
+		enemy.is_dead = true
+		enemy.queue_free()
+	for shot in _projectile_layer.get_children():
+		shot.queue_free()
 
 
 ## Short floating text in the world (loot, "not enough gold"…).

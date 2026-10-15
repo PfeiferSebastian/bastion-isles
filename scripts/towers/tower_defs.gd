@@ -7,6 +7,17 @@ const TYPES: Array[StringName] = [
 	&"attack", &"wall", &"energy", &"repair", &"aura", &"scout", &"warehouse",
 ]
 
+## What each building does, for hover texts. The biome below changes how it works.
+const DESCRIPTIONS := {
+	&"attack": "Turret. Fires at enemies in range, using energy from its tile.\nThe biome decides the weapon: cannon, thorns, mortar, laser or poison.",
+	&"wall": "Rampart with lots of HP. Raises the max HP of buildings next to it\nand mends itself from its own energy after 10 s without damage. At most 3 in a row.",
+	&"energy": "Generator. Sends energy to the storages of buildings around it;\nless arrives the further it travels and the worse the ground conducts.",
+	&"repair": "Workshop. Repairs damaged buildings and ground in reach, using energy.",
+	&"aura": "Obelisk. Buffs the buildings around it while it has energy;\nthe biome decides the buff.",
+	&"scout": "Watchtower. Clears the fog of war around it while it has energy.",
+	&"warehouse": "Storehouse. Will hold resources and keep loot when escaping (no effect yet).",
+}
+
 const BASE_HP := {
 	&"attack": 100.0,
 	&"wall": 400.0,
@@ -45,6 +56,10 @@ const WALL_REST_DELAY := 10.0
 const WALL_REST_REGEN := 0.02
 ## Energy per second the resting wall spends on regenerating.
 const WALL_REST_ENERGY := 1.0
+
+
+static func description_of(type: StringName) -> String:
+	return DESCRIPTIONS.get(type, "")
 
 
 static func base_hp(type: StringName) -> float:

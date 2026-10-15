@@ -71,8 +71,7 @@ func _rebuild() -> void:
 		for level in inventory.tower_levels(type):
 			owned += inventory.count(Inventory.tower_item(type, level))
 		_tabs.set_tab_title(i + 1, "%s (%d)" % [String(type).capitalize(), owned])
-		_tab_info[i + 1] = "%s: %d in the inventory · blueprints %d/%d (a full set becomes a tower)" % [
-			String(type).capitalize(), owned, treasury.blueprints.get(type, 0), view.island.blueprints_needed(type)]
+		_tab_info[i + 1] = "%s (%d in the inventory)\n%s" % [String(type).capitalize(), owned, TowerDefs.description_of(type)]
 	for child in _slots.get_children():
 		child.queue_free()
 	if _tabs.current_tab == TERRAIN_TAB:
@@ -93,9 +92,19 @@ func _add_slot(kind: StringName, item: Dictionary, badge := "") -> void:
 	var amount := view.island.treasury.inventory.count(item)
 	var slot := ToolIcon.new(kind, "×%d" % amount, "")
 	slot.badge = badge
+	var blueprint_kind: StringName = &"tile" if item.kind == &"tile" else (item.type if item.kind == &"tower" and item.level == 1 else &"")
+	if blueprint_kind != &"":
+		# Blueprints toward the next one: "have/need" in the corner, plus the build wipe when empty.
+		var have: int = view.island.treasury.blueprints.get(blueprint_kind, 0)
+		var need := view.island.blueprints_needed(blueprint_kind)
+		slot.progress = float(have) / need
+		slot.corner_text = "%d/%d" % [have, need]
 	slot.set_meta(&"item", item)
 	slot.button_group = _group
-	slot.modulate = Color.WHITE if amount > 0 else Color(1, 1, 1, 0.4)
+	# Towers and tiles show their blueprint progress (a dark build wipe while none are in
+	# stock), so only other empty stacks are faded.
+	var has_progress: bool = item.kind == &"tile" or (item.kind == &"tower" and item.level == 1)
+	slot.modulate = Color.WHITE if amount > 0 or has_progress else Color(1, 1, 1, 0.4)
 	slot.disabled = amount <= 0
 	slot.button_down.connect(func() -> void:
 		if view.island.treasury.inventory.count(item) > 0:
@@ -110,13 +119,11 @@ static func describe(item: Dictionary, island: Island = null) -> String:
 		&"stone":
 			text += " · only found as loot\n" + Biome.description_of(item.biome)
 		&"tile":
-			text += " · dropped by enemies\nNew neutral ground next to the island (towers on an empty hex take one along).\n" + Biome.description_of(Biome.Type.NEUTRAL)
+			text += "\nNew neutral ground next to the island (towers on an empty hex take one along).\n" + Biome.description_of(Biome.Type.NEUTRAL)
 		&"tower":
+			text += "\n" + TowerDefs.description_of(item.type)
 			if item.level > 1:
 				text += "\nKeeps its level: +%d%% effect" % roundi(Tower.LEVEL_BONUS * (item.level - 1) * 100.0)
-			if island:
-				text += "\nBlueprints %d/%d for the next one (each tower you own needs one more)" % [
-					island.treasury.blueprints.get(item.type, 0), island.blueprints_needed(item.type)]
 	return text
 
 

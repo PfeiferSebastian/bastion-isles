@@ -294,9 +294,10 @@ The Tier 0 behaviour, i.e. the base version on a neutral tile:
 - **Build bar ✅:** hexagon symbols – Tower: light tower on dark hex · Tile: plus on sand · Forest: dark green tree · Mountain: grey mountain on red · Desert: sand dunes · Plains: horizon (beige land, white sky) · Swamp: pond with reeds.
 - **Energy overlay ✅:** storages are saturated by their reserve (grey = empty, full yellow = full) with the % shown.
 - ✅ **Mission progress tube** along the very bottom: a thin brass tube that fills with green liquid, a short tick every 5% (longer every 25%). Placeholder source until zones exist: kills out of 100.
-- ✅ **Mission flow (placeholder):** enemies only start coming **10 s** after landing (countdown in the mission bar; spawning a wave by hand starts it early). When the goal is reached, **no more enemies spawn**, a notice appears and the mission bar offers **Leave** (back to the main menu for now).
-- ✅ **Saved island:** leaving a mission or retreating (Esc) saves the island – layout, biomes, tiers, towers, gold, blueprints and inventory – repaired, as after any fight (`user://island.json`). Start and Edit Island continue from it.
+- ✅ **Mission flow (placeholder):** enemies only start coming **10 s** after landing (countdown in the mission bar; spawning a wave by hand starts it early). When the goal is reached, **no more enemies spawn** and the **remaining enemies vanish** (no loot), a notice appears and the mission bar offers **Leave** (back to the main menu for now).
+- ✅ **Saved island:** leaving a mission or retreating (Esc) saves the island – layout, biomes, tiers, towers, gold, blueprints and inventory – repaired, as after any fight (`user://island.json`). Start and Edit Island continue from it. ✅ **Blueprints are saved the moment they are found** (`user://blueprints.json`), together with towers completed from them, so they are kept even if a mission ends without leaving or retreating (quitting, crash); those towers are handed out on the next start.
 - ✅ **Edit Island** (main menu, under Start): the island without enemies – build and rearrange freely, then **Done** saves and returns to the menu.
+- ✅ **Calm map (2026-10-16):** status bars are thinner and only show while they matter – HP when damaged, shield when not full, energy below 50% – and all of them while the building is hovered. No dark plates under buildings.
 - ✅ **Hover info:** there are no floating tooltips – every hover text (tiles, inventory slots and tabs, buttons, overlay icons, mission tube) shows in the fixed info window at the bottom right; with nothing hovered it shows the controls. The window has a fixed size; very long texts are cut off at the bottom.
 - ✅ **Notices:** found biome stones, blueprints (with set progress, or "+1 tower" when a set completes) and level-ups stack below the overlay icons at the top left, stay about 10 s and then fade out over 1 s.
 - **Tier display (interim) ✅:** colour shades – **light = Tier 0, dark = Tier 7**. Biome tiles get darker with every tier; the Tier overlay shows a light-to-dark ramp with the number.
@@ -580,8 +581,8 @@ Enemies fly, so they can cross the island without collision. They pick targets b
 ### 9.1 Prototype economy ✅ (2026-10-15)
 - **Gold** is unlimited and comes from **destroyed enemies** (and later from destroyed enemy buildings and hex tiles). ✅ **Normalised:** 1 gold per light enemy (Rammer, Corsair), 3 per normal (Gunboat), 5 per heavy (Bomber). ✅ **Nothing is bought with gold (2026-10-16)** – it has no use yet.
 - **Rare drops = biome stones** (one per faction biome). Enemies have a **chance** to drop one; **the stronger the enemy, the likelier**. ✅ **Very rare (2026-10-16): 0.1% × strength.** (Faction resources like Wood, Ore, Aether, Life Essence and Pearls stay as an idea for faction abilities.)
-- ✅ **Blueprints are the only way to new towers (2026-10-16):** each kill rolls one random tower type: **1% × strength**, or **1.2% × strength** if the player owns none of that type. A set of **2 + (towers of that type already owned)** blueprints becomes **one tower** of that type in the inventory, so every further tower of a type takes longer.
-- ✅ **Neutral tiles drop** from enemies too (💡 12% per kill).
+- ✅ **Blueprints are the only way to new towers (2026-10-16):** each kill rolls one random kind (a tower type or **neutral tile**): **1% × strength**, or **1.2% × strength** if the player owns none of that kind. A set of **2 + (towers of that type already owned)** blueprints becomes **one tower** in the inventory (tiles: 2 + unused tiles in the inventory), so every further one takes longer. ✅ **Tiles no longer drop directly** – only from blueprints.
+- ✅ **Progress on the slot:** like a build timer in Command & Conquer – with none in stock, a dark clock wipe over the slot clears as blueprints come in; and every tower/tile slot shows **blueprints have/need** (e.g. 1/3) in its bottom-left corner.
 - The **HQ holds** blueprints and rare resources, **unlimited for now**. The Warehouse keeps its escape-loot role for later.
 - Debug keys: G +500 gold, R +5 biome stones each and 5 tiles, B a full blueprint set (one tower) of each type.
 
@@ -592,7 +593,7 @@ Enemies fly, so they can cross the island without collision. They pick targets b
 ### 9.2 Inventory ✅ (2026-10-15)
 - Placeable things live in a **stackable inventory**: **towers** (one tab per tower type, **stacked by level** – towers will gain levels later), **neutral tiles** and **biome stones**.
 - **Rare drops are biome stones** directly (Forest, Mountain, Plains, Swamp, Lake stones).
-- Tabs show how many items they hold, e.g. "Attack (2)"; hovering a tower tab or slot shows its blueprint progress (e.g. 2/3). Empty stacks are greyed out.
+- Tabs show how many items they hold, e.g. "Attack (2)"; hovering a tower tab or slot shows what the building does. Empty stacks are greyed out.
 - **Placing:** **click** a slot to select it, then click tiles (stays selected while you have more), **or drag** a slot onto the island. Right click or Esc cancels.
 - **Picking up:** right click (with nothing selected) returns the top layer of a tile to the inventory: tower first, then biome stone (tile turns neutral), then the tile itself. Replacing a biome with another stone returns the old stone. No gold refunds.
 - A biome stone **or a tower** on an empty spot next to the island takes a tile from the inventory along (placed automatically when you have one).

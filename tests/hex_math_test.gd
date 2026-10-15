@@ -471,7 +471,22 @@ func _test_economy() -> void:
 	var bp_island := Island.create_starter(1)
 	_check(bp_island.blueprints_needed(&"scout") == Island.BLUEPRINTS_BASE, "a missing type needs the base set")
 	_check(bp_island.blueprints_needed(&"attack") == Island.BLUEPRINTS_BASE + 1, "each owned tower raises the set by one")
-	_check(bp_island.missing_tower_types().has(&"scout") and not bp_island.missing_tower_types().has(&"attack"), "missing types known")
+	_check(bp_island.missing_blueprint_kinds().has(&"scout") and not bp_island.missing_blueprint_kinds().has(&"attack"), "missing types known")
+	# Blueprints are saved the moment they are found and come back even without an island save.
+	IslandSave.path = "user://test_island.json"
+	IslandSave.blueprint_path = "user://test_blueprints.json"
+	bp_island.persist_blueprints = true
+	bp_island.add_blueprint(&"aura")
+	bp_island.add_blueprint(&"scout")
+	bp_island.add_blueprint(&"scout")
+	var reloaded := IslandSave.load_island(1)
+	_check(reloaded.treasury.blueprints.get(&"aura", 0) == 1, "blueprint progress survives without an island save")
+	_check(reloaded.treasury.inventory.count(Inventory.tower_item(&"scout")) == 1, "towers from blueprints survive without an island save")
+	_check(IslandSave.load_island(1).treasury.inventory.count(Inventory.tower_item(&"scout")) == 1, "and are handed out only once")
+	DirAccess.remove_absolute(IslandSave.path)
+	DirAccess.remove_absolute(IslandSave.blueprint_path)
+	IslandSave.path = "user://island.json"
+	IslandSave.blueprint_path = "user://blueprints.json"
 	var inv := Inventory.new()
 	inv.add(Inventory.tower_item(&"wall", 1), 2)
 	inv.add(Inventory.tower_item(&"wall", 3))
@@ -493,10 +508,12 @@ func _test_economy() -> void:
 	_check(Economy.roll_loot(weak, rng).gold == 1, "light enemy gives 1 gold")
 	_check(is_equal_approx(Economy.stone_chance(weak), 0.001), "biome stones are very rare")
 	_check(Economy.blueprint_chance(weak, true) > Economy.blueprint_chance(weak, false), "missing types drop a bit more often")
-	var tiles := 0
-	for i in 400:
-		tiles += 1 if Economy.roll_loot(weak, rng).tile else 0
-	_check(tiles > 20 and tiles < 90, "enemies drop tiles now and then")
+	var tile_set := Island.create_starter(1)
+	var needed := tile_set.blueprints_needed(&"tile")
+	for i in needed - 1:
+		tile_set.add_blueprint(&"tile")
+	var before := tile_set.treasury.inventory.tiles
+	_check(tile_set.add_blueprint(&"tile") and tile_set.treasury.inventory.tiles == before + 1, "tile blueprints make a tile")
 	_check(Economy.kill_gold(strong) == 5, "heavy enemy gives 5 gold")
 	_check(Economy.kill_gold(strong) > Economy.kill_gold(weak), "stronger enemies give more gold")
 	_check(Economy.stone_chance(strong) > Economy.stone_chance(weak) * 3, "stronger enemies drop stones more often")

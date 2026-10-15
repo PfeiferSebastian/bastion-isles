@@ -1,7 +1,7 @@
 class_name Economy
 extends RefCounted
-## Loot (GDD §9). Nothing is bought with gold: towers come from blueprints (several make one
-## tower, see Island.blueprints_needed), tiles and biome stones drop from enemies.
+## Loot (GDD §9). Nothing is bought with gold: towers and neutral tiles come from blueprints
+## (several make one, see Island.blueprints_needed); biome stones drop from enemies.
 ## Placeholder numbers until playtesting.
 
 const STARTING_GOLD := 30
@@ -14,9 +14,8 @@ const STARTING_TILES := 4
 ## it on yet.)
 const KILL_GOLD := {&"corsair": 1, &"rammer": 1, &"gunboat": 3, &"bomber": 5}
 ## Drop chances per kill; stones and blueprints get likelier with enemy strength (max HP
-## relative to a basic rammer), neutral tiles drop at a flat rate. Biome stones are very
-## rare; blueprints of a tower type the player has none of are a little likelier.
-const TILE_DROP_CHANCE := 0.12
+## relative to a basic rammer). Biome stones are very rare; blueprints of something the
+## player has none of are a little likelier.
 const STONE_DROP_CHANCE := 0.001
 const BLUEPRINT_DROP_CHANCE := 0.01
 const MISSING_BLUEPRINT_DROP_CHANCE := 0.012
@@ -36,20 +35,27 @@ static func stone_chance(enemy: Enemy) -> float:
 	return minf(STONE_DROP_CHANCE * strength(enemy), MAX_DROP_CHANCE)
 
 
-## Chance that `enemy` drops a blueprint of one tower type: higher if the player has none.
+## Things blueprints exist for: every tower type and neutral tiles.
+static func blueprint_kinds() -> Array[StringName]:
+	var kinds: Array[StringName] = TowerDefs.TYPES.duplicate()
+	kinds.append(&"tile")
+	return kinds
+
+
+## Chance that `enemy` drops a blueprint of one kind: higher if the player has none.
 static func blueprint_chance(enemy: Enemy, missing: bool) -> float:
 	return minf((MISSING_BLUEPRINT_DROP_CHANCE if missing else BLUEPRINT_DROP_CHANCE) * strength(enemy), MAX_DROP_CHANCE)
 
 
-## Loot of one kill: {gold, tile (bool), stone (Biome.Type or -1), blueprint (StringName or
-## &"")}. A random tower type is picked for the blueprint roll; `missing` lists the types the
+## Loot of one kill: {gold, stone (Biome.Type or -1), blueprint (a tower type, &"tile" or
+## &"")}. A random kind is picked for the blueprint roll; `missing` lists the kinds the
 ## player has none of. `rng` makes drops reproducible (tests, simulation).
 static func roll_loot(enemy: Enemy, rng: RandomNumberGenerator, missing: Array[StringName] = []) -> Dictionary:
-	var loot := {gold = kill_gold(enemy), tile = false, stone = -1, blueprint = &""}
-	loot.tile = rng.randf() < TILE_DROP_CHANCE
+	var loot := {gold = kill_gold(enemy), stone = -1, blueprint = &""}
 	if rng.randf() < stone_chance(enemy):
 		loot.stone = Treasury.STONE_BIOMES[rng.randi() % Treasury.STONE_BIOMES.size()]
-	var type: StringName = TowerDefs.TYPES[rng.randi() % TowerDefs.TYPES.size()]
+	var kinds := blueprint_kinds()
+	var type: StringName = kinds[rng.randi() % kinds.size()]
 	if rng.randf() < blueprint_chance(enemy, missing.has(type)):
 		loot.blueprint = type
 	return loot
