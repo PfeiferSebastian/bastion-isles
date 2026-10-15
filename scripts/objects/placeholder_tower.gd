@@ -11,6 +11,13 @@ extends Node2D
 
 @export var radius := 18.0
 
+## Turret direction in radians; 0 points right, -PI/2 (default) points up.
+var aim_angle := -PI / 2.0:
+	set(value):
+		if not is_equal_approx(value, aim_angle):
+			aim_angle = value
+			queue_redraw()
+
 const BASE := Color("4a4f5c")
 const DARK := Color("2b2e36")
 const ACCENTS := {
@@ -69,7 +76,9 @@ func _draw() -> void:
 			draw_line(Vector2(box.position.x, box.end.y), Vector2(box.end.x, box.position.y), accent.darkened(0.45), 2.0)
 		_:  # attack
 			_draw_base()
+			draw_set_transform(Vector2.ZERO, aim_angle + PI / 2.0)
 			draw_rect(Rect2(-4, -radius - 10, 8, radius + 4), DARK)
+			draw_set_transform(Vector2.ZERO)
 			draw_circle(Vector2.ZERO, radius * 0.45, DARK)
 			draw_circle(Vector2.ZERO, radius * 0.2, accent)
 

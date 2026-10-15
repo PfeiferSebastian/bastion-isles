@@ -7,7 +7,7 @@ enum Tool { TOWER, TILE, BIOME }
 
 @export var hex_size := 48.0
 @export var starter_radius := 2
-## Scene spawned for a tower. Its root must expose a `tower_type` property.
+## Scene spawned for a tower. Its root must expose `tower_type` and `aim_angle` properties.
 @export var placeable_scene: PackedScene
 ## Damage dealt by the debug key, until enemies exist.
 @export var debug_damage := 25.0
@@ -22,6 +22,13 @@ const HP_RING_WIDTH := 4.0
 const HP_LOW_COLOR := Color("e05545")
 const HP_FULL_COLOR := Color("5fd068")
 const SHIELD_COLOR := Color("1e7bff")
+const ENERGY_COLOR := Color("ffd23f")
+const ENERGY_EMPTY_COLOR := Color("c0392b")
+const TRACK_COLOR := Color(0, 0, 0, 0.5)
+## Gap (in hex sides) at both ends of each status arc.
+const ARC_GAP := 0.08
+const WALL_REACH_COLOR := Color("9fb4d8")
+const ATTACK_REACH_COLOR := Color(1, 1, 1)
 
 var island: Island
 var tool := Tool.TOWER
@@ -53,6 +60,17 @@ func set_tool(new_tool: Tool, biome: Biome.Type = tool_biome) -> void:
 
 func world_to_hex(world_position: Vector2) -> Vector2i:
 	return HexMath.from_pixel(to_local(world_position), hex_size)
+
+
+func hex_center_world(coord: Vector2i) -> Vector2:
+	return to_global(HexMath.to_pixel(coord, hex_size))
+
+
+## Turns the tower's turret toward `angle` (radians, world space).
+func aim_tower(coord: Vector2i, angle: float) -> void:
+	var node: Node2D = _objects.get(coord)
+	if node:
+		node.set(&"aim_angle", angle)
 
 
 # --- Input ---------------------------------------------------------------
@@ -143,7 +161,8 @@ func _draw() -> void:
 		elif tile.tier > 0:
 			_draw_tier(center, tile)
 		if tile.tower:
-			_draw_health(coord, center)
+			_draw_status(coord, center, tile)
+	_draw_tower_reach()
 	_draw_hover()
 
 
@@ -168,33 +187,83 @@ func _draw_hover() -> void:
 	draw_polyline(outline, color, 3.0, true)
 
 
-## HP runs clockwise around the hex edge from the top corner; the shield overlays it as a dashed blue line.
-func _draw_health(coord: Vector2i, center: Vector2) -> void:
-	var tower := island.get_tower(coord)
-	var hp_ratio := clampf(tower.hp / island.tower_max_hp(coord), 0.0, 1.0)
-	draw_polyline(_ring(center, 1.0), Color(0, 0, 0, 0.5), HP_RING_WIDTH, true)
-	if hp_ratio > 0.0:
-		draw_polyline(_ring(center, hp_ratio), HP_LOW_COLOR.lerp(HP_FULL_COLOR, hp_ratio), HP_RING_WIDTH, true)
+## HP, shield and energy share the hex edge, each on its own arc of at least 2 sides.
+## Perimeter corners clockwise: 0 top, 1 upper right, 2 lower right, 3 bottom, 4 lower left, 5 upper left.
+## Shield: top → lower right. Energy: lower right → lower left. HP: the remaining sides.
+func _draw_status(coord: Vector2i, center: Vector2, tile: IslandTile) -> void:
+	var tower := tile.tower
 	var max_shield := island.tower_max_shield(coord)
-	if max_shield > 0.0 and tower.shield > 0.0:
-		var points := _ring(center, clampf(tower.shield / max_shield, 0.0, 1.0))
+	var cap := EnergyGrid.capacity(tile)
+	var hp_start := 4 if cap > 0.0 else 2
+	var hp_edges := 6 - (2 if max_shield > 0.0 else 0) - (2 if cap > 0.0 else 0)
+	var hp_ratio := clampf(tower.hp / island.tower_max_hp(coord), 0.0, 1.0)
+	_draw_arc(center, hp_start, hp_edges, hp_ratio, HP_LOW_COLOR.lerp(HP_FULL_COLOR, hp_ratio), TRACK_COLOR)
+	if max_shield > 0.0:
+		var points := _arc(center, 0, 2, 1.0)
+		draw_polyline(points, TRACK_COLOR, HP_RING_WIDTH, true)
+		points = _arc(center, 0, 2, clampf(tower.shield / max_shield, 0.0, 1.0))
 		for i in points.size() - 1:
-			draw_dashed_line(points[i], points[i + 1], SHIELD_COLOR, 3.0, 6.0)
+			draw_dashed_line(points[i], points[i + 1], SHIELD_COLOR, HP_RING_WIDTH, 6.0)
+	if cap > 0.0:
+		var ratio := clampf(tile.energy / cap, 0.0, 1.0)
+		var track := ENERGY_EMPTY_COLOR if ratio < 0.05 else TRACK_COLOR
+		_draw_arc(center, 2, 2, ratio, ENERGY_COLOR, track)
 
 
-## Points along the hex edge, clockwise from the top corner, covering `ratio` of the perimeter.
-func _ring(center: Vector2, ratio: float) -> PackedVector2Array:
+func _draw_arc(center: Vector2, start: int, edges: int, ratio: float, color: Color, track: Color) -> void:
+	draw_polyline(_arc(center, start, edges, 1.0), track, HP_RING_WIDTH, true)
+	if ratio > 0.0:
+		draw_polyline(_arc(center, start, edges, ratio), color, HP_RING_WIDTH, true)
+
+
+## Points along `edges` sides of the hex edge, clockwise from perimeter corner `start`,
+## covering `ratio` of them. A small gap at both ends keeps neighbouring arcs apart.
+func _arc(center: Vector2, start: int, edges: int, ratio: float) -> PackedVector2Array:
 	var corners := _scaled(_hex_points, HP_RING_SCALE)
-	# _hex_points starts at -30° and runs clockwise; index 5 is the top corner.
-	var ordered := PackedVector2Array([corners[5], corners[0], corners[1], corners[2], corners[3], corners[4], corners[5]])
-	var edges := ratio * 6.0
-	var result := PackedVector2Array([ordered[0] + center])
-	for i in 6:
-		if edges <= i:
-			break
-		var t := minf(edges - i, 1.0)
-		result.append(ordered[i].lerp(ordered[i + 1], t) + center)
+	var from := ARC_GAP
+	var to := ARC_GAP + (edges - 2.0 * ARC_GAP) * ratio
+	var result := PackedVector2Array([_perimeter_point(corners, start, from) + center])
+	for i in range(int(floor(from)) + 1, int(ceil(to))):
+		result.append(_perimeter_point(corners, start, float(i)) + center)
+	result.append(_perimeter_point(corners, start, to) + center)
 	return result
+
+
+## Point `distance` sides (fractional) clockwise from perimeter corner `start`.
+static func _perimeter_point(corners: PackedVector2Array, start: int, distance: float) -> Vector2:
+	var edge := int(floor(distance))
+	var t := distance - edge
+	# Perimeter corner i (0 = top, clockwise) is corners[(i + 5) % 6].
+	var a := corners[(start + edge + 5) % 6]
+	var b := corners[(start + edge + 6) % 6]
+	return a.lerp(b, t)
+
+
+## While hovering a tower (or the HQ), tint the tiles it affects:
+## generators by how much energy arrives, walls their buffed neighbours, attack towers their range.
+func _draw_tower_reach() -> void:
+	var tile := island.get_tile(hovered_coord)
+	if tile == null:
+		return
+	var shares := {}
+	var color := ENERGY_COLOR
+	var profile := EnergyGrid.generator_at(island, hovered_coord)
+	if profile:
+		shares = EnergyGrid.delivery_map(island, hovered_coord, profile)
+	elif tile.tower and tile.tower.type == &"wall":
+		color = WALL_REACH_COLOR
+		for n in HexMath.neighbors(hovered_coord):
+			if island.has_tile(n):
+				shares[n] = 1.0
+	elif tile.tower and tile.tower.type == &"attack":
+		color = ATTACK_REACH_COLOR
+		var reach := int(AttackProfiles.for_tile(island, hovered_coord).range_hexes)
+		for coord in HexMath.area(hovered_coord, reach):
+			if island.has_tile(coord) and coord != hovered_coord:
+				shares[coord] = 0.6
+	var inner := _scaled(_hex_points, 0.92)
+	for coord in shares:
+		draw_colored_polygon(_offset(inner, HexMath.to_pixel(coord, hex_size)), Color(color, 0.4 * shares[coord]))
 
 
 func _draw_tier(center: Vector2, tile: IslandTile) -> void:

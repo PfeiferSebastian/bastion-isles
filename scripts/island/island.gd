@@ -207,8 +207,9 @@ func _apply_damage(coord: Vector2i, amount: float) -> void:
 		tile_changed.emit(coord)
 
 
-## Advances regeneration and shields. Called every frame by the view.
+## Advances energy, regeneration and shields. Called every frame by the view.
 func tick(delta: float) -> void:
+	EnergyGrid.tick(self, delta)
 	for coord in _tiles:
 		var tower := get_tower(coord)
 		if tower == null:
@@ -217,8 +218,10 @@ func tick(delta: float) -> void:
 		var max_hp := tower_max_hp(coord)
 		tower.time_since_damage += delta
 		var regen: float = aura.get(&"regen", 0.0)
-		if tower.type == &"wall" and tower.time_since_damage >= TowerDefs.WALL_REST_DELAY:
-			regen += TowerDefs.WALL_REST_REGEN
+		if tower.type == &"wall" and tower.time_since_damage >= TowerDefs.WALL_REST_DELAY and tower.hp < max_hp:
+			# The resting wall pays for its own repairs from its tile's energy.
+			var power := EnergyGrid.draw_energy(self, coord, TowerDefs.WALL_REST_ENERGY * delta)
+			regen += TowerDefs.WALL_REST_REGEN * power
 		tower.hp = minf(max_hp, tower.hp + regen * max_hp * delta)
 		var max_shield: float = max_hp * aura.get(&"shield", 0.0)
 		tower.shield = minf(max_shield, tower.shield + max_shield * SHIELD_REGEN * delta)

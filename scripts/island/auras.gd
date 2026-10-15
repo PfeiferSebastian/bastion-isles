@@ -40,6 +40,9 @@ static func collect(island: Island, coord: Vector2i) -> Dictionary:
 		var tile := island.get_tile(n)
 		if tile:
 			_add(result, PER_TIER, tile)
+			# Wall towers buff the HP of adjacent buildings (not their own tile).
+			if tile.tower and tile.tower.type == &"wall":
+				result[&"max_hp"] = result.get(&"max_hp", 0.0) + TowerDefs.WALL_NEIGHBOUR_HP.get(tile.biome, 0.1)
 	return result
 
 

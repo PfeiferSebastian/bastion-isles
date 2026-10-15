@@ -9,6 +9,8 @@ var tier := 0
 var is_hq := false
 ## The tower standing on this tile, or null.
 var tower: Tower = null
+## Stored energy; capacity comes from EnergyGrid.capacity().
+var energy := 0.0
 
 
 func _init(at: Vector2i, type: Biome.Type = Biome.Type.NEUTRAL) -> void:
@@ -19,6 +21,11 @@ func _init(at: Vector2i, type: Biome.Type = Biome.Type.NEUTRAL) -> void:
 func set_biome(type: Biome.Type) -> void:
 	biome = type
 	tier = 0 if type == Biome.Type.NEUTRAL else 1
+
+
+## Destroyed tiles will block the energy layer once tile damage exists (milestone 5).
+func blocks_energy() -> bool:
+	return false
 
 
 func is_free() -> bool:

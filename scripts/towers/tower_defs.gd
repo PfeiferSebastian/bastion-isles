@@ -17,10 +17,26 @@ const BASE_HP := {
 	&"warehouse": 200.0,
 }
 
+## Towers that use energy and therefore get a storage on their tile (GDD §6.4).
+const ENERGY_CONSUMERS: Array[StringName] = [&"attack", &"wall", &"repair", &"aura", &"scout"]
+
+## Wall towers raise the max HP of adjacent buildings by this share, depending on the
+## biome (faction) under the wall. Placeholder numbers.
+const WALL_NEIGHBOUR_HP := {
+	Biome.Type.NEUTRAL: 0.10,
+	Biome.Type.FOREST: 0.10,
+	Biome.Type.MOUNTAIN: 0.20,
+	Biome.Type.DESERT: 0.08,
+	Biome.Type.PLAINS: 0.10,
+	Biome.Type.SWAMP: 0.10,
+}
+
 ## Wall (Tier 0): regenerates from its own energy after this long without damage.
 const WALL_REST_DELAY := 10.0
 ## Share of max HP the resting wall regains per second.
 const WALL_REST_REGEN := 0.02
+## Energy per second the resting wall spends on regenerating.
+const WALL_REST_ENERGY := 1.0
 
 
 static func base_hp(type: StringName) -> float:

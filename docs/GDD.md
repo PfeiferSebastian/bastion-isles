@@ -222,6 +222,8 @@ The Tier 0 behaviour, i.e. the base version on a neutral tile:
 
 - ❓ When a damaged Warehouse loses capacity, which resources are lost first? (To be defined later; chips can change it.)
 - 💡 Ideas for later blueprints: **Command** (now mostly covered by chips, 6.6), **Veil** (creates fog), **Trap**.
+- 🕓 **Propulsion tower** (idea, 2026-10-15): drives the island; gets **stronger the fewer tiles are connected to it**.
+- 🕓 **"The fewer tiles, the better"** as the core concept of a future faction (small, fast, specialised islands).
 
 ### 6.5 Energy ✅
 - **Every tile can store some energy.** Towers normally draw only from **the storage of their own tile**.
@@ -235,7 +237,24 @@ The Tier 0 behaviour, i.e. the base version on a neutral tile:
 - Biome specials:
   - **Forest** tiles produce small amounts of energy passively, all the time.
   - **Swamp** towers can drain energy from surrounding tiles.
-- ❓ Numbers: storage per tile, generator output, distance falloff, use per tower.
+- ✅ **Energy layer (decided 2026-10-15):** energy runs in a layer **beneath the buildings**.
+  - **Only tiles with an energy-consuming building store energy** (Attack, Wall, Repair, Aura, Scout). Energy towers and Warehouses store none.
+  - All other tiles are **conduits**: energy flows through them, losing a share on the way. **Factions differ** in how well their empty tiles conduct. 💡 Neutral 85% · Forest 92% · Mountain 80% · Desert 85% · Plains 97% · Swamp 88%.
+  - Tiles **with a building** pass energy on without loss.
+  - **Damaged/destroyed tiles can block** the flow (hook is in place; comes with tile damage, 8.4).
+  - Generators send energy along the **best path**; on top, each generator has its own falloff by path length (e.g. Mountain 100/40/10%).
+- ✅ **Prototype numbers (milestone 3b)**, all 💡 placeholders:
+  - Storage: 20 + 10 per tier on consumer tiles. New towers start empty.
+  - **The HQ is a weak neutral generator** (3/s, reach 2) so a new island can fight before the first Energy tower. 💡 Not in the original notes – please confirm.
+  - Default refill priority: best-connected consumer first, then emptiest.
+  - Energy towers (Tier 1 output, falloff by path length): Neutral 6/s, 100/50% · Mountain 10/s, 100/40/10% · Desert 6/s, 100/90/80/70% · Forest 2/s + root network (connected Forest tiles produce 3×) · Plains 3/s + conduit balancing · Swamp 3/s + 8 energy per enemy dying within 3 hexes. Output +25% per tier above 1, plus Desert efficiency.
+  - Forest tiles produce 0.3/s per tier for their own building and their neighbours.
+  - Use: Attack 1 per shot (Mountain 3, Forest/Swamp 0.5), Desert laser 2/s per beam, resting Wall 1/s. Aura, Scout and Repair use nothing yet because they have no effect yet.
+- ❓ Numbers to be tuned in playtesting.
+
+### 6.5b Status display & reach ✅
+- **HP, shield and energy share the hex edge**, each on its own arc of **at least 2 sides**: shield top → lower right (dashed blue), energy along the bottom (yellow, red track when empty), HP on the remaining sides. Without shield or storage, HP takes over those sides.
+- **Hovering a building tints the tiles it affects**: energy generators by how much arrives, walls their buffed neighbours, attack towers their range. ✅ The same should come for Repair and the other towers once they have effects.
 
 ### 6.6 Chips & items ✅
 - **Chips** are rule sets slotted into **one specific tower or fused complex**. They do not affect other towers of the same type.
@@ -284,7 +303,7 @@ How each biome changes each base tower. Tier 0 has no traits (6.1); the trait gr
 
 | Biome | Trait | Tier 3 / Tier 6 milestones |
 |---|---|---|
-| **Neutral (Tier 0)** | Lots of HP, no attack. Regenerates slowly from its own energy after **10 s without damage** | – |
+| **Neutral (Tier 0)** | Lots of HP, no attack. Regenerates slowly from its own energy after **10 s without damage**. ✅ **Raises the max HP of adjacent buildings** by a share that depends on the faction (💡 10%, Mountain 20%, Desert 8%) | – |
 | **Forest** | Living hedge: **regenerates even while under fire** (weaker than when resting) | ✅ **Regrows completely** after a cooldown once destroyed. 💡 T3 = long cooldown, T6 = short cooldown |
 | **Mountain** | Fortress: **most HP** and **damage reduction** ✅ | ✅ Ideas: **self-repair in large chunks** (e.g. 20% every 10 s) · **taunt** (enemies prefer to attack the wall). 💡 T3 = chunk repair, T6 = taunt |
 | **Desert** | Mirror wall: **spreads damage** to its Desert neighbours and **reflects part of it** back as light | 💡 T3: higher reflection share · T6: reflected light blinds the attacker |
@@ -535,7 +554,7 @@ There are two separate tracks:
 |---|---|
 | **1** ✅ | Scrollable background · hex grid with a neutral HQ · place objects on hex tiles |
 | **2** ✅ | Add/remove tiles · biome stones (neutral → Tier 1) · neighbour auras · object health |
-| **3** | Towers target and shoot dummy objects · dummies move · terrain changes towers |
+| **3** ✅ | Towers target and shoot dummy objects · dummies move · terrain changes towers (Attack only so far; Tier 3/6 milestones not yet) |
 | **4** | Tile merging with biome potentials · tower fusion (triangle recipe) · tower upgrades with visual change |
 | **5** | Zone with a start and an end · enemy waves at defined points · battle damage to tiers · escape |
 | **6** | Menus (main menu, options) |
@@ -573,6 +592,11 @@ Content, to design when the time comes:
 5. Empty-storage behaviour per tower and faction · Warehouse loss order (6.4 / 6.5)
 6. Unique tower level above max? · Necropolis classification (6.2 / 6.9)
 7. 🕓 Seafolk faction · resonance & faction bonuses · diplomacy & faction conflicts
+
+### Prototype follow-ups (noted 2026-10-15)
+1. Plains morph weapons need their own design pass (current version is a first attempt)
+2. Status visuals on enemies: weaken = purple ring ✅ (keep); **poison = green ring that shows its remaining duration**
+3. Enemy behaviour, to design later: enemies fly, so **flying over the island without collision** should be possible; **tiles can be destroyed** too (see 8.4)
 
 ## 15. Decision Log
 

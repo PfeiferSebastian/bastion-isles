@@ -7,6 +7,8 @@ var type: StringName
 var hp: float
 var shield := 0.0
 var time_since_damage := 0.0
+## Seconds until an Attack tower may fire its next projectile.
+var attack_cooldown := 0.0
 
 
 func _init(tower_type: StringName, max_hp: float) -> void:
