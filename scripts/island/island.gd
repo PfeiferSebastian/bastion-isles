@@ -311,7 +311,10 @@ func tower_max_shield(coord: Vector2i) -> float:
 func damage_tower(coord: Vector2i, amount: float) -> void:
 	if get_tower(coord) == null:
 		return
-	var spread: float = minf(aura_at(coord).get(&"damage_spread", 0.0), 1.0)
+	var aura := aura_at(coord)
+	# Armour (Mountain Aura) reduces incoming damage, capped at 80%.
+	amount *= 1.0 - minf(aura.get(&"armor", 0.0), 0.8)
+	var spread: float = minf(aura.get(&"damage_spread", 0.0), 1.0)
 	var receivers: Array[Vector2i] = []
 	for n in HexMath.neighbors(coord):
 		if get_tower(n) != null:
@@ -342,9 +345,11 @@ func _apply_damage(coord: Vector2i, amount: float) -> void:
 func tick(delta: float) -> void:
 	EnergyGrid.tick(self, delta)
 	_tick_heals_over_time(delta)
+	_power_auras(delta)
 	for coord in _tiles:
 		var tower := get_tower(coord)
 		if tower == null:
+			_regen_ground(coord, delta)
 			continue
 		var aura := aura_at(coord)
 		var max_hp := tower_max_hp(coord)
@@ -356,4 +361,31 @@ func tick(delta: float) -> void:
 			regen += TowerDefs.WALL_REST_REGEN * power
 		tower.hp = minf(max_hp, tower.hp + regen * max_hp * delta)
 		var max_shield: float = max_hp * aura.get(&"shield", 0.0)
-		tower.shield = minf(max_shield, tower.shield + max_shield * SHIELD_REGEN * delta)
+		if tower.shield < max_shield:
+			# Shields regenerate from the tower's own storage where it has one.
+			var gain := minf(max_shield - tower.shield, max_shield * SHIELD_REGEN * delta)
+			var power := 1.0
+			if EnergyGrid.capacity(get_tile(coord)) > 0.0:
+				power = EnergyGrid.draw_energy(self, coord, gain * TowerDefs.SHIELD_ENERGY_PER_HP)
+			tower.shield += gain * power
+		tower.shield = minf(tower.shield, max_shield)
+
+
+## Aura towers pay their energy every frame; their power scales the buff (0 = off).
+func _power_auras(delta: float) -> void:
+	for coord in _tiles:
+		var tower := get_tower(coord)
+		if tower and tower.type == &"aura":
+			var energy := AuraProfiles.for_tile(self, coord).energy_per_second * delta
+			tower.aura_power = EnergyGrid.draw_energy(self, coord, energy)
+
+
+## Regeneration auras (Forest tiles, Forest Aura towers) also mend the ground.
+func _regen_ground(coord: Vector2i, delta: float) -> void:
+	var tile := get_tile(coord)
+	var max_hp := tile_max_hp(coord)
+	if tile.destroyed or tile.hp >= max_hp:
+		return
+	var regen: float = aura_at(coord).get(&"regen", 0.0)
+	if regen > 0.0:
+		tile.hp = minf(max_hp, tile.hp + regen * max_hp * delta)

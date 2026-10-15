@@ -52,8 +52,11 @@ static func for_tile(island: Island, coord: Vector2i) -> AttackProfile:
 	_scale_by_tier(p, tile.tier)
 	var aura := island.aura_at(coord)
 	var efficiency: float = aura.get(&"efficiency", 0.0)
+	var output: float = aura.get(&"output", 0.0)
 	p.cooldown /= 1.0 + efficiency
-	p.beam_dps *= 1.0 + efficiency
+	p.beam_dps *= (1.0 + efficiency) * (1.0 + output)
+	p.damage *= 1.0 + output
+	p.thorn_dps *= 1.0 + output
 	p.poison = aura.get(&"poison", 0.0)
 	return p
 

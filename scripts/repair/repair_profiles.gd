@@ -51,5 +51,7 @@ static func for_tile(island: Island, coord: Vector2i) -> RepairProfile:
 	var tile := island.get_tile(coord)
 	var p := base(tile.biome)
 	p.amount *= 1.0 + TIER_AMOUNT_STEP * maxi(tile.tier - 1, 0)
-	p.cooldown /= 1.0 + island.aura_at(coord).get(&"efficiency", 0.0)
+	var aura := island.aura_at(coord)
+	p.amount *= 1.0 + aura.get(&"output", 0.0)
+	p.cooldown /= 1.0 + aura.get(&"efficiency", 0.0)
 	return p

@@ -31,6 +31,11 @@ const WALL_NEIGHBOUR_HP := {
 	Biome.Type.SWAMP: 0.10,
 }
 
+## Largest radius any Aura profile has.
+const AURA_RADIUS_MAX := 1
+## Energy per shield HP regenerated, paid from the tower's own storage.
+const SHIELD_ENERGY_PER_HP := 0.05
+
 ## Largest reach any Repair profile has (used to look for nearby Repair towers).
 const REPAIR_REACH_MAX := 3
 

@@ -110,6 +110,8 @@ func _describe_tile(coord: Vector2i) -> String:
 		lines.append(line)
 	if tower and tower.type == &"attack":
 		lines.append("Attack: " + _describe_attack(AttackProfiles.for_tile(view.island, coord)))
+	if tower and tower.type == &"aura":
+		lines.append("Aura: " + _describe_aura(AuraProfiles.for_tile(view.island, coord), tower.aura_power))
 	if tower and tower.type == &"repair":
 		lines.append("Repair: " + _describe_repair(RepairProfiles.for_tile(view.island, coord)))
 	return "\n".join(lines)
@@ -155,3 +157,15 @@ static func _describe_repair(p: RepairProfile) -> String:
 	if p.targets > 1:
 		what += " × %d targets" % p.targets
 	return "%s every %.1fs (%.1f energy) · reach %d" % [what, p.cooldown, p.energy_per_heal, p.reach()]
+
+
+static func _describe_aura(p: AuraProfile, power: float) -> String:
+	var parts: PackedStringArray = []
+	if not p.effects.is_empty():
+		parts.append(Auras.describe(p.effects))
+	if p.enemy_weaken > 0.0:
+		parts.append("weakens enemies %d%%" % roundi(p.enemy_weaken * 100.0))
+	if p.tile_aura_boost > 0.0:
+		parts.append("tile auras +%d%%" % roundi(p.tile_aura_boost * 100.0))
+	var state := "no energy – off" if power <= 0.0 else ("%d%% power" % roundi(power * 100.0))
+	return "%s · radius %d · %.1f energy/s · %s" % [" · ".join(parts), p.radius, p.energy_per_second, state]

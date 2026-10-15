@@ -17,6 +17,7 @@ func _init() -> void:
 	_test_energy()
 	_test_ground_damage()
 	_test_healing()
+	_test_aura_towers()
 	print("hex_math_test: %s" % ("OK" if _failures == 0 else "%d FAILED" % _failures))
 	quit(1 if _failures > 0 else 0)
 
@@ -323,3 +324,54 @@ func _test_healing() -> void:
 	_check(RepairProfiles.base(Biome.Type.DESERT).targets == 3, "desert pulses reach several targets")
 	_check(RepairProfiles.base(Biome.Type.PLAINS).mode == &"redistribute", "plains redistributes")
 	_check(RepairProfiles.base(Biome.Type.SWAMP).mode == &"lifesteal", "swamp drains enemies")
+
+
+func _test_aura_towers() -> void:
+	var island := Island.create_starter(2)
+	var aura := Vector2i(1, 0)
+	var neighbour := Vector2i(2, 0)
+	var far := Vector2i(-2, 0)
+	island.place_tower(aura, &"aura")
+	island.place_tower(neighbour, &"attack")
+	island.place_tower(far, &"attack")
+	var plain_damage := AttackProfiles.for_tile(island, neighbour).damage
+	_check(island.get_tower(aura).aura_power == 0.0, "aura starts unpowered")
+	island.get_tile(aura).energy = 20.0
+	island.tick(0.1)
+	_check(island.get_tower(aura).aura_power == 1.0, "aura powered by its tile energy")
+	_check(is_equal_approx(AttackProfiles.for_tile(island, neighbour).damage, plain_damage * 1.25), "neutral aura boosts neighbour output 25%")
+	_check(is_equal_approx(AttackProfiles.for_tile(island, far).damage, plain_damage), "aura does not reach distance 2")
+	# Tile auras inside the radius are boosted.
+	island.set_biome(neighbour, Biome.Type.MOUNTAIN)
+	_check(is_equal_approx(island.aura_at(neighbour).get(&"max_hp", 0.0), 0.05 * 1.25), "aura tower boosts tile auras in its radius")
+	# No chaining: a second aura tower next to the first gets only its own buff.
+	var second := Vector2i(1, -1)
+	island.place_tower(second, &"aura")
+	island.get_tile(second).energy = 20.0
+	island.tick(0.1)
+	_check(is_equal_approx(island.aura_at(second).get(&"output", 0.0), 0.25), "aura towers receive only their own buff")
+	# Mountain aura: armour reduces damage.
+	var armor := Island.create_starter(2)
+	armor.set_biome(aura, Biome.Type.MOUNTAIN)
+	armor.place_tower(aura, &"aura")
+	armor.place_tower(neighbour, &"attack")
+	armor.get_tile(aura).energy = 20.0
+	armor.tick(0.1)
+	var hp := armor.get_tower(neighbour).hp
+	armor.damage_tower(neighbour, 10.0)
+	_check(is_equal_approx(hp - armor.get_tower(neighbour).hp, 9.0), "mountain aura armour reduces damage 10%")
+	# Swamp aura buffs no allies.
+	var swamp := Island.create_starter(2)
+	swamp.set_biome(aura, Biome.Type.SWAMP)
+	swamp.place_tower(aura, &"aura")
+	swamp.place_tower(neighbour, &"attack")
+	swamp.get_tile(aura).energy = 20.0
+	swamp.tick(0.1)
+	_check(not swamp.aura_at(neighbour).has(&"output"), "swamp aura gives allies nothing")
+	_check(AuraProfiles.for_tile(swamp, aura).enemy_weaken > 0.0, "swamp aura weakens enemies")
+	# Forest regen also mends the ground.
+	var forest := Island.create_starter(2)
+	forest.set_biome(Vector2i(1, 0), Biome.Type.FOREST)
+	forest.damage_tile(Vector2i(2, 0), 100.0)
+	forest.tick(10.0)
+	_check(forest.get_tile(Vector2i(2, 0)).hp > Island.TILE_BASE_HP - 100.0, "forest regen mends ground")

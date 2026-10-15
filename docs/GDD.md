@@ -363,6 +363,14 @@ How each biome changes each base tower. Tier 0 has no traits (6.1); the trait gr
 | **Plains** | **Energy shield:** towers in its radius get a barrier worth a share of their max HP. The barrier soaks up damage first and **regenerates from the tower's own energy storage**. ✅ Confirmed, to be tuned in playtesting | T3: barrier hits refill energy (like the Plains wall) · T6: barrier spreads damage to other shielded towers |
 | **Swamp** | **Debuff aura:** weakens **enemies** in its radius instead of buffing allies | T3: debuffed enemies are revealed in fog (8.6) · T6: enemies killed in the radius give energy (like Swamp Energy) |
 
+- ✅ **Prototype implementation (2026-10-15)**, numbers 💡 placeholders:
+  - Radius 1 (own tile + neighbours), 1 energy/s from its own storage; without energy the aura is off (Forest keeps a third of its strength).
+  - Neutral +25% output (damage, healing, energy) · Forest +2%/s regen for towers **and ground** · Mountain +20% HP and 10% armour · Desert +25% efficiency · Plains shield worth 25% of max HP · Swamp weakens enemies by 25%, buffs no allies.
+  - Tile auras emitted inside the radius +25% (not for Swamp). Strength +25% per tier above 1.
+  - No chaining: Aura towers only receive their own buff.
+  - Side effects decided with it: **shields now regenerate from the tower's own storage** (0.05 energy per shield HP); **regen auras also mend damaged ground**.
+  - Not yet: Tier 3/6 milestones (bigger radius etc.).
+
 #### Scout in detail ✅
 
 | Biome | Trait | Tier 3 / Tier 6 milestones |

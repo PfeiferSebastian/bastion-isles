@@ -56,6 +56,7 @@ func _process(delta: float) -> void:
 			_move_and_attack(enemy, delta)
 	_towers_attack(delta)
 	_towers_repair(delta)
+	_aura_debuffs()
 	_check_battle_end(delta)
 	queue_redraw()
 
@@ -210,6 +211,23 @@ func _fire_projectile(origin: Vector2, target: Enemy, profile: AttackProfile) ->
 	projectile.profile = profile
 	_projectile_layer.add_child(projectile)
 	projectile.global_position = origin
+
+
+## Swamp Aura towers weaken every enemy inside their radius.
+func _aura_debuffs() -> void:
+	var island := _view.island
+	for coord in island.coords():
+		var tower := island.get_tower(coord)
+		if tower == null or tower.type != &"aura" or tower.aura_power <= 0.0:
+			continue
+		var profile := AuraProfiles.for_tile(island, coord)
+		if profile.enemy_weaken <= 0.0:
+			continue
+		var origin := _view.hex_center_world(coord)
+		var range_px := (profile.radius + 0.5) * HexMath.SQRT3 * _view.hex_size
+		for enemy in enemies():
+			if origin.distance_to(enemy.global_position) <= range_px:
+				enemy.add_weaken(profile.enemy_weaken * tower.aura_power)
 
 
 # --- Repair --------------------------------------------------------------
