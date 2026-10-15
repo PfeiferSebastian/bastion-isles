@@ -45,7 +45,7 @@ layout_mode = 2
 theme_override_colors/font_outline_color = Color(0, 0, 0, 0.6)
 theme_override_constants/outline_size = 4
 text = "Left click: build / cycle tower · Right click: remove · Drag: pan · Wheel: zoom
-Debug: D damages hovered tower · +/- changes tile tier"
+Debug: D damages hovered tower · +/- changes tile tier · Esc: main menu"
 
 [node name="CombatInfo" type="Label" parent="HUD/Margin/Lines"]
 unique_name_in_owner = true
