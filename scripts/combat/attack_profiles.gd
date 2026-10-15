@@ -75,6 +75,10 @@ static func for_tile(island: Island, coord: Vector2i) -> AttackProfile:
 	p.damage *= 1.0 + output
 	p.thorn_dps *= 1.0 + output
 	p.poison = aura.get(&"poison", 0.0)
+	var merged := island.effect_bonus(coord)
+	p.damage *= merged
+	p.beam_dps *= merged
+	p.thorn_dps *= merged
 	return p
 
 

@@ -37,7 +37,7 @@ static func base(biome: Biome.Type) -> AuraProfile:
 static func for_tile(island: Island, coord: Vector2i) -> AuraProfile:
 	var tile := island.get_tile(coord)
 	var p := base(tile.biome)
-	var factor := 1.0 + TIER_STRENGTH_STEP * maxi(tile.tier - 1, 0)
+	var factor := (1.0 + TIER_STRENGTH_STEP * maxi(tile.tier - 1, 0)) * island.effect_bonus(coord)
 	for key in p.effects:
 		p.effects[key] *= factor
 	p.tile_aura_boost *= factor

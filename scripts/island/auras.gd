@@ -45,7 +45,7 @@ static func collect(island: Island, coord: Vector2i) -> Dictionary:
 			_add(result, PER_TIER, tile, _tile_boost(auras, n))
 			# Wall towers buff the HP of adjacent buildings (not their own tile).
 			if tile.tower and tile.tower.type == &"wall":
-				result[&"max_hp"] = result.get(&"max_hp", 0.0) + TowerDefs.WALL_NEIGHBOUR_HP.get(tile.biome, 0.1)
+				result[&"max_hp"] = result.get(&"max_hp", 0.0) + TowerDefs.WALL_NEIGHBOUR_HP.get(tile.biome, 0.1) * island.effect_bonus(n)
 	# Aura towers buff everything in their radius. No chaining: an Aura tower only
 	# receives its own buff, never another Aura tower's.
 	var own_aura := center.tower != null and center.tower.type == &"aura"

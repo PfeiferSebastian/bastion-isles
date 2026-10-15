@@ -10,16 +10,21 @@ extends RefCounted
 
 const BASE_CAPACITY := 20.0
 const CAPACITY_PER_TIER := 10.0
-## Share of energy an empty tile of this biome lets through (factions differ).
+## Share of energy an empty tile of this biome lets through (factions differ). Water and
+## wood carry energy best, plain ground and rock poorly.
 const CONDUIT_EFFICIENCY := {
-	Biome.Type.NEUTRAL: 0.85,
-	Biome.Type.FOREST: 0.92,
-	Biome.Type.MOUNTAIN: 0.80,
-	Biome.Type.PLAINS: 0.97,
-	Biome.Type.SWAMP: 0.88,
-	# Hydro power: water carries energy well (placeholder until the Seafolk are designed).
-	Biome.Type.LAKE: 0.95,
+	Biome.Type.NEUTRAL: 0.30,
+	Biome.Type.FOREST: 0.60,
+	Biome.Type.MOUNTAIN: 0.25,
+	Biome.Type.PLAINS: 0.45,
+	Biome.Type.SWAMP: 0.35,
+	# Hydro power: water carries energy best (placeholder until the Seafolk are designed).
+	Biome.Type.LAKE: 0.70,
 }
+## Each tier above 1 lets this much more through; water biomes gain twice as much.
+const CONDUIT_PER_TIER := 0.03
+const CONDUIT_PER_TIER_WATER := 0.06
+const CONDUIT_MAX := 0.95
 ## Forest tiles produce this much per second and tier, feeding themselves and their neighbours.
 const FOREST_PASSIVE := 0.3
 ## …and this many times more when connected to a Forest Energy tower (root network).
@@ -44,13 +49,18 @@ static func fill(tile: IslandTile) -> float:
 	return tile.energy / cap if cap > 0.0 else 1.0
 
 
-## Share of energy that passes through `tile` on its way somewhere else.
-static func pass_through(tile: IslandTile) -> float:
+## Share of energy that passes through `tile` on its way somewhere else. Damaged ground
+## passes less (by its HP share) when `island` is given.
+static func pass_through(tile: IslandTile, island: Island = null) -> float:
 	if tile.blocks_energy():
 		return 0.0
-	if tile.tower != null or tile.is_hq:
-		return 1.0
-	return CONDUIT_EFFICIENCY.get(tile.biome, 0.85)
+	var share := 1.0
+	if tile.tower == null and not tile.is_hq:
+		var per_tier := CONDUIT_PER_TIER_WATER if tile.biome == Biome.Type.LAKE else CONDUIT_PER_TIER
+		share = minf(CONDUIT_MAX, CONDUIT_EFFICIENCY.get(tile.biome, 0.3) + per_tier * maxi(tile.tier - 1, 0))
+	if island:
+		share *= clampf(tile.hp / maxf(island.tile_max_hp(tile.coord), 0.001), 0.0, 1.0)
+	return share
 
 
 ## The generator profile for `coord`, or null if nothing there produces energy.
@@ -74,7 +84,7 @@ static func delivery_map(island: Island, source: Vector2i, profile: EnergyProfil
 		var next := {}
 		for coord in frontier:
 			# Energy leaving an intermediate tile pays its pass-through loss.
-			var leaving: float = frontier[coord] * (1.0 if coord == source else pass_through(island.get_tile(coord)))
+			var leaving: float = frontier[coord] * (1.0 if coord == source else pass_through(island.get_tile(coord), island))
 			if leaving <= 0.0:
 				continue
 			for n in HexMath.neighbors(coord):
@@ -139,6 +149,11 @@ static func draw_energy(island: Island, coord: Vector2i, amount: float) -> float
 		return 1.0
 	if tile.energy >= amount:
 		tile.energy -= amount
+		return 1.0
+	# Combined buildings share their stored energy.
+	if tile.tower and island.group_pool(coord, &"energy").x >= amount:
+		island.pull_group_energy(coord, amount - tile.energy)
+		tile.energy = 0.0
 		return 1.0
 	if tile.biome == Biome.Type.SWAMP and _drain_neighbours(island, coord, amount - tile.energy):
 		tile.energy = 0.0

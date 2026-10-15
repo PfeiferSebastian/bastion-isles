@@ -36,6 +36,7 @@ static func for_tile(island: Island, coord: Vector2i) -> EnergyProfile:
 	p.output *= 1.0 + TIER_OUTPUT_STEP * maxi(tile.tier - 1, 0)
 	var aura := island.aura_at(coord)
 	p.output *= (1.0 + aura.get(&"efficiency", 0.0)) * (1.0 + aura.get(&"output", 0.0))
+	p.output *= island.effect_bonus(coord)
 	return p
 
 

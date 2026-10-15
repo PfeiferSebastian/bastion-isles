@@ -122,21 +122,30 @@ func handle_secondary_tap(world_position: Vector2) -> void:
 	pick_up(world_to_hex(world_position), world_position)
 
 
-## Puts `item` from the inventory onto `coord` (buying one first if none is left and it is
-## buyable). Returns true if it was placed.
+## Puts `item` from the inventory onto `coord`. Towers and biome stones on an empty hex next
+## to the island take a tile from the inventory along. Returns true if it was placed.
 func place_item(coord: Vector2i, item: Dictionary, world_position: Vector2) -> bool:
 	var inventory := island.treasury.inventory
 	if not _can_place(coord, item):
+		if item.kind == &"tower" and item.type == &"wall" and island.can_place(coord):
+			message.emit(world_position, "Wall sections are at most %d long" % Island.MAX_WALL_SECTION)
 		return false
-	if not Economy.ensure_one(item, island):
-		message.emit(world_position, "No %s left" % Inventory.label_of(item) if Economy.buy_price(item, island) < 0 else "Not enough gold")
+	if inventory.count(item) <= 0:
+		message.emit(world_position, "No %s left" % Inventory.label_of(item))
 		return false
 	var tile := island.get_tile(coord)
 	match item.kind:
 		&"tower":
-			if tile == null or not tile.is_free():
+			if not placeable_scene:
 				return false
-			if not placeable_scene or island.place_tower(coord, item.type) == null:
+			if tile == null:
+				# Empty ground next to the island: a tile from the inventory goes down first.
+				if inventory.count(Inventory.tile_item()) <= 0:
+					message.emit(world_position, "Needs a tile too")
+					return false
+				inventory.take(Inventory.tile_item())
+				island.add_tile(coord)
+			if island.place_tower(coord, item.type, item.level) == null:
 				return false
 			inventory.take(item)
 			_spawn_tower_node(coord, item.type)
@@ -150,7 +159,7 @@ func place_item(coord: Vector2i, item: Dictionary, world_position: Vector2) -> b
 				# A stone on an empty hex needs a tile to go with it.
 				if not island.can_add_tile(coord):
 					return false
-				if not Economy.ensure_one(Inventory.tile_item(), island):
+				if inventory.count(Inventory.tile_item()) <= 0:
 					message.emit(world_position, "Needs a tile too")
 					return false
 				inventory.take(Inventory.tile_item())
@@ -173,9 +182,10 @@ func pick_up(coord: Vector2i, world_position: Vector2) -> void:
 	if tile == null or tile.is_hq:
 		return
 	if tile.tower:
+		var level := tile.tower.level()
 		var type := island.remove_tower(coord)
 		_free_tower_node(coord)
-		inventory.add(Inventory.tower_item(type))
+		inventory.add(Inventory.tower_item(type, level))
 		message.emit(world_position, "%s back to inventory" % String(type).capitalize())
 	elif tile.biome != Biome.Type.NEUTRAL and not tile.destroyed:
 		var biome := tile.biome
@@ -186,7 +196,7 @@ func pick_up(coord: Vector2i, world_position: Vector2) -> void:
 
 
 ## Selects an inventory item to place with clicks (stays selected while the stack lasts or
-## there is gold to buy more).
+## the player picks something else).
 func hold(item: Dictionary) -> void:
 	held = item
 
@@ -216,13 +226,14 @@ func _input(event: InputEvent) -> void:
 		_keep_or_release()
 
 
-## The held item stays selected while there are more in the inventory or gold to buy one.
+## The held item stays selected while there are more in the inventory.
 func _keep_or_release() -> void:
-	if not held.is_empty() and not Economy.can_get(held, island):
+	if not held.is_empty() and island.treasury.inventory.count(held) <= 0:
 		release_hold()
 
 
-## Debug keys: D damages, +/- change the tier, G gives gold, R biome stones, B all blueprints.
+## Debug keys: D damages, +/- change the tier, G gives gold, R biome stones and tiles,
+## B a full blueprint set (one tower) of each type.
 func _unhandled_key_input(event: InputEvent) -> void:
 	var key := event as InputEventKey
 	if key == null or not key.pressed or key.echo:
@@ -239,9 +250,11 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		KEY_R:
 			for biome in Treasury.STONE_BIOMES:
 				island.treasury.inventory.add(Inventory.stone_item(biome), 5)
+			island.treasury.inventory.add(Inventory.tile_item(), 5)
 		KEY_B:
-			for type in island.treasury.locked_towers():
-				island.treasury.add_blueprint(type)
+			for type in TowerDefs.TYPES:
+				while not island.add_blueprint(type):
+					pass
 
 
 func _shift_tier(step: int) -> void:
@@ -271,19 +284,56 @@ func _on_tile_changed(_coord: Vector2i) -> void:
 	_refresh_tower_nodes()
 
 
-## Tells every tower node its biome and which neighbours hold a wall (for connected walls).
+## Tells every tower node its biome and its same-type neighbours. A combined building
+## (2+ towers of one type, except walls, which stay ramparts) is drawn by its first node over
+## all its hexes; the other members' nodes hide.
 func _refresh_tower_nodes() -> void:
-	for coord in _objects:
-		var node := _objects[coord]
-		var tile := island.get_tile(coord)
-		if tile == null or tile.tower == null:
-			continue
-		node.set(&"biome", tile.biome)
+	for group in island.groups():
+		var lead: Node2D = _objects.get(group[0])
+		var combined: bool = group.size() > 1 and island.get_tower(group[0]).type != &"wall"
+		for coord in group:
+			var node: Node2D = _objects.get(coord)
+			if node == null:
+				continue
+			var tile := island.get_tile(coord)
+			node.set(&"biome", tile.biome)
+			var links: Array[bool] = []
+			for dir in HexMath.DIRECTIONS:
+				links.append(group.has(coord + dir))
+			node.set(&"links", links)
+			node.visible = not combined or node == lead
+		if lead:
+			lead.set(&"group_art", _group_art(group, lead.position) if combined else {})
+
+
+## What the lead node needs to draw a combined building, in its local space: the platform
+## outline, every member's centre, links and biome, and the main biome.
+func _group_art(group: Array[Vector2i], origin: Vector2) -> Dictionary:
+	var platform := GroupShape.inset(GroupShape.outline(group, hex_size), hex_size * 0.07)
+	var members: Array[Vector2] = []
+	var member_links: Array = []
+	var member_biomes: Array = []
+	var biomes := {}
+	var center := Vector2.ZERO
+	for coord in group:
+		var c := HexMath.to_pixel(coord, hex_size) - origin
+		members.append(c)
+		center += c
 		var links: Array[bool] = []
 		for dir in HexMath.DIRECTIONS:
-			var other := island.get_tower(coord + dir)
-			links.append(tile.tower.type == &"wall" and other != null and other.type == &"wall")
-		node.set(&"wall_links", links)
+			links.append(group.has(coord + dir))
+		member_links.append(links)
+		var biome := island.get_tile(coord).biome
+		member_biomes.append(biome)
+		biomes[biome] = biomes.get(biome, 0) + 1
+	var main_biome: Biome.Type = biomes.keys()[0]
+	for biome in biomes:
+		if biomes[biome] > biomes[main_biome]:
+			main_biome = biome
+	return {
+		platform = _offset(platform, -origin), members = members, links = member_links,
+		biomes = member_biomes, biome = main_biome, center = center / group.size(),
+	}
 
 
 # --- Drawing -------------------------------------------------------------
@@ -310,7 +360,7 @@ func _draw() -> void:
 			_canvas.draw_texture_rect(TerrainArt.for_tile(tile), TerrainArt.tile_rect(center, hex_size), false, shade)
 		else:
 			_draw_plain_tile(tile, center, shade)
-		if tile.tower and not _has_art(tile):
+		if tile.tower:
 			_canvas.draw_colored_polygon(_offset(_scaled(_hex_points, 0.62), center), BUILDING_PLATE)
 		if tile.destroyed:
 			_draw_wasteland(center)
@@ -326,21 +376,17 @@ func _draw_top() -> void:
 		var tile := island.get_tile(coord)
 		var center := HexMath.to_pixel(coord, hex_size)
 		if tile.tower:
-			_draw_status(coord, center, tile)
+			continue   # buildings: see _draw_group_status
 		elif tile.is_hq or (not tile.destroyed and tile.hp < island.tile_max_hp(coord)):
 			# Ground HP all around the edge: always for the HQ, otherwise once damaged.
 			var ratio := clampf(tile.hp / island.tile_max_hp(coord), 0.0, 1.0)
 			_draw_arc(center, 0, 6, ratio, HP_LOW_COLOR.lerp(HP_FULL_COLOR, ratio), TRACK_COLOR)
+	for group in island.groups():
+		_draw_group_status(group)
 	_draw_overlay()
 	_draw_tower_reach()
 	_draw_hover()
 	_canvas = self
-
-
-## Buildings with painted art need no dark plate under them (so far: neutral walls).
-func _has_art(tile: IslandTile) -> bool:
-	var node: Node2D = _objects.get(tile.coord)
-	return node != null and node.has_method(&"has_art") and node.call(&"has_art")
 
 
 ## Fallback without the purchased art: a flat coloured hex (and a drawn keep for the HQ).
@@ -409,7 +455,7 @@ func _overlay_energy(coord: Vector2i, tile: IslandTile, hex: PackedVector2Array,
 			_canvas.draw_polyline(_closed(hex), ENERGY_EMPTY_COLOR, 3.0, true)
 		_draw_label(center + Vector2(0, hex_size * 0.5), "%d%%" % roundi(ratio * 100.0), Color(0.15, 0.1, 0.05))
 		return
-	var through := EnergyGrid.pass_through(tile)
+	var through := EnergyGrid.pass_through(tile, island)
 	_canvas.draw_colored_polygon(hex, Color(0.1, 0.1, 0.15, 0.55 * (1.0 - through) + 0.1))
 	if not tile.is_hq:
 		_draw_label(center, "%d%%" % roundi(through * 100.0), Color(1, 1, 1, 0.85))
@@ -487,7 +533,10 @@ func _can_place(coord: Vector2i, item: Dictionary) -> bool:
 	var tile := island.get_tile(coord)
 	match item.kind:
 		&"tower":
-			return tile != null and tile.is_free()
+			if tile == null:
+				return island.can_add_tile(coord) and island.treasury.inventory.count(Inventory.tile_item()) > 0 \
+					and (item.type != &"wall" or island.wall_section_with(coord) <= Island.MAX_WALL_SECTION)
+			return island.can_place_tower(coord, item.type)
 		&"tile":
 			return island.can_add_tile(coord)
 		&"stone":
@@ -498,28 +547,46 @@ func _can_place(coord: Vector2i, item: Dictionary) -> bool:
 
 
 
-## HP, shield and energy share the hex edge, each on its own arc of at least 2 sides.
-## Perimeter corners clockwise: 0 top, 1 upper right, 2 lower right, 3 bottom, 4 lower left, 5 upper left.
-## Shield: top → lower right. Energy: lower right → lower left. HP: the remaining sides.
-func _draw_status(coord: Vector2i, center: Vector2, tile: IslandTile) -> void:
-	var tower := tile.tower
-	var max_shield := island.tower_max_shield(coord)
-	var cap := EnergyGrid.capacity(tile)
-	var hp_start := 4 if cap > 0.0 else 2
-	var hp_edges := 6 - (2 if max_shield > 0.0 else 0) - (2 if cap > 0.0 else 0)
-	var hp_ratio := clampf(tower.hp / island.tower_max_hp(coord), 0.0, 1.0)
-	_draw_arc(center, hp_start, hp_edges, hp_ratio, HP_LOW_COLOR.lerp(HP_FULL_COLOR, hp_ratio), TRACK_COLOR)
-	if max_shield > 0.0:
-		var points := _arc(center, 0, 2, 1.0)
-		_canvas.draw_polyline(points, TRACK_COLOR, HP_RING_WIDTH + 3.0, true)
-		points = _arc(center, 0, 2, clampf(tower.shield / max_shield, 0.0, 1.0))
+## HP, shield and energy of a building group run along its outer edge (a combined building
+## shares one pool of each). Measured in sixths of that edge, clockwise from the top corner
+## like a single hex: shield top → lower right (2/6), energy lower right → lower left (2/6),
+## HP the rest.
+func _draw_group_status(group: Array[Vector2i]) -> void:
+	var ring := GroupShape.inset(GroupShape.outline(group, hex_size), HexMath.SQRT3 / 2.0 * hex_size * (1.0 - HP_RING_SCALE))
+	if ring.size() < 3:
+		return
+	var sixth := GroupShape.length(ring) / 6.0
+	var coord := group[0]
+	var hp := island.group_pool(coord, &"hp")
+	var shield := island.group_pool(coord, &"shield")
+	var energy := island.group_pool(coord, &"energy")
+	var hp_start := 4 if energy.y > 0.0 else 2
+	var hp_edges := 6 - (2 if shield.y > 0.0 else 0) - (2 if energy.y > 0.0 else 0)
+	var hp_ratio := clampf(hp.x / maxf(hp.y, 0.001), 0.0, 1.0)
+	_draw_ring_bar(ring, sixth, hp_start, hp_edges, hp_ratio, HP_LOW_COLOR.lerp(HP_FULL_COLOR, hp_ratio), TRACK_COLOR)
+	if shield.y > 0.0:
+		_canvas.draw_polyline(_ring_piece(ring, sixth, 0, 2, 1.0), TRACK_COLOR, HP_RING_WIDTH + 3.0, true)
+		var points := _ring_piece(ring, sixth, 0, 2, clampf(shield.x / shield.y, 0.0, 1.0))
 		for i in points.size() - 1:
 			_canvas.draw_dashed_line(points[i], points[i + 1], SHIELD_COLOR, HP_RING_WIDTH, 6.0)
-	if cap > 0.0:
-		var ratio := clampf(tile.energy / cap, 0.0, 1.0)
+	if energy.y > 0.0:
+		var ratio := clampf(energy.x / energy.y, 0.0, 1.0)
 		var track := ENERGY_EMPTY_COLOR if ratio < 0.05 else TRACK_COLOR
 		# Anchored at the lower left, so energy drains from right to left.
-		_draw_arc(center, 2, 2, ratio, ENERGY_COLOR, track, true)
+		_draw_ring_bar(ring, sixth, 2, 2, ratio, ENERGY_COLOR, track, true)
+
+
+func _draw_ring_bar(ring: PackedVector2Array, sixth: float, start: int, edges: int, ratio: float, color: Color, track: Color, from_end := false) -> void:
+	_canvas.draw_polyline(_ring_piece(ring, sixth, start, edges, 1.0), track, HP_RING_WIDTH + 3.0, true)
+	if ratio > 0.0:
+		_canvas.draw_polyline(_ring_piece(ring, sixth, start, edges, ratio, from_end), color, HP_RING_WIDTH, true)
+
+
+## Like _arc, but along a group's ring: `edges` sixths from sixth `start`, covering `ratio`.
+static func _ring_piece(ring: PackedVector2Array, sixth: float, start: int, edges: int, ratio: float, from_end := false) -> PackedVector2Array:
+	var length := (edges - 2.0 * ARC_GAP) * ratio
+	var from := edges - ARC_GAP - length if from_end else ARC_GAP
+	return GroupShape.slice(ring, (start + from) * sixth, (start + from + length) * sixth)
 
 
 func _draw_arc(center: Vector2, start: int, edges: int, ratio: float, color: Color, track: Color, from_end := false) -> void:

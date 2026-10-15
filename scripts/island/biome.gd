@@ -18,29 +18,29 @@ const COLORS := {
 ## What a tile of each biome does (shown in the inventory tooltip). Keep in sync with the
 ## profiles (Auras, AttackProfiles, EnergyProfiles, RepairProfiles, AuraProfiles, ScoutProfiles).
 const DESCRIPTIONS := {
-	Type.NEUTRAL: "Plain ground. Towers on it work in their basic form.\nLets 85% of energy pass through.",
+	Type.NEUTRAL: "Plain ground. Towers on it work in their basic form.\nPoor conductor: lets 30% of energy pass.",
 	Type.FOREST: "Wardens · symbiosis and regrowth\n"
 		+ "Tile: produces energy on its own (more next to a Forest Energy tower).\n"
 		+ "Towers: Attack = stacking thorns · Repair = heals over time\n"
 		+ "Aura = regeneration · Energy = root network · Scout = sky stays open longer\n"
-		+ "Empty Forest towers keep working slowly. Lets 92% of energy pass.",
+		+ "Empty Forest towers keep working slowly. Good conductor (60%).",
 	Type.MOUNTAIN: "Bastion · fortress and firepower\n"
 		+ "Tile: +5% max HP per tier for itself and its neighbours.\n"
 		+ "Towers: Attack = heavy long-range shells · Repair = big chunks\n"
 		+ "Aura = armour and HP · Energy = strong but short reach · Scout = wide view\n"
-		+ "Walls buff neighbours more. Becomes a big mountain from Tier 4. Lets 80% pass.",
+		+ "Walls buff neighbours more. Becomes a big mountain from Tier 4. Poor conductor (25%).",
 	Type.PLAINS: "Mages · energy, lasers and barriers\n"
 		+ "Tile: +3% shield per tier for itself and its neighbours;\n"
 		+ "passes 10% per tier of the damage it takes on to neighbouring towers.\n"
 		+ "Towers: Attack = laser beam · Repair = moves HP from healthy to damaged\n"
-		+ "Aura = shield · Energy = evens out storage. Best conductor (97%).",
+		+ "Aura = shield · Energy = evens out storage. Lets 45% pass.",
 	Type.SWAMP: "Necrolytes · poison, decay and draining\n"
 		+ "Tile: attacks of itself and its neighbours poison (+3% per tier).\n"
 		+ "Towers: Attack = weakens enemies · Repair = drains life from enemies\n"
 		+ "Aura = weakens enemies nearby · Energy = gains energy from deaths nearby\n"
-		+ "Empty Swamp towers drain energy from neighbours. Lets 88% pass.",
+		+ "Empty Swamp towers drain energy from neighbours. Lets 35% pass.",
 	Type.LAKE: "Seafolk · still being designed\n"
-		+ "Works like plain ground for now.\nCarries energy well (95%).",
+		+ "Works like plain ground for now.\nBest conductor (70%, +6% per tier).",
 }
 
 

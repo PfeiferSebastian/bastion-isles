@@ -19,6 +19,7 @@ func _ready() -> void:
 	_hud.combat = _combat
 	_hud.leave_requested.connect(_leave)
 	if GameSession.edit_mode:
+		_island_view.island.gains_xp = false
 		_combat.set_process(false)
 		_combat.set_process_unhandled_key_input(false)
 		_hud.show_edit_mode()

@@ -7,7 +7,7 @@ extends CanvasLayer
 ## that shows every hover text.
 
 ## Shown in the info window while nothing with a description is hovered.
-const HELP := "Click a slot, then the island · or drag a slot onto it\nRight click: pick up / cancel\nDrag: pan · Wheel: zoom · Esc: menu\nP: waves on/off · W: spawn a wave\n\nDebug: D damage · +/- tier · F1–F4 enemies · V fog\nG +500 gold · R +5 stones · B all blueprints"
+const HELP := "Click a slot, then the island · or drag a slot onto it\nRight click: pick up / cancel\nDrag: pan · Wheel: zoom · Esc: menu\nP: waves on/off · W: spawn a wave\n\nDebug: D damage · +/- tier · F1–F4 enemies · V fog\nG +500 gold · R +5 stones and tiles · B a tower of each type"
 
 const OVERLAYS := [
 	[&"energy", "Energy: generators bright, storages by fill (red = empty), empty tiles show how much they let through"],
@@ -20,12 +20,26 @@ const OVERLAYS := [
 signal leave_requested
 
 ## Set by main; the HUD reads hover state and island data from it every frame.
-var view: IslandView
+var view: IslandView:
+	set(value):
+		view = value
+		view.island.tower_levelled.connect(_on_tower_levelled)
 var combat: Combat:
 	set(value):
 		combat = value
 		combat.item_found.connect(notify)
 		combat.mission_completed.connect(func() -> void: notify("Mission complete! No more enemies are coming."))
+
+
+## Announces level-ups of buildings (every few levels, and when their ground rises a tier).
+func _on_tower_levelled(coord: Vector2i, level: int, tier_up: bool) -> void:
+	var tower := view.island.get_tower(coord)
+	if tower == null:
+		return
+	var text := "%s reached level %d" % [String(tower.type).capitalize(), level]
+	if tier_up:
+		text += " · its ground rises to Tier %d" % view.island.get_tile(coord).tier
+	notify(text)
 
 ## Find and level-up notices stack below the overlay icons; each stays NOTICE_TIME seconds,
 ## then fades out over NOTICE_FADE.
@@ -202,10 +216,7 @@ func _on_overlay_toggled(on: bool, icon: OverlayIcon) -> void:
 
 
 static func _describe_treasury(t: Treasury) -> String:
-	var blueprints := 0
-	for type in t.blueprints:
-		blueprints += t.blueprints[type]
-	return "Gold %d · Blueprints %d" % [t.gold, blueprints]
+	return "Gold %d" % t.gold
 
 
 ## What a click with the held inventory item would do here.
@@ -228,7 +239,7 @@ func _describe_tile(coord: Vector2i) -> String:
 	if cap > 0.0:
 		lines.append("Energy %.1f / %.0f" % [tile.energy, cap])
 	elif tile.tower == null and not tile.is_hq:
-		lines.append("Energy conduit: lets %d%% through" % roundi(EnergyGrid.pass_through(tile) * 100.0))
+		lines.append("Energy conduit: lets %d%% through" % roundi(EnergyGrid.pass_through(tile, view.island) * 100.0))
 	var generator := EnergyGrid.generator_at(view.island, coord)
 	if generator:
 		lines.append("Generator: %.1f/s · reach %d · %s" % [generator.output, generator.reach(), _describe_falloff(generator)])
@@ -240,10 +251,24 @@ func _describe_tile(coord: Vector2i) -> String:
 		lines.append("HQ cannon: %.0f dmg every %.1fs · range %.1f hex · no energy" % [cannon.damage, cannon.cooldown, cannon.range_hexes])
 	var tower := tile.tower
 	if tower:
-		var line := "%s · HP %d / %d" % [String(tower.type).capitalize(), ceili(tower.hp), roundi(view.island.tower_max_hp(coord))]
-		if view.island.tower_max_shield(coord) > 0.0:
-			line += " · Shield %d / %d" % [ceili(tower.shield), roundi(view.island.tower_max_shield(coord))]
+		# Combined buildings show their shared pools.
+		var hp := view.island.group_pool(coord, &"hp")
+		var shield := view.island.group_pool(coord, &"shield")
+		var line := "%s · HP %d / %d" % [String(tower.type).capitalize(), ceili(hp.x), roundi(hp.y)]
+		if shield.y > 0.0:
+			line += " · Shield %d / %d" % [ceili(shield.x), roundi(shield.y)]
 		lines.append(line)
+		var level := tower.level()
+		if level >= Tower.MAX_LEVEL:
+			lines.append("Level %d (max) · +%d%% effect" % [level, roundi((tower.level_bonus() - 1.0) * 100.0)])
+		else:
+			var from := Tower.xp_for_level(level)
+			lines.append("Level %d · XP %d / %d · +%d%% effect · ground +1 tier every %d levels" % [level,
+				floori(tower.xp - from), ceili(Tower.xp_for_level(level + 1) - from),
+				roundi((tower.level_bonus() - 1.0) * 100.0), Island.LEVELS_PER_TIER])
+		var size := view.island.group_of(coord).size()
+		if size >= 2:
+			lines.append("Combined building of %d · +%d%% effect each · shared HP, shield and energy" % [size, roundi(Island.MERGE_BONUS * 100.0)])
 	if tower and tower.type == &"attack":
 		lines.append("Attack: " + _describe_attack(AttackProfiles.for_tile(view.island, coord)))
 	var price := _describe_price(coord)

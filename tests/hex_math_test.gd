@@ -111,10 +111,55 @@ func _test_health() -> void:
 	var d := Vector2i(-1, 0)
 	island.set_biome(d, Biome.Type.PLAINS)
 	island.place_tower(d, &"attack")
-	island.place_tower(Vector2i(-2, 0), &"attack")
+	# A different type next door, so the two don't form one combined building.
+	island.place_tower(Vector2i(-2, 0), &"warehouse")
+	var neighbour_max := island.tower_max_hp(Vector2i(-2, 0))
 	island.damage_tower(d, 50.0)
-	_check(is_equal_approx(island.get_tower(Vector2i(-2, 0)).hp, 95.0), "plains spreads damage to neighbour")
+	_check(is_equal_approx(island.get_tower(Vector2i(-2, 0)).hp, neighbour_max - 5.0), "plains spreads damage to neighbour")
 	_check(is_equal_approx(island.get_tower(d).hp, 55.0), "plains keeps the rest")
+	# Neighbouring towers of one type share one HP pool and fall together.
+	var group_island := Island.create_starter(2)
+	group_island.place_tower(Vector2i(1, 0), &"attack")
+	group_island.place_tower(Vector2i(2, 0), &"attack")
+	group_island.damage_tower(Vector2i(1, 0), 50.0)
+	_check(is_equal_approx(group_island.get_tower(Vector2i(2, 0)).hp, 75.0), "combined buildings share damage")
+	group_island.damage_tower(Vector2i(2, 0), 149.0)
+	_check(group_island.get_tower(Vector2i(1, 0)) != null, "combined building stands while the pool lasts")
+	group_island.damage_tower(Vector2i(1, 0), 2.0)
+	_check(group_island.get_tower(Vector2i(1, 0)) == null and group_island.get_tower(Vector2i(2, 0)) == null, "combined building falls together")
+	# Combined buildings work 30% better per tower.
+	group_island.place_tower(Vector2i(1, 0), &"attack")
+	var alone := AttackProfiles.for_tile(group_island, Vector2i(1, 0)).damage
+	group_island.place_tower(Vector2i(2, 0), &"attack")
+	_check(is_equal_approx(AttackProfiles.for_tile(group_island, Vector2i(1, 0)).damage, alone * 1.3), "combined buildings deal 30% more")
+	# Walls: at most 3 in one section.
+	var walls := Island.create_starter(3)
+	for x in [1, 2, 3]:
+		walls.place_tower(Vector2i(x, 0), &"wall")
+	_check(walls.get_tower(Vector2i(3, 0)) != null, "three walls in a row")
+	_check(walls.place_tower(Vector2i(3, -1), &"wall") == null, "no fourth wall in a section")
+	_check(walls.place_tower(Vector2i(-2, 0), &"wall") != null, "a separate wall section is fine")
+	# No XP once the mission is won (combat switches it off), nor while editing.
+	walls.gains_xp = false
+	walls.add_xp(Vector2i(1, 0), 500.0)
+	_check(walls.get_tower(Vector2i(1, 0)).xp == 0.0, "no xp while switched off")
+	# Experience: exponential levels, +1% per level, shared in combined buildings.
+	_check(Tower.level_for_xp(0.0) == 1 and Tower.level_for_xp(Tower.xp_for_level(10)) == 10, "xp levels round trip")
+	_check(Tower.xp_for_level(10) > 200.0 and Tower.xp_for_level(10) < 400.0, "level 10 takes hundreds of xp")
+	_check(Tower.xp_for_level(50) > 2000.0, "level 50 takes thousands of xp")
+	_check(Tower.level_for_xp(1.0e9) == Tower.MAX_LEVEL, "max level 100")
+	var xp_island := Island.create_starter(2)
+	var xc := Vector2i(1, 0)
+	xp_island.set_biome(xc, Biome.Type.FOREST)
+	xp_island.place_tower(xc, &"attack")
+	xp_island.add_xp(xc, Tower.xp_for_level(11))
+	xp_island.tick(0.01)
+	_check(xp_island.get_tower(xc).level() == 11, "xp raises the level")
+	_check(is_equal_approx(xp_island.effect_bonus(xc), 1.1), "level 11 gives +10% effect")
+	_check(xp_island.get_tile(xc).tier == 2, "level 10 raises the ground one tier")
+	xp_island.place_tower(Vector2i(2, 0), &"attack")
+	xp_island.tick(0.01)
+	_check(is_equal_approx(xp_island.get_tower(Vector2i(2, 0)).xp, xp_island.get_tower(xc).xp), "combined buildings split their xp")
 	# Plains shield absorbs damage first.
 	var p := Vector2i(0, 2)
 	island.set_biome(p, Biome.Type.PLAINS)
@@ -197,9 +242,12 @@ func _test_energy() -> void:
 	grid.place_tower(target, &"attack")
 	var profile := EnergyProfiles.for_tile(grid, gen)
 	var shares := EnergyGrid.delivery_map(grid, gen, profile)
-	_check(is_equal_approx(shares[target], 0.85 * 0.5), "neutral conduit loses 15% on top of falloff")
-	grid.set_biome(mid, Biome.Type.PLAINS)
-	_check(is_equal_approx(EnergyGrid.delivery_map(grid, gen, profile)[target], 0.97 * 0.5), "plains conducts better")
+	_check(is_equal_approx(shares[target], 0.30 * 0.5), "neutral conduit passes only 30% on top of falloff")
+	grid.set_biome(mid, Biome.Type.LAKE)
+	_check(is_equal_approx(EnergyGrid.delivery_map(grid, gen, profile)[target], 0.70 * 0.5), "water conducts best")
+	grid.damage_tile(mid, grid.tile_max_hp(mid) * 0.5)
+	_check(is_equal_approx(EnergyGrid.delivery_map(grid, gen, profile)[target], 0.35 * 0.5), "damaged ground passes less")
+	grid.restore_tiles()
 	grid.place_tower(mid, &"warehouse")
 	_check(is_equal_approx(EnergyGrid.delivery_map(grid, gen, profile)[target], 0.5), "built tiles pass energy without loss")
 	EnergyGrid.distribute(grid, gen, profile, 10.0)
@@ -329,7 +377,8 @@ func _test_aura_towers() -> void:
 	island.place_tower(second, &"aura")
 	island.get_tile(second).energy = 20.0
 	island.tick(0.1)
-	_check(is_equal_approx(island.aura_at(second).get(&"output", 0.0), 0.25), "aura towers receive only their own buff")
+	# The two touch, so they form a combined building (+30%), but still don't stack.
+	_check(is_equal_approx(island.aura_at(second).get(&"output", 0.0), 0.25 * (1.0 + Island.MERGE_BONUS)), "aura towers receive only their own buff")
 	# Mountain aura: armour reduces damage.
 	var armor := Island.create_starter(2)
 	armor.set_biome(aura, Biome.Type.MOUNTAIN)
@@ -414,13 +463,15 @@ func _test_economy() -> void:
 	var t := Treasury.new(100)
 	_check(t.spend_gold(60) and t.gold == 40, "spend gold")
 	_check(not t.spend_gold(50) and t.gold == 40, "cannot overspend gold")
-	_check(t.locked_towers().size() == TowerDefs.TYPES.size() - 3, "three tower types start unlocked")
-	_check(not t.buy(Inventory.tower_item(&"scout"), 10), "locked tower types cannot be bought")
-	t.add_blueprint(&"scout")
-	_check(t.is_unlocked(&"scout"), "blueprint unlocks a tower type")
-	_check(t.buy(Inventory.tower_item(&"attack"), 30) and t.gold == 10, "buying puts a tower into the inventory")
-	_check(t.inventory.count(Inventory.tower_item(&"attack")) == 1, "attack stack of one")
-	_check(not t.buy(Inventory.tile_item(), 20), "cannot buy without gold")
+	# Blueprints: a full set of one type becomes a tower in the inventory.
+	_check(not t.add_blueprint(&"scout", 3) and not t.add_blueprint(&"scout", 3), "two of three blueprints are not a tower yet")
+	_check(t.inventory.count(Inventory.tower_item(&"scout")) == 0, "no scout tower yet")
+	_check(t.add_blueprint(&"scout", 3) and t.inventory.count(Inventory.tower_item(&"scout")) == 1, "a full set makes a tower")
+	_check(t.blueprints[&"scout"] == 0, "the set is used up")
+	var bp_island := Island.create_starter(1)
+	_check(bp_island.blueprints_needed(&"scout") == Island.BLUEPRINTS_BASE, "a missing type needs the base set")
+	_check(bp_island.blueprints_needed(&"attack") == Island.BLUEPRINTS_BASE + 1, "each owned tower raises the set by one")
+	_check(bp_island.missing_tower_types().has(&"scout") and not bp_island.missing_tower_types().has(&"attack"), "missing types known")
 	var inv := Inventory.new()
 	inv.add(Inventory.tower_item(&"wall", 1), 2)
 	inv.add(Inventory.tower_item(&"wall", 3))
@@ -428,8 +479,6 @@ func _test_economy() -> void:
 	_check(inv.take(Inventory.tower_item(&"wall", 1)) and inv.count(Inventory.tower_item(&"wall", 1)) == 1, "take one from a stack")
 	_check(not inv.take(Inventory.stone_item(Biome.Type.FOREST)), "no forest stone yet")
 	var island := Island.create_starter(2)
-	_check(Economy.tile_cost(island) == Economy.TILE_BASE_COST + 19 / Economy.TILES_PER_EXTRA_GOLD, "tile price grows with the island")
-	_check(Economy.price_of(Inventory.stone_item(Biome.Type.FOREST), island) == -1, "biome stones cannot be bought")
 	_check(island.treasury.gold == Economy.STARTING_GOLD, "island starts with gold")
 	for type in [&"attack", &"wall", &"energy", &"repair"]:
 		_check(island.treasury.inventory.count(Inventory.tower_item(type)) == 1, "island starts with one %s" % type)
@@ -441,14 +490,15 @@ func _test_economy() -> void:
 	weak.setup(&"rammer")
 	var strong := Enemy.new()
 	strong.setup(&"bomber", 6.0)
-	var weak_drops := 0
-	var strong_drops := 0
+	_check(Economy.roll_loot(weak, rng).gold == 1, "light enemy gives 1 gold")
+	_check(is_equal_approx(Economy.stone_chance(weak), 0.001), "biome stones are very rare")
+	_check(Economy.blueprint_chance(weak, true) > Economy.blueprint_chance(weak, false), "missing types drop a bit more often")
+	var tiles := 0
 	for i in 400:
-		weak_drops += 1 if Economy.roll_loot(weak, t, rng).stone >= 0 else 0
-		strong_drops += 1 if Economy.roll_loot(strong, t, rng).stone >= 0 else 0
-	_check(Economy.roll_loot(weak, t, rng).gold == 1, "light enemy gives 1 gold")
+		tiles += 1 if Economy.roll_loot(weak, rng).tile else 0
+	_check(tiles > 20 and tiles < 90, "enemies drop tiles now and then")
 	_check(Economy.kill_gold(strong) == 5, "heavy enemy gives 5 gold")
 	_check(Economy.kill_gold(strong) > Economy.kill_gold(weak), "stronger enemies give more gold")
-	_check(strong_drops > weak_drops * 3, "stronger enemies drop stones more often")
+	_check(Economy.stone_chance(strong) > Economy.stone_chance(weak) * 3, "stronger enemies drop stones more often")
 	weak.free()
 	strong.free()

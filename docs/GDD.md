@@ -198,6 +198,9 @@ Each biome has its own rule for the **highest tier a tile can be merged to**. Th
 - ✅ **Sizes:** **2 hexes** (pair), **3 hexes** (triangle, line…), **4–5 hexes** (rhombus, line, Y/star, V, X…) and **7 hexes** (flower: centre + full ring, endgame).
 - ✅ **Fusions grow step by step:** a pair plus an adjacent identical tower becomes a 3-hex fusion, and so on.
 - ✅ **Pairs:** a combined version that **looks better** than the single buildings and gains an **extra function** (e.g. double shots, a machine gun for weapons). ❓ To be defined type by type.
+- ✅ **Joined look (prototype, visual only):** buildings are drawn from above in the **material of their biome** (Neutral grey stone, Forest wood, Mountain red granite, Plains white marble, Swamp dark purple stone, Lake blue). Neighbouring buildings of the same type grow into **one combined structure**: a connecting wing runs to the shared hex side and a joint building sits on it – walls become ramparts between round towers, storehouses one long hall with a loading bay, turrets a gun deck with an ammunition magazine, tesla coils an insulated conduit with a transformer, workshops a metal annex with a crane, obelisks a glowing arcade with a floating crystal, watchtowers a covered walkway with a lookout. Combined buildings (all types except walls) stand on one **platform painted over the hex borders**, each hex of it in its **biome colour**; every building stays, joined to its neighbours by a **wide bridge** with a joint building on the hex side. Walls stay ramparts between round towers.
+- ✅ **Shared pools (2026-10-16):** neighbouring towers of the same type form **one combined building** with **one HP, shield and energy pool** (each member holds its share by its own maximum). Damage, repairs and energy use go into the pool; the whole building **falls together** when its HP pool is empty. ✅ **Merge bonus:** every tower in a combined building works **30% better** (two count as 2.6, three as 3.9 …): attack damage, generator output, repair amount, aura strength, wall HP buff, how long scouts keep the sky open. Storehouses have no effect yet. ✅ **Walls:** a wall section is at most **3 walls** long.
+- ✅ **Tower experience (2026-10-16):** towers gain XP by working – Attack 1 per shot (lasers 1 per second of firing), Repair 1 per heal, Walls 0.1 per point of damage taken, Energy/Aura/Scout 1 per second of work (Aura/Scout only while powered), Storehouse 0.5 per second; nothing while editing the island. Levels **1–100**, each level needs 5% more XP than the one before (level 10 ≈ 250 XP, level 50 ≈ 4200, level 100 ≈ 52000). **+1% effect per level.** Every **10 levels** the biome tile under the tower rises **one tier** (up to Tier 7; neutral ground stays Tier 0). A combined building splits its XP evenly, so all its towers share one level. Towers keep their level in the inventory (moving one doesn't raise its new tile again). Level-ups are announced every 5 levels and on every tier-up. The status bars run once along the group's **outer edge** (shield top → lower right, energy lower right → lower left, HP the rest, by sixths of the outline). Symbols: turret with a biome weapon (cannon, thorn launcher, mortar, crystal laser, poison sprayer), tesla coil, workshop cog with wrench, crystal obelisk, watchtower with spyglass, storehouse roof with crates. No gameplay effect yet.
 - ✅ **Shape matters**, but what a shape means **depends on tower type and faction** – e.g. a line could be a bigger gun, a stronger wall, a long directional cannon or beam, a very strong drive, or something that channels. ❓ Not a fixed shape-role table.
 - ⚠️ **Prerequisite:** the **faction/class philosophy needs sharpening** first, so shapes, pairs and variants follow a clear design.
 
@@ -268,7 +271,7 @@ The Tier 0 behaviour, i.e. the base version on a neutral tile:
   - **Swamp** towers can drain energy from surrounding tiles.
 - ✅ **Energy layer (decided 2026-10-15):** energy runs in a layer **beneath the buildings**.
   - **Only tiles with an energy-consuming building store energy** (Attack, Wall, Repair, Aura, Scout). Energy towers and Warehouses store none.
-  - All other tiles are **conduits**: energy flows through them, losing a share on the way. **Factions differ** in how well their empty tiles conduct. 💡 Neutral 85% · Forest 92% · Mountain 80% · Desert 85% · Plains 97% · Swamp 88%.
+  - All other tiles are **conduits**: energy flows through them, losing a share on the way. **Factions differ** in how well their empty tiles conduct. ✅ **Lowered (2026-10-16):** Neutral 30% · Forest (wood) 60% · Mountain 25% · Plains 45% · Swamp 35% · Lake (water) 70%. Each tier above 1 adds 3% (water 6%), max 95%. **Damaged ground passes less**, by its HP share (buildings' tiles too).
   - Tiles **with a building** pass energy on without loss.
   - **Damaged/destroyed tiles can block** the flow (hook is in place; comes with tile damage, 8.4).
   - Generators send energy along the **best path**; on top, each generator has its own falloff by path length (e.g. Mountain 100/40/10%).
@@ -295,7 +298,7 @@ The Tier 0 behaviour, i.e. the base version on a neutral tile:
 - ✅ **Saved island:** leaving a mission or retreating (Esc) saves the island – layout, biomes, tiers, towers, gold, blueprints and inventory – repaired, as after any fight (`user://island.json`). Start and Edit Island continue from it.
 - ✅ **Edit Island** (main menu, under Start): the island without enemies – build and rearrange freely, then **Done** saves and returns to the menu.
 - ✅ **Hover info:** there are no floating tooltips – every hover text (tiles, inventory slots and tabs, buttons, overlay icons, mission tube) shows in the fixed info window at the bottom right; with nothing hovered it shows the controls. The window has a fixed size; very long texts are cut off at the bottom.
-- ✅ **Notices:** found biome stones and blueprints (later also level-ups) stack below the overlay icons at the top left, stay about 10 s and then fade out over 1 s.
+- ✅ **Notices:** found biome stones, blueprints (with set progress, or "+1 tower" when a set completes) and level-ups stack below the overlay icons at the top left, stay about 10 s and then fade out over 1 s.
 - **Tier display (interim) ✅:** colour shades – **light = Tier 0, dark = Tier 7**. Biome tiles get darker with every tier; the Tier overlay shows a light-to-dark ramp with the number.
 
 ### 6.6 Chips & items ✅
@@ -575,24 +578,24 @@ Enemies fly, so they can cross the island without collision. They pick targets b
 ---
 
 ### 9.1 Prototype economy ✅ (2026-10-15)
-- **Gold** is unlimited and comes from **destroyed enemies** (and later from destroyed enemy buildings and hex tiles). ✅ **Normalised:** 1 gold per light enemy (Rammer, Corsair), 3 per normal (Gunboat), 5 per heavy (Bomber).
-- **Rare drops = biome stones** (one per faction biome). Enemies have a **chance** to drop one; **the stronger the enemy, the likelier**. 💡 6% × strength. (Faction resources like Wood, Ore, Aether, Life Essence and Pearls stay as an idea for faction abilities.)
-- **Blueprints** can drop too (💡 2.5% × strength), preferring tower types not unlocked yet. **Attack, Wall and Energy** are available from the start; the others need their first blueprint.
+- **Gold** is unlimited and comes from **destroyed enemies** (and later from destroyed enemy buildings and hex tiles). ✅ **Normalised:** 1 gold per light enemy (Rammer, Corsair), 3 per normal (Gunboat), 5 per heavy (Bomber). ✅ **Nothing is bought with gold (2026-10-16)** – it has no use yet.
+- **Rare drops = biome stones** (one per faction biome). Enemies have a **chance** to drop one; **the stronger the enemy, the likelier**. ✅ **Very rare (2026-10-16): 0.1% × strength.** (Faction resources like Wood, Ore, Aether, Life Essence and Pearls stay as an idea for faction abilities.)
+- ✅ **Blueprints are the only way to new towers (2026-10-16):** each kill rolls one random tower type: **1% × strength**, or **1.2% × strength** if the player owns none of that type. A set of **2 + (towers of that type already owned)** blueprints becomes **one tower** of that type in the inventory, so every further tower of a type takes longer.
+- ✅ **Neutral tiles drop** from enemies too (💡 12% per kill).
 - The **HQ holds** blueprints and rare resources, **unlimited for now**. The Warehouse keeps its escape-loot role for later.
-- **Costs** on the normalised scale 💡: Attack 10, Wall 8, Energy 12, Repair 14, Aura 16, Scout 10, Warehouse 12; new tiles 3 + 1 per 3 existing tiles. Start: 30 gold.
-- Debug keys: G +500 gold, R +5 biome stones each, B all blueprints.
+- Debug keys: G +500 gold, R +5 biome stones each and 5 tiles, B a full blueprint set (one tower) of each type.
 
 - ✅ **Start island:** only the HQ and **one ring of tiles** around it (7 tiles).
-- ✅ **Start kit:** a fresh island starts with **one Attack, Wall, Energy and Repair tower** in the inventory (Repair can be placed even though buying more needs its blueprint).
+- ✅ **Start kit:** a fresh island starts with **one Attack, Wall, Energy and Repair tower** and **4 neutral tiles** in the inventory.
 - ✅ **HQ cannon:** the HQ fires its own cannon to help at the start – 💡 20 damage every 1 s, range 5 hexes, no energy needed.
 
 ### 9.2 Inventory ✅ (2026-10-15)
 - Placeable things live in a **stackable inventory**: **towers** (one tab per tower type, **stacked by level** – towers will gain levels later), **neutral tiles** and **biome stones**.
 - **Rare drops are biome stones** directly (Forest, Mountain, Plains, Swamp, Lake stones).
-- **Buying:** buyable slots (basic tiles, unlocked level-1 towers) show their **price with a gold coin** (bottom left). Pressing a slot you have **none** of **buys one** if you have the gold, then selects it. No separate buy buttons. Tabs show how many items they hold, e.g. "Attack (2)".
-- **Placing:** **click** a slot to select it, then click tiles (stays selected while you have more or the gold to buy one – buyable items are bought automatically when the stack is empty), **or drag** a slot onto the island. Right click or Esc cancels.
+- Tabs show how many items they hold, e.g. "Attack (2)"; hovering a tower tab or slot shows its blueprint progress (e.g. 2/3). Empty stacks are greyed out.
+- **Placing:** **click** a slot to select it, then click tiles (stays selected while you have more), **or drag** a slot onto the island. Right click or Esc cancels.
 - **Picking up:** right click (with nothing selected) returns the top layer of a tile to the inventory: tower first, then biome stone (tile turns neutral), then the tile itself. Replacing a biome with another stone returns the old stone. No gold refunds.
-- A biome stone on an empty spot needs a tile from the inventory too.
+- A biome stone **or a tower** on an empty spot next to the island takes a tile from the inventory along (placed automatically when you have one).
 
 ---
 

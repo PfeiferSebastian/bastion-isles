@@ -1,8 +1,8 @@
 class_name Treasury
 extends RefCounted
-## What the player owns (GDD §9): gold (unlimited), blueprints that unlock tower types, and
-## the inventory of placeable items. Rare drops are biome stones in the inventory; the HQ
-## holds them and the blueprints (unlimited for now).
+## What the player owns (GDD §9): gold (unlimited), blueprint pieces, and the inventory of
+## placeable items. A full set of blueprints of one type (see Island.blueprints_needed)
+## becomes a tower of that type in the inventory; that is the only way to get new towers.
 
 signal changed
 
@@ -10,8 +10,6 @@ signal changed
 const STONE_BIOMES: Array[Biome.Type] = [
 	Biome.Type.FOREST, Biome.Type.MOUNTAIN, Biome.Type.PLAINS, Biome.Type.SWAMP, Biome.Type.LAKE,
 ]
-## Tower types available without a blueprint.
-const STARTING_TOWERS: Array[StringName] = [&"attack", &"wall", &"energy"]
 
 var gold := 0
 var blueprints: Dictionary[StringName, int] = {}
@@ -52,28 +50,12 @@ func spend_gold(amount: int) -> bool:
 	return true
 
 
-func add_blueprint(tower_type: StringName) -> void:
+## Adds a blueprint; with `needed` of them the set becomes a tower. Returns true then.
+func add_blueprint(tower_type: StringName, needed: int) -> bool:
 	blueprints[tower_type] = blueprints.get(tower_type, 0) + 1
+	var built := blueprints[tower_type] >= needed
+	if built:
+		blueprints[tower_type] -= needed
+		inventory.add(Inventory.tower_item(tower_type))
 	changed.emit()
-
-
-func is_unlocked(tower_type: StringName) -> bool:
-	return STARTING_TOWERS.has(tower_type) or blueprints.get(tower_type, 0) > 0
-
-
-func locked_towers() -> Array[StringName]:
-	var result: Array[StringName] = []
-	for type in TowerDefs.TYPES:
-		if not is_unlocked(type):
-			result.append(type)
-	return result
-
-
-## Buys one item into the inventory: towers (unlocked types) and tiles cost gold.
-func buy(item: Dictionary, price: int) -> bool:
-	if item.kind == &"tower" and not is_unlocked(item.type):
-		return false
-	if not spend_gold(price):
-		return false
-	inventory.add(item)
-	return true
+	return built

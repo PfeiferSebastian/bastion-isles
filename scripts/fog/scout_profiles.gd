@@ -27,4 +27,6 @@ static func for_tile(island: Island, coord: Vector2i) -> ScoutProfile:
 	var tile := island.get_tile(coord)
 	var p := base(tile.biome)
 	p.radius += maxi(tile.tier - 1, 0)
+	# Combined watchtowers keep the sky open longer.
+	p.hold_factor *= island.effect_bonus(coord)
 	return p

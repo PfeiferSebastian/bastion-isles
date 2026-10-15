@@ -1,7 +1,7 @@
 class_name InventoryBar
 extends VBoxContainer
 ## Inventory at the bottom of the combat screen: a tab for terrain (tiles and biome stones)
-## and one tab per tower type (stacks by level, buy button). Click a slot to select it for
+## and one tab per tower type (stacks by level). Click a slot to select it for
 ## placing, or drag it onto the map. Locked tower types need a blueprint to be bought, but
 ## towers already in the inventory (e.g. the starting Repair) can always be placed.
 
@@ -71,8 +71,8 @@ func _rebuild() -> void:
 		for level in inventory.tower_levels(type):
 			owned += inventory.count(Inventory.tower_item(type, level))
 		_tabs.set_tab_title(i + 1, "%s (%d)" % [String(type).capitalize(), owned])
-		_tabs.set_tab_disabled(i + 1, not treasury.is_unlocked(type) and owned == 0)
-		_tab_info[i + 1] = "%s: %d in the inventory%s" % [String(type).capitalize(), owned, "" if treasury.is_unlocked(type) else " · needs a blueprint to buy more"]
+		_tab_info[i + 1] = "%s: %d in the inventory · blueprints %d/%d (a full set becomes a tower)" % [
+			String(type).capitalize(), owned, treasury.blueprints.get(type, 0), view.island.blueprints_needed(type)]
 	for child in _slots.get_children():
 		child.queue_free()
 	if _tabs.current_tab == TERRAIN_TAB:
@@ -88,36 +88,35 @@ func _rebuild() -> void:
 			_add_slot(type, Inventory.tower_item(type, level), "Lv%d" % level)
 
 
-## A slot selects its item (click) or starts a drag. With none left but enough gold for a
-## buyable item, pressing it buys one first.
+## A slot selects its item (click) or starts a drag; empty stacks are greyed out.
 func _add_slot(kind: StringName, item: Dictionary, badge := "") -> void:
-	var treasury := view.island.treasury
-	var amount := treasury.inventory.count(item)
-	var price := Economy.buy_price(item, view.island)
-	var can_buy := price >= 0 and treasury.gold >= price
+	var amount := view.island.treasury.inventory.count(item)
 	var slot := ToolIcon.new(kind, "×%d" % amount, "")
-	slot.price = price
 	slot.badge = badge
 	slot.set_meta(&"item", item)
 	slot.button_group = _group
-	slot.modulate = Color.WHITE if amount > 0 or can_buy else Color(1, 1, 1, 0.4)
-	slot.disabled = amount <= 0 and not can_buy
+	slot.modulate = Color.WHITE if amount > 0 else Color(1, 1, 1, 0.4)
+	slot.disabled = amount <= 0
 	slot.button_down.connect(func() -> void:
-		if Economy.ensure_one(item, view.island):
+		if view.island.treasury.inventory.count(item) > 0:
 			view.begin_drag(item))
 	_slots.add_child(slot)
 
 
-## Name, what it does (biome stones and tiles) and its price.
+## Name, what it does (biome stones and tiles), where it comes from and its level.
 static func describe(item: Dictionary, island: Island = null) -> String:
 	var text := Inventory.label_of(item)
 	match item.kind:
 		&"stone":
 			text += " · only found as loot\n" + Biome.description_of(item.biome)
 		&"tile":
-			text += "\nNew neutral ground next to the island.\n" + Biome.description_of(Biome.Type.NEUTRAL)
-	if island and Economy.price_of(item, island) >= 0:
-		text += "\nPrice: %d gold (bought automatically when you have none)" % Economy.price_of(item, island)
+			text += " · dropped by enemies\nNew neutral ground next to the island (towers on an empty hex take one along).\n" + Biome.description_of(Biome.Type.NEUTRAL)
+		&"tower":
+			if item.level > 1:
+				text += "\nKeeps its level: +%d%% effect" % roundi(Tower.LEVEL_BONUS * (item.level - 1) * 100.0)
+			if island:
+				text += "\nBlueprints %d/%d for the next one (each tower you own needs one more)" % [
+					island.treasury.blueprints.get(item.type, 0), island.blueprints_needed(item.type)]
 	return text
 
 

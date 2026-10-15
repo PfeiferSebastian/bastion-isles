@@ -47,4 +47,5 @@ static func for_tile(island: Island, coord: Vector2i) -> RepairProfile:
 	var aura := island.aura_at(coord)
 	p.amount *= 1.0 + aura.get(&"output", 0.0)
 	p.cooldown /= 1.0 + aura.get(&"efficiency", 0.0)
+	p.amount *= island.effect_bonus(coord)
 	return p

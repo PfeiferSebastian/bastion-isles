@@ -204,7 +204,7 @@ func _on_enemy_died(enemy: Enemy) -> void:
 	kills += 1
 	EnergyGrid.notify_enemy_died(_view.island, _view.world_to_hex(enemy.global_position))
 	var treasury := _view.island.treasury
-	var loot := Economy.roll_loot(enemy, treasury, _loot_rng)
+	var loot := Economy.roll_loot(enemy, _loot_rng, _view.island.missing_tower_types())
 	var at := enemy.global_position
 	treasury.add_gold(loot.gold)
 	popup(at, "+%d gold" % loot.gold, Color("ffd23f"))
@@ -213,12 +213,21 @@ func _on_enemy_died(enemy: Enemy) -> void:
 		treasury.inventory.add(stone)
 		popup(at + Vector2(0, -16), "+1 " + Inventory.label_of(stone), Color("8fd3ff"))
 		item_found.emit("Found: %s" % Inventory.label_of(stone))
+	if loot.tile:
+		treasury.inventory.add(Inventory.tile_item())
+		popup(at + Vector2(0, -48), "+1 Tile", Color("e8dcb8"))
 	if loot.blueprint != &"":
-		treasury.add_blueprint(loot.blueprint)
-		popup(at + Vector2(0, -32), "Blueprint: " + String(loot.blueprint).capitalize(), Color("f0d28a"))
-		item_found.emit("Blueprint found: %s" % String(loot.blueprint).capitalize())
+		var name := String(loot.blueprint).capitalize()
+		var built := _view.island.add_blueprint(loot.blueprint)
+		popup(at + Vector2(0, -32), "Blueprint: " + name, Color("f0d28a"))
+		if built:
+			item_found.emit("Blueprints complete: +1 %s tower" % name)
+		else:
+			item_found.emit("Blueprint found: %s (%d/%d)" % [name, treasury.blueprints[loot.blueprint], _view.island.blueprints_needed(loot.blueprint)])
 	if not mission_done and kills >= mission_kill_goal:
 		mission_done = true
+		# The fight is won: towers stop gaining experience.
+		_view.island.gains_xp = false
 		mission_completed.emit()
 
 
@@ -422,12 +431,14 @@ func _towers_attack(delta: float) -> void:
 			var beam_power := EnergyGrid.draw_energy(island, coord, profile.beam_energy * beams * delta)
 			for i in beams:
 				_fire_beam(origin, targets[i], profile, beam_power, delta)
+			island.add_xp(coord, beam_power * delta)
 		if profile.has_projectile() and tower.attack_cooldown <= 0.0:
 			var power := EnergyGrid.draw_energy(island, coord, profile.energy_per_shot)
 			if power > 0.0:
 				# Below 1 (e.g. Forest without energy) the tower fires more slowly.
 				tower.attack_cooldown = profile.cooldown / power
 				_fire_projectile(origin, targets[0], profile)
+				island.add_xp(coord, 1.0)
 
 
 ## The HQ fires its own cannon at the nearest visible enemy (needs no energy).
@@ -517,6 +528,7 @@ func _towers_repair(delta: float) -> void:
 		if power <= 0.0:
 			continue
 		tower.attack_cooldown = profile.cooldown / power
+		island.add_xp(coord, 1.0)
 		match profile.mode:
 			&"redistribute":
 				_redistribute(coord, profile, damaged)

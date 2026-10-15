@@ -10,8 +10,6 @@ const LIGHT := Color("e8e2d0")
 
 var kind: StringName
 var caption := ""
-## Gold price shown bottom left with a coin, or -1 for none.
-var price := -1
 ## Small text in the top-left corner (e.g. a tower's level).
 var badge := ""
 
@@ -49,8 +47,6 @@ func _draw() -> void:
 		_:
 			_tower_symbol(c, r)
 	draw_polyline(hex + PackedVector2Array([hex[0]]), Color(0, 0, 0, 0.55), 1.5, true)
-	if price >= 0:
-		_draw_price()
 	if badge != "":
 		var bfont := get_theme_default_font()
 		draw_string_outline(bfont, Vector2(3, 13), badge, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, 4, Color(0, 0, 0, 0.85))
@@ -150,48 +146,13 @@ func _pond(c: Vector2, r: float) -> void:
 		draw_rect(Rect2(root + Vector2(r * 0.02, -r * 0.55), Vector2(r * 0.09, r * 0.2)), Color("5a3f26"))
 
 
-## Light symbol per tower type on the dark hexagon.
+## The building itself as it looks on the map (neutral material), on the dark hexagon.
 func _tower_symbol(c: Vector2, r: float) -> void:
-	match kind:
-		&"attack":
-			draw_circle(c, r * 0.38, LIGHT)
-			draw_rect(Rect2(c + Vector2(-r * 0.09, -r * 0.75), Vector2(r * 0.18, r * 0.5)), LIGHT)
-			draw_circle(c, r * 0.16, DARK)
-		&"wall":
-			draw_rect(Rect2(c + Vector2(-r * 0.6, -r * 0.15), Vector2(r * 1.2, r * 0.45)), LIGHT)
-			for i in 3:
-				draw_rect(Rect2(c + Vector2(-r * 0.6 + i * r * 0.48, -r * 0.35), Vector2(r * 0.24, r * 0.2)), LIGHT)
-		&"energy":
-			draw_colored_polygon(PackedVector2Array([c + Vector2(r * 0.12, -r * 0.6), c + Vector2(-r * 0.3, r * 0.08),
-				c + Vector2(-r * 0.03, r * 0.08), c + Vector2(-r * 0.15, r * 0.6), c + Vector2(r * 0.3, -r * 0.12),
-				c + Vector2(r * 0.03, -r * 0.12)]), Color("ffd23f"))
-		&"repair":
-			draw_rect(Rect2(c + Vector2(-r * 0.12, -r * 0.45), Vector2(r * 0.24, r * 0.9)), Color("5fd068"))
-			draw_rect(Rect2(c + Vector2(-r * 0.45, -r * 0.12), Vector2(r * 0.9, r * 0.24)), Color("5fd068"))
-		&"aura":
-			draw_arc(c, r * 0.55, 0, TAU, 24, Color("7fe0c2"), 2.0, true)
-			draw_circle(c, r * 0.25, Color("7fe0c2"))
-		&"scout":
-			draw_circle(c, r * 0.42, LIGHT)
-			draw_circle(c, r * 0.24, Color("6fb7ff"))
-			draw_circle(c, r * 0.1, DARK)
-		&"warehouse":
-			var box := Rect2(c - Vector2(r * 0.45, r * 0.35), Vector2(r * 0.9, r * 0.7))
-			draw_rect(box, Color("b48a5a"))
-			draw_line(box.position, box.end, DARK, 1.5)
-			draw_line(Vector2(box.position.x, box.end.y), Vector2(box.end.x, box.position.y), DARK, 1.5)
-		_:
-			_tower(c, r)
-
-
-## Gold coin with the price in the bottom-left corner.
-func _draw_price() -> void:
-	var coin := Vector2(9, size.y - 10)
-	draw_circle(coin + Vector2(0.5, 1), 6.5, Color(0, 0, 0, 0.5))
-	draw_circle(coin, 6.5, Color("8a6414"))
-	draw_circle(coin, 5.2, Color("f2c94c"))
-	draw_circle(coin + Vector2(-1.5, -1.5), 1.8, Color("fff3c4"))
-	var font := get_theme_default_font()
-	var pos := coin + Vector2(8, 4.5)
-	draw_string_outline(font, pos, str(price), HORIZONTAL_ALIGNMENT_LEFT, -1, 12, 4, Color(0, 0, 0, 0.85))
-	draw_string(font, pos, str(price), HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("f2c94c"))
+	if kind == &"wall":
+		# A stretch of rampart (left and right), so it reads as a wall rather than a tower.
+		var links: Array[bool] = [true, false, false, true, false, false]
+		TowerArt.draw(self, kind, Biome.Type.NEUTRAL, c, r * 0.6, links, r * 0.8)
+	elif TowerDefs.TYPES.has(kind):
+		TowerArt.draw(self, kind, Biome.Type.NEUTRAL, c + Vector2(0, -r * 0.05), r * 0.6)
+	else:
+		_tower(c, r)
