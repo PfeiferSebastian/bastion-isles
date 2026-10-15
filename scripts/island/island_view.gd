@@ -277,14 +277,22 @@ func _draw() -> void:
 	var ordered := island.coords()
 	ordered.sort_custom(func(a: Vector2i, b: Vector2i) -> bool:
 		return a.y < b.y if a.y != b.y else a.x < b.x)
+	var art := TerrainArt.available()
 	# Rocky underside first: only the island's lower edge stays visible below the tiles.
 	for coord in ordered:
-		_canvas.draw_texture_rect(TerrainArt.underside(), TerrainArt.underside_rect(HexMath.to_pixel(coord, hex_size), hex_size), false)
+		var c := HexMath.to_pixel(coord, hex_size)
+		if art:
+			_canvas.draw_texture_rect(TerrainArt.underside(), TerrainArt.underside_rect(c, hex_size), false)
+		else:
+			_draw_plain_underside(c)
 	for coord in ordered:
 		var tile := island.get_tile(coord)
 		var center := HexMath.to_pixel(coord, hex_size)
 		var shade := WASTELAND_TINT if tile.destroyed else tile_shade(tile)
-		_canvas.draw_texture_rect(TerrainArt.for_tile(tile), TerrainArt.tile_rect(center, hex_size), false, shade)
+		if art:
+			_canvas.draw_texture_rect(TerrainArt.for_tile(tile), TerrainArt.tile_rect(center, hex_size), false, shade)
+		else:
+			_draw_plain_tile(tile, center, shade)
 		if tile.tower and not _has_art(tile):
 			_canvas.draw_colored_polygon(_offset(_scaled(_hex_points, 0.62), center), BUILDING_PLATE)
 		if tile.destroyed:
@@ -316,6 +324,32 @@ func _draw_top() -> void:
 func _has_art(tile: IslandTile) -> bool:
 	var node: Node2D = _objects.get(tile.coord)
 	return node != null and node.has_method(&"has_art") and node.call(&"has_art")
+
+
+## Fallback without the purchased art: a flat coloured hex (and a drawn keep for the HQ).
+func _draw_plain_tile(tile: IslandTile, center: Vector2, shade: Color) -> void:
+	var hex := _offset(_scaled(_hex_points, 0.96), center)
+	var color := Biome.color_of(tile.biome) * Color(shade.r / ART_TINT.r, shade.g / ART_TINT.g, shade.b / ART_TINT.b)
+	_canvas.draw_colored_polygon(hex, color)
+	_canvas.draw_polyline(_closed(hex), Color(0.2, 0.16, 0.12, 0.7), 2.0, true)
+	if tile.is_hq:
+		var keep := Color("8c8f99")
+		_canvas.draw_colored_polygon(_offset(_scaled(_hex_points, 0.7), center), keep)
+		var w := hex_size * 0.5
+		var body := Rect2(center + Vector2(-w / 2.0, -hex_size * 0.22), Vector2(w, hex_size * 0.45))
+		_canvas.draw_rect(body, keep.darkened(0.35))
+		for i in 3:
+			_canvas.draw_rect(Rect2(body.position + Vector2(i * 2 * w / 5.0, -w / 5.0), Vector2(w / 5.0, w / 5.0)), keep.darkened(0.35))
+
+
+## Fallback underside: a dark earthy band below the hex's lower edges.
+func _draw_plain_underside(center: Vector2) -> void:
+	var h := hex_size * 0.55
+	var p := _offset(_hex_points, center)
+	# _hex_points: index 0 upper right … 1 lower right, 2 bottom, 3 lower left.
+	var band := PackedVector2Array([p[1], p[2], p[3], p[3] + Vector2(0, h), p[2] + Vector2(0, h), p[1] + Vector2(0, h)])
+	_canvas.draw_colored_polygon(band, Color("4a3a2c"))
+	_canvas.draw_polyline(PackedVector2Array([p[3] + Vector2(0, h * 0.5), p[2] + Vector2(0, h * 0.5), p[1] + Vector2(0, h * 0.5)]), Color("3a2d22"), 2.0, true)
 
 
 ## Tint for a tile's art: darker with every tier (interim tier display).
@@ -422,7 +456,10 @@ func _draw_hover() -> void:
 	# Ghost preview of tiles and biome stones on valid spots.
 	if ok and held.kind != &"tower":
 		var biome: Biome.Type = held.biome if held.kind == &"stone" else Biome.Type.NEUTRAL
-		_canvas.draw_texture_rect(TerrainArt.preview(biome, hovered_coord), TerrainArt.tile_rect(center, hex_size), false, Color(1, 1, 1, GHOST_ALPHA))
+		if TerrainArt.available():
+			_canvas.draw_texture_rect(TerrainArt.preview(biome, hovered_coord), TerrainArt.tile_rect(center, hex_size), false, Color(1, 1, 1, GHOST_ALPHA))
+		else:
+			_canvas.draw_colored_polygon(_offset(_scaled(_hex_points, 0.96), center), Color(Biome.color_of(biome), GHOST_ALPHA))
 	elif ok:
 		_canvas.draw_circle(center, hex_size * 0.4, Color(0, 0, 0, 0.35))
 	_canvas.draw_polyline(outline, HOVER_OK_COLOR if ok else HOVER_BLOCKED_COLOR, 3.0, true)

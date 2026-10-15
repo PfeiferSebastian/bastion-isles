@@ -25,7 +25,21 @@ const UNDERSIDE := "under/hexUnderDirt00.png"
 ## The HQ: a castle on a mountain (sample tile from the same artist, free to use as-is).
 const HQ := "samples/medieval-fantasy_locations/hexMountainCastle00.png"
 
+## Set to true to always draw plain coloured hexes (e.g. for testing the fallback).
+static var force_colours := false
+
 static var _cache := {}
+static var _available: Variant = null
+
+
+## True when the purchased tile art is installed. It is not part of the repository; without
+## it the island is drawn as plain coloured hexes, so the project runs for everyone.
+static func available() -> bool:
+	if force_colours:
+		return false
+	if _available == null:
+		_available = ResourceLoader.exists(DIR + "tiles/hexDirt00.png")
+	return _available
 
 
 ## The art for `tile`: the castle for the HQ, otherwise one of its biome's variants,
