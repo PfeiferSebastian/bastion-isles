@@ -22,6 +22,8 @@ const TILE_HP_PER_TIER := 100.0
 var _tiles: Dictionary[Vector2i, IslandTile] = {}
 ## Active heals over time: {coord, tower (bool), rate (HP/s), time (s left)}.
 var _heals_over_time: Array[Dictionary] = []
+## Gold, rare resources and blueprints of this island's player.
+var treasury := Treasury.new(Economy.STARTING_GOLD)
 ## aura_at() results, cleared every tick and whenever a tile or tower changes.
 var _aura_cache: Dictionary = {}
 
@@ -47,6 +49,8 @@ static func create_starter(radius: int) -> Island:
 		tile.is_hq = coord == HQ_COORD
 		island._tiles[coord] = tile
 		tile.hp = island.tile_max_hp(coord)
+	for type in Economy.STARTING_TOWERS:
+		island.treasury.inventory.add(Inventory.tower_item(type))
 	return island
 
 

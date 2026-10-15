@@ -4,6 +4,7 @@
 [ext_resource type="Script" path="res://scripts/world/sky_background.gd" id="2_sky"]
 [ext_resource type="Script" path="res://scripts/ui/floating_island_art.gd" id="3_island"]
 [ext_resource type="Script" path="res://scripts/ui/menu_frame.gd" id="4_frame"]
+[ext_resource type="Script" path="res://scripts/ui/brass_button.gd" id="5_button"]
 
 [node name="MainMenu" type="Control"]
 layout_mode = 3
@@ -64,18 +65,21 @@ alignment = 2
 
 [node name="Start" type="Button" parent="Buttons"]
 unique_name_in_owner = true
+script = ExtResource("5_button")
 custom_minimum_size = Vector2(0, 48)
 layout_mode = 2
 text = "Start"
 
 [node name="Options" type="Button" parent="Buttons"]
 unique_name_in_owner = true
+script = ExtResource("5_button")
 custom_minimum_size = Vector2(0, 48)
 layout_mode = 2
 text = "Options"
 
 [node name="Exit" type="Button" parent="Buttons"]
 unique_name_in_owner = true
+script = ExtResource("5_button")
 custom_minimum_size = Vector2(0, 48)
 layout_mode = 2
 text = "Exit"
@@ -122,6 +126,7 @@ value = 100.0
 
 [node name="Back" type="Button" parent="OptionsPanel/Content"]
 unique_name_in_owner = true
+script = ExtResource("5_button")
 custom_minimum_size = Vector2(0, 48)
 layout_mode = 2
 text = "Back"

@@ -84,6 +84,7 @@ func _simulate(biome: Biome.Type, config: Dictionary, run_seed: int) -> Dictiona
 	world.process_mode = Node.PROCESS_MODE_DISABLED  # everything is stepped by hand below
 	var view := IslandView.new()
 	view.name = "IslandView"
+	view.starter_radius = 2  # the configurations use two rings
 	world.add_child(view)
 	var combat := Combat.new()
 	combat.island_view_path = NodePath("../IslandView")

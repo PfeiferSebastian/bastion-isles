@@ -15,10 +15,15 @@ extends Node2D
 @export var idle_range := 90.0
 ## Buildings within this distance (px) are attacked before any ground.
 @export var building_seek_range := 340.0
+## Placeholder mission until zones exist: progress is kills out of this many.
+@export var mission_kill_goal := 100
 ## Seconds without enemies after which the fight counts as over and the ground is repaired.
 @export var battle_end_delay := 5.0
 ## How close an enemy must be to a laser's line to get hit.
 @export var beam_hit_radius := 12.0
+
+## A rare drop was found (biome stone or blueprint), for the HUD notice.
+signal item_found(text: String)
 
 var waves_enabled := true
 var kills := 0
@@ -36,9 +41,15 @@ var _beam_colors: Array[Color] = []
 var _heal_flashes: Array[Dictionary] = []
 ## Bomb impacts: {position, time}.
 var _bursts: Array[Dictionary] = []
+## Floating loot texts: {position, text, color, time}.
+var _popups: Array[Dictionary] = []
+var _loot_rng := RandomNumberGenerator.new()
+## Seconds until the HQ cannon may fire again.
+var _hq_cooldown := 0.0
 
 const HEAL_FLASH_TIME := 0.35
 const BURST_TIME := 0.4
+const POPUP_TIME := 1.2
 
 
 func _ready() -> void:
@@ -60,6 +71,7 @@ func _process(delta: float) -> void:
 		if not enemy.is_dead:
 			_move_and_attack(enemy, delta)
 	_towers_attack(delta)
+	_hq_attack(delta)
 	_towers_repair(delta)
 	_aura_debuffs()
 	_check_battle_end(delta)
@@ -120,6 +132,11 @@ func spawn_enemy(kind: StringName = &"", factor := 1.0) -> Enemy:
 	return enemy
 
 
+## Mission progress from 0 to 1 (placeholder: kills toward mission_kill_goal).
+func mission_progress() -> float:
+	return clampf(float(kills) / maxf(mission_kill_goal, 1), 0.0, 1.0)
+
+
 func is_enemy_visible(enemy: Enemy) -> bool:
 	return fog == null or fog.is_visible(_view.world_to_hex(enemy.global_position))
 
@@ -133,6 +150,25 @@ func _reveal_shooter(enemy: Enemy) -> void:
 func _on_enemy_died(enemy: Enemy) -> void:
 	kills += 1
 	EnergyGrid.notify_enemy_died(_view.island, _view.world_to_hex(enemy.global_position))
+	var treasury := _view.island.treasury
+	var loot := Economy.roll_loot(enemy, treasury, _loot_rng)
+	var at := enemy.global_position
+	treasury.add_gold(loot.gold)
+	popup(at, "+%d gold" % loot.gold, Color("ffd23f"))
+	if loot.stone >= 0:
+		var stone := Inventory.stone_item(loot.stone)
+		treasury.inventory.add(stone)
+		popup(at + Vector2(0, -16), "+1 " + Inventory.label_of(stone), Color("8fd3ff"))
+		item_found.emit("Found: %s" % Inventory.label_of(stone))
+	if loot.blueprint != &"":
+		treasury.add_blueprint(loot.blueprint)
+		popup(at + Vector2(0, -32), "Blueprint: " + String(loot.blueprint).capitalize(), Color("f0d28a"))
+		item_found.emit("Blueprint found: %s" % String(loot.blueprint).capitalize())
+
+
+## Short floating text in the world (loot, "not enough gold"…).
+func popup(world_position: Vector2, text: String, color: Color) -> void:
+	_popups.append({position = world_position, text = text, color = color, time = POPUP_TIME})
 
 
 # --- Enemies -------------------------------------------------------------
@@ -312,6 +348,21 @@ func _towers_attack(delta: float) -> void:
 				_fire_projectile(origin, targets[0], profile)
 
 
+## The HQ fires its own cannon at the nearest visible enemy (needs no energy).
+func _hq_attack(delta: float) -> void:
+	var hq := _view.island.get_tile(Island.HQ_COORD)
+	_hq_cooldown = maxf(_hq_cooldown - delta, 0.0)
+	if hq == null or hq.hp <= 0.0 or _hq_cooldown > 0.0:
+		return
+	var profile := AttackProfiles.hq()
+	var origin := _view.hex_center_world(Island.HQ_COORD)
+	var targets := _targets_in_range(origin, profile.range_hexes * HexMath.SQRT3 * _view.hex_size)
+	if targets.is_empty():
+		return
+	_hq_cooldown = profile.cooldown
+	_fire_projectile(origin, targets[0], profile)
+
+
 ## Visible enemies within range, nearest first.
 func _targets_in_range(origin: Vector2, range_px: float) -> Array[Enemy]:
 	var result: Array[Enemy] = []
@@ -364,7 +415,7 @@ func _aura_debuffs() -> void:
 # --- Repair --------------------------------------------------------------
 
 func _towers_repair(delta: float) -> void:
-	for list in [_heal_flashes, _bursts]:
+	for list in [_heal_flashes, _bursts, _popups]:
 		for i in range(list.size() - 1, -1, -1):
 			list[i].time -= delta
 			if list[i].time <= 0.0:
@@ -474,6 +525,13 @@ func _flash(from: Vector2i, to: Vector2i, color: Color) -> void:
 
 
 func _draw() -> void:
+	var font := ThemeDB.fallback_font
+	for p in _popups:
+		var t: float = p.time / POPUP_TIME
+		var at := to_local(p.position) + Vector2(-60, -20 - (1.0 - t) * 24)
+		var color: Color = p.color
+		draw_string_outline(font, at, p.text, HORIZONTAL_ALIGNMENT_CENTER, 120, 13, 4, Color(0, 0, 0, 0.7 * t))
+		draw_string(font, at, p.text, HORIZONTAL_ALIGNMENT_CENTER, 120, 13, Color(color, t))
 	for burst in _bursts:
 		var t: float = burst.time / BURST_TIME
 		var at := to_local(burst.position)

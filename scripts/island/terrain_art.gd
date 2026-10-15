@@ -18,16 +18,34 @@ const TILE_NAMES := {
 	Biome.Type.SWAMP: "hexMarsh",
 	Biome.Type.LAKE: "hexOcean",
 }
+## Mountains start as highlands and only become the big snowy mountains from this tier.
+const BIG_MOUNTAIN_TIER := 4
 ## Rocky underside drawn below the island's edge tiles.
 const UNDERSIDE := "under/hexUnderDirt00.png"
+## The HQ: a castle on a mountain (sample tile from the same artist, free to use as-is).
+const HQ := "samples/medieval-fantasy_locations/hexMountainCastle00.png"
 
 static var _cache := {}
 
 
-## One of the variants for `type`, picked stably from the tile's coordinate.
-static func tile(type: Biome.Type, coord: Vector2i) -> Texture2D:
-	var variant := absi(coord.x * 7 + coord.y * 13) % VARIANTS
-	return _load("tiles/%s%02d.png" % [TILE_NAMES[type], variant])
+## The art for `tile`: the castle for the HQ, otherwise one of its biome's variants,
+## picked stably from the tile's coordinate.
+static func for_tile(tile: IslandTile) -> Texture2D:
+	if tile.is_hq:
+		return _load(HQ)
+	var name: String = TILE_NAMES[tile.biome]
+	if tile.biome == Biome.Type.MOUNTAIN and tile.tier < BIG_MOUNTAIN_TIER:
+		name = "hexHighlands"
+	return variant(name, tile.coord)
+
+
+## Art for a biome stone preview at `coord` (Tier 1).
+static func preview(type: Biome.Type, coord: Vector2i) -> Texture2D:
+	return variant("hexHighlands" if type == Biome.Type.MOUNTAIN else TILE_NAMES[type], coord)
+
+
+static func variant(name: String, coord: Vector2i) -> Texture2D:
+	return _load("tiles/%s%02d.png" % [name, absi(coord.x * 7 + coord.y * 13) % VARIANTS])
 
 
 static func underside() -> Texture2D:

@@ -20,6 +20,7 @@ func _init() -> void:
 	_test_aura_towers()
 	_test_enemy_types()
 	_test_fog_of_war()
+	_test_economy()
 	print("hex_math_test: %s" % ("OK" if _failures == 0 else "%d FAILED" % _failures))
 	quit(1 if _failures > 0 else 0)
 
@@ -407,3 +408,45 @@ func _test_fog_of_war() -> void:
 	_check(blind_fog.level_at(Vector2i(4, 0)) == FogOfWar.Level.THICK, "unpowered scout reveals nothing")
 	_check(ScoutProfiles.base(Biome.Type.MOUNTAIN).radius > ScoutProfiles.base(Biome.Type.NEUTRAL).radius, "mountain scout sees further")
 	_check(ScoutProfiles.base(Biome.Type.FOREST).hold_factor > 1.0, "forest keeps the sky open longer")
+
+
+func _test_economy() -> void:
+	var t := Treasury.new(100)
+	_check(t.spend_gold(60) and t.gold == 40, "spend gold")
+	_check(not t.spend_gold(50) and t.gold == 40, "cannot overspend gold")
+	_check(t.locked_towers().size() == TowerDefs.TYPES.size() - 3, "three tower types start unlocked")
+	_check(not t.buy(Inventory.tower_item(&"scout"), 10), "locked tower types cannot be bought")
+	t.add_blueprint(&"scout")
+	_check(t.is_unlocked(&"scout"), "blueprint unlocks a tower type")
+	_check(t.buy(Inventory.tower_item(&"attack"), 30) and t.gold == 10, "buying puts a tower into the inventory")
+	_check(t.inventory.count(Inventory.tower_item(&"attack")) == 1, "attack stack of one")
+	_check(not t.buy(Inventory.tile_item(), 20), "cannot buy without gold")
+	var inv := Inventory.new()
+	inv.add(Inventory.tower_item(&"wall", 1), 2)
+	inv.add(Inventory.tower_item(&"wall", 3))
+	_check(inv.tower_levels(&"wall") == [1, 3], "towers stack per level")
+	_check(inv.take(Inventory.tower_item(&"wall", 1)) and inv.count(Inventory.tower_item(&"wall", 1)) == 1, "take one from a stack")
+	_check(not inv.take(Inventory.stone_item(Biome.Type.FOREST)), "no forest stone yet")
+	var island := Island.create_starter(2)
+	_check(Economy.tile_cost(island) == Economy.TILE_BASE_COST + Economy.TILE_COST_PER_TILE * 19, "tile price grows with the island")
+	_check(island.treasury.gold == Economy.STARTING_GOLD, "island starts with gold")
+	for type in [&"attack", &"wall", &"energy", &"repair"]:
+		_check(island.treasury.inventory.count(Inventory.tower_item(type)) == 1, "island starts with one %s" % type)
+	_check(AttackProfiles.hq().damage > AttackProfiles.base(Biome.Type.NEUTRAL).damage and AttackProfiles.hq().energy_per_shot == 0.0, "hq cannon is strong and free")
+	# Loot: always gold; stronger enemies drop biome stones more often.
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7
+	var weak := Enemy.new()
+	weak.setup(&"rammer")
+	var strong := Enemy.new()
+	strong.setup(&"bomber", 6.0)
+	var weak_drops := 0
+	var strong_drops := 0
+	for i in 400:
+		weak_drops += 1 if Economy.roll_loot(weak, t, rng).stone >= 0 else 0
+		strong_drops += 1 if Economy.roll_loot(strong, t, rng).stone >= 0 else 0
+	_check(Economy.roll_loot(weak, t, rng).gold == 5, "rammer gives 5 gold")
+	_check(Economy.kill_gold(strong) > Economy.kill_gold(weak), "stronger enemies give more gold")
+	_check(strong_drops > weak_drops * 3, "stronger enemies drop stones more often")
+	weak.free()
+	strong.free()

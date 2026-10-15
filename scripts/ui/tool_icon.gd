@@ -1,20 +1,21 @@
 class_name ToolIcon
 extends Button
-## Build bar button: a coloured hexagon with a symbol for what it builds, plus its hotkey.
-## Kinds: &"tower", &"tile" or a biome (&"forest", &"mountain", &"plains", &"swamp", &"lake").
+## Inventory slot: a coloured hexagon with a symbol for the item, plus a caption (e.g. "×3").
+## Kinds: a tower type (&"attack", &"wall", …), &"tower" (generic), &"tile" or a biome
+## (&"forest", &"mountain", &"plains", &"swamp", &"lake").
 
 const SIZE := 58.0
 const DARK := Color("2f2a26")
 const LIGHT := Color("e8e2d0")
 
 var kind: StringName
-var hotkey := 0
+var caption := ""
 
 
-func _init(icon_kind: StringName, key_number: int, tooltip: String) -> void:
+func _init(icon_kind: StringName, caption_text: String, tooltip: String) -> void:
 	kind = icon_kind
-	hotkey = key_number
-	tooltip_text = "%s (%d)" % [tooltip, key_number]
+	caption = caption_text
+	tooltip_text = tooltip
 	toggle_mode = true
 	focus_mode = Control.FOCUS_NONE
 	custom_minimum_size = Vector2(SIZE, SIZE)
@@ -40,16 +41,18 @@ func _draw() -> void:
 			_horizon(c, r, hex)
 		&"swamp":
 			_pond(c, r)
+		_:
+			_tower_symbol(c, r)
 	draw_polyline(hex + PackedVector2Array([hex[0]]), Color(0, 0, 0, 0.55), 1.5, true)
-	var font := get_theme_default_font()
-	draw_string_outline(font, Vector2(4, 14), str(hotkey), HORIZONTAL_ALIGNMENT_LEFT, -1, 12, 3, Color(0, 0, 0, 0.8))
-	draw_string(font, Vector2(4, 14), str(hotkey), HORIZONTAL_ALIGNMENT_LEFT, -1, 12, MenuTheme.CREAM)
+	if caption != "":
+		var font := get_theme_default_font()
+		var pos := Vector2(0, size.y - 4)
+		draw_string_outline(font, pos, caption, HORIZONTAL_ALIGNMENT_RIGHT, size.x - 4, 13, 4, Color(0, 0, 0, 0.85))
+		draw_string(font, pos, caption, HORIZONTAL_ALIGNMENT_RIGHT, size.x - 4, 13, MenuTheme.CREAM)
 
 
 func _fill() -> Color:
 	match kind:
-		&"tower":
-			return DARK
 		&"tile":
 			return Biome.color_of(Biome.Type.NEUTRAL)
 		&"forest":
@@ -62,7 +65,7 @@ func _fill() -> Color:
 			return Color.WHITE
 		&"swamp":
 			return Biome.color_of(Biome.Type.SWAMP)
-	return Color.GRAY
+	return DARK
 
 
 static func _hex(c: Vector2, r: float) -> PackedVector2Array:
@@ -134,3 +137,37 @@ func _pond(c: Vector2, r: float) -> void:
 		var root := c + Vector2(r * x, r * 0.15)
 		draw_line(root, root + Vector2(r * 0.05, -r * 0.55), Color("3d5a2a"), 2.0, true)
 		draw_rect(Rect2(root + Vector2(r * 0.02, -r * 0.55), Vector2(r * 0.09, r * 0.2)), Color("5a3f26"))
+
+
+## Light symbol per tower type on the dark hexagon.
+func _tower_symbol(c: Vector2, r: float) -> void:
+	match kind:
+		&"attack":
+			draw_circle(c, r * 0.38, LIGHT)
+			draw_rect(Rect2(c + Vector2(-r * 0.09, -r * 0.75), Vector2(r * 0.18, r * 0.5)), LIGHT)
+			draw_circle(c, r * 0.16, DARK)
+		&"wall":
+			draw_rect(Rect2(c + Vector2(-r * 0.6, -r * 0.15), Vector2(r * 1.2, r * 0.45)), LIGHT)
+			for i in 3:
+				draw_rect(Rect2(c + Vector2(-r * 0.6 + i * r * 0.48, -r * 0.35), Vector2(r * 0.24, r * 0.2)), LIGHT)
+		&"energy":
+			draw_colored_polygon(PackedVector2Array([c + Vector2(r * 0.12, -r * 0.6), c + Vector2(-r * 0.3, r * 0.08),
+				c + Vector2(-r * 0.03, r * 0.08), c + Vector2(-r * 0.15, r * 0.6), c + Vector2(r * 0.3, -r * 0.12),
+				c + Vector2(r * 0.03, -r * 0.12)]), Color("ffd23f"))
+		&"repair":
+			draw_rect(Rect2(c + Vector2(-r * 0.12, -r * 0.45), Vector2(r * 0.24, r * 0.9)), Color("5fd068"))
+			draw_rect(Rect2(c + Vector2(-r * 0.45, -r * 0.12), Vector2(r * 0.9, r * 0.24)), Color("5fd068"))
+		&"aura":
+			draw_arc(c, r * 0.55, 0, TAU, 24, Color("7fe0c2"), 2.0, true)
+			draw_circle(c, r * 0.25, Color("7fe0c2"))
+		&"scout":
+			draw_circle(c, r * 0.42, LIGHT)
+			draw_circle(c, r * 0.24, Color("6fb7ff"))
+			draw_circle(c, r * 0.1, DARK)
+		&"warehouse":
+			var box := Rect2(c - Vector2(r * 0.45, r * 0.35), Vector2(r * 0.9, r * 0.7))
+			draw_rect(box, Color("b48a5a"))
+			draw_line(box.position, box.end, DARK, 1.5)
+			draw_line(Vector2(box.position.x, box.end.y), Vector2(box.end.x, box.position.y), DARK, 1.5)
+		_:
+			_tower(c, r)

@@ -290,6 +290,8 @@ The Tier 0 behaviour, i.e. the base version on a neutral tile:
 - **Map overlay icons** (bottom left): **Energy, Repair, Hitpoints, Tiers**. Hovering an icon highlights the matching data on all tiles; clicking locks the overlay on.
 - **Build bar ✅:** hexagon symbols – Tower: light tower on dark hex · Tile: plus on sand · Forest: dark green tree · Mountain: grey mountain on red · Desert: sand dunes · Plains: horizon (beige land, white sky) · Swamp: pond with reeds.
 - **Energy overlay ✅:** storages are saturated by their reserve (grey = empty, full yellow = full) with the % shown.
+- ✅ **Mission progress tube** along the very bottom: a thin brass tube that fills with green liquid, a short tick every 5% (longer every 25%). Placeholder source until zones exist: kills out of 100.
+- ✅ **Find notice:** biome stones and blueprints found show as a notice centred above the gold display.
 - **Tier display (interim) ✅:** colour shades – **light = Tier 0, dark = Tier 7**. Biome tiles get darker with every tier; the Tier overlay shows a light-to-dark ramp with the number.
 
 ### 6.6 Chips & items ✅
@@ -559,9 +561,32 @@ Enemies fly, so they can cross the island without collision. They pick targets b
 | Desert | Sunglass | Sun Crystal |
 | Plains | Aether | Pure Aether |
 | Swamp | Life Essence ✅ | ❓ |
+| Lake | Pearls ✅ | ❓ |
 
 - Sources: tile production and enemy drops. Drops can also include **blueprints**, **biome stones** and **elements**.
 - ✅ **Each faction has its own resource**, which also fuels its **general faction abilities**. Swamp uses **Life Essence** (gathered e.g. by the Ossuary) instead of Bone.
+
+---
+
+### 9.1 Prototype economy ✅ (2026-10-15)
+- **Gold** is unlimited and comes from **destroyed enemies** (and later from destroyed enemy buildings and hex tiles). 💡 Rammer 5, Corsair 6, Gunboat 8, Bomber 12, scaled with enemy strength.
+- **Rare drops = biome stones** (one per faction biome). Enemies have a **chance** to drop one; **the stronger the enemy, the likelier**. 💡 6% × strength. (Faction resources like Wood, Ore, Aether, Life Essence and Pearls stay as an idea for faction abilities.)
+- **Blueprints** can drop too (💡 2.5% × strength), preferring tower types not unlocked yet. **Attack, Wall and Energy** are available from the start; the others need their first blueprint.
+- The **HQ holds** blueprints and rare resources, **unlimited for now**. The Warehouse keeps its escape-loot role for later.
+- **Costs:** towers cost gold (💡 Attack 50, Wall 40, Energy 60, Repair 70, Aura 80, Scout 50, Warehouse 60); new tiles cost gold (💡 20 + 2 per existing tile). Both are bought into the inventory (9.2).
+- Start: 💡 300 gold. Debug keys: G +500 gold, R +5 biome stones each, B all blueprints.
+
+- ✅ **Start island:** only the HQ and **one ring of tiles** around it (7 tiles).
+- ✅ **Start kit:** a fresh island starts with **one Attack, Wall, Energy and Repair tower** in the inventory (Repair can be placed even though buying more needs its blueprint).
+- ✅ **HQ cannon:** the HQ fires its own cannon to help at the start – 💡 20 damage every 1 s, range 5 hexes, no energy needed.
+
+### 9.2 Inventory ✅ (2026-10-15)
+- Placeable things live in a **stackable inventory**: **towers** (one tab per tower type, **stacked by level** – towers will gain levels later), **neutral tiles** and **biome stones**.
+- **Rare drops are biome stones** directly (Forest, Mountain, Plains, Swamp, Lake stones).
+- **Buying:** towers (unlocked types) and tiles are **bought with gold into the inventory**. Locked tower tabs show "needs a blueprint".
+- **Placing:** **click** a slot to select it, then click tiles (stays selected while the stack lasts), **or drag** a slot onto the island. Right click or Esc cancels.
+- **Picking up:** right click (with nothing selected) returns the top layer of a tile to the inventory: tower first, then biome stone (tile turns neutral), then the tile itself. Replacing a biome with another stone returns the old stone. No gold refunds.
+- A biome stone on an empty spot needs a tile from the inventory too.
 
 ---
 

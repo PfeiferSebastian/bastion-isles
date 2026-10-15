@@ -13,7 +13,15 @@ const OVERLAYS := [
 
 ## Set by main; the HUD reads hover state and island data from it every frame.
 var view: IslandView
-var combat: Combat
+var combat: Combat:
+	set(value):
+		combat = value
+		combat.item_found.connect(notify)
+
+## How long a find notice stays, and queued notices still to show.
+const NOTICE_TIME := 3.0
+var _notices: PackedStringArray = []
+var _notice_left := 0.0
 
 ## Overlay locked on by clicking an icon; hovering another icon previews it temporarily.
 var _locked_overlay: StringName = &""
@@ -24,16 +32,18 @@ var _locked_overlay: StringName = &""
 @onready var _waves: Button = %Waves
 @onready var _spawn: Button = %Spawn
 @onready var _stats: Label = %Stats
+@onready var _treasury_panel: Control = %Treasury
+@onready var _treasury_text: Label = %TreasuryText
+@onready var _notice: Control = %Notice
+@onready var _notice_text: Label = %NoticeText
+@onready var _mission_tube: ProgressTube = %MissionTube
 @onready var _legend: Label = %Legend
 @onready var _overlay_icons: HBoxContainer = %OverlayIcons
-@onready var _toolbar: Toolbar = %Toolbar
+@onready var _inventory: InventoryBar = %Inventory
 
 
 func _ready() -> void:
 	_root.theme = MenuTheme.build_hud()
-	_toolbar.tool_selected.connect(func(tool: IslandView.Tool, biome: Biome.Type) -> void:
-		if view:
-			view.set_tool(tool, biome))
 	_waves.toggled.connect(func(on: bool) -> void:
 		if combat:
 			combat.waves_enabled = on)
@@ -48,13 +58,40 @@ func _ready() -> void:
 		_overlay_icons.add_child(icon)
 
 
-func _process(_delta: float) -> void:
+## Shows a short notice above the gold display (finds queue up and show one after another).
+func notify(text: String) -> void:
+	_notices.append(text)
+
+
+func _update_notice(delta: float) -> void:
+	_notice_left -= delta
+	if _notice_left <= 0.0:
+		if _notices.is_empty():
+			_notice.visible = false
+			return
+		_notice_text.text = _notices[0]
+		_notices.remove_at(0)
+		_notice_left = NOTICE_TIME
+		_notice.visible = true
+	_notice.reset_size()
+	_notice.position.x = (_root.size.x - _notice.size.x) / 2.0
+	# Fade out over the last half second.
+	_notice.modulate.a = clampf(_notice_left / 0.5, 0.0, 1.0)
+
+
+func _process(delta: float) -> void:
+	_update_notice(delta)
 	if combat:
 		_waves.set_pressed_no_signal(combat.waves_enabled)
 		_waves.text = "Waves: on" if combat.waves_enabled else "Waves: off"
 		_stats.text = "Enemies %d · Killed %d" % [combat.enemies().size(), combat.kills]
+		_mission_tube.value = combat.mission_progress()
+		_mission_tube.tooltip_text = "Mission progress: %d / %d kills (placeholder until zones)" % [mini(combat.kills, combat.mission_kill_goal), combat.mission_kill_goal]
 	if view == null:
 		return
+	_treasury_text.text = _describe_treasury(view.island.treasury)
+	_treasury_panel.reset_size()
+	_treasury_panel.position.x = (_root.size.x - _treasury_panel.size.x) / 2.0
 	_info.text = _describe_tile(view.hovered_coord)
 	_info_panel.visible = _info.text != ""
 	_info_panel.reset_size()
@@ -63,7 +100,7 @@ func _process(_delta: float) -> void:
 func _set_overlay(mode: StringName) -> void:
 	if view:
 		view.overlay = mode
-	_legend.text = "Map overlays" if mode == &"" else _legend_for(mode)
+	_legend.text = "Map\noverlays" if mode == &"" else _legend_for(mode)
 
 
 func _on_overlay_toggled(on: bool, icon: OverlayIcon) -> void:
@@ -82,10 +119,24 @@ static func _legend_for(mode: StringName) -> String:
 	return ""
 
 
+static func _describe_treasury(t: Treasury) -> String:
+	var blueprints := 0
+	for type in t.blueprints:
+		blueprints += t.blueprints[type]
+	return "Gold %d · Blueprints %d" % [t.gold, blueprints]
+
+
+## What a click with the held inventory item would do here.
+func _describe_price(_coord: Vector2i) -> String:
+	if view.held.is_empty():
+		return ""
+	return "Placing: %s (%d left) · right click to cancel" % [Inventory.label_of(view.held), view.island.treasury.inventory.count(view.held)]
+
+
 func _describe_tile(coord: Vector2i) -> String:
 	var tile := view.island.get_tile(coord)
 	if tile == null:
-		return ""
+		return _describe_price(coord)
 	var lines: PackedStringArray = []
 	var what := "HQ" if tile.is_hq else "%s · Tier %d" % [Biome.name_of(tile.biome), tile.tier]
 	if tile.destroyed:
@@ -102,6 +153,9 @@ func _describe_tile(coord: Vector2i) -> String:
 	var effects := view.island.aura_at(coord)
 	if not effects.is_empty():
 		lines.append("Auras: " + Auras.describe(effects))
+	if tile.is_hq:
+		var cannon := AttackProfiles.hq()
+		lines.append("HQ cannon: %.0f dmg every %.1fs · range %.1f hex · no energy" % [cannon.damage, cannon.cooldown, cannon.range_hexes])
 	var tower := tile.tower
 	if tower:
 		var line := "%s · HP %d / %d" % [String(tower.type).capitalize(), ceili(tower.hp), roundi(view.island.tower_max_hp(coord))]
@@ -110,6 +164,9 @@ func _describe_tile(coord: Vector2i) -> String:
 		lines.append(line)
 	if tower and tower.type == &"attack":
 		lines.append("Attack: " + _describe_attack(AttackProfiles.for_tile(view.island, coord)))
+	var price := _describe_price(coord)
+	if price != "":
+		lines.append(price)
 	if tower and tower.type == &"aura":
 		lines.append("Aura: " + _describe_aura(AuraProfiles.for_tile(view.island, coord), tower.aura_power))
 	if tower and tower.type == &"scout":

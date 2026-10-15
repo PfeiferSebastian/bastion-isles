@@ -6,9 +6,10 @@
 [ext_resource type="PackedScene" path="res://scenes/objects/placeholder_tower.tscn" id="4_tower"]
 [ext_resource type="Script" path="res://scripts/world/camera_controller.gd" id="5_camera"]
 [ext_resource type="Script" path="res://scripts/ui/hud.gd" id="6_hud"]
-[ext_resource type="Script" path="res://scripts/ui/toolbar.gd" id="7_toolbar"]
+[ext_resource type="Script" path="res://scripts/ui/inventory_bar.gd" id="7_toolbar"]
 [ext_resource type="Script" path="res://scripts/combat/combat.gd" id="8_combat"]
 [ext_resource type="Script" path="res://scripts/fog/fog_layer.gd" id="9_fog"]
+[ext_resource type="Script" path="res://scripts/ui/progress_tube.gd" id="10_tube"]
 
 [node name="Main" type="Node2D"]
 script = ExtResource("1_main")
@@ -60,6 +61,52 @@ layout_mode = 2
 custom_minimum_size = Vector2(430, 0)
 autowrap_mode = 2
 
+[node name="Treasury" type="PanelContainer" parent="HUD/Root"]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -150.0
+offset_top = -168.0
+offset_right = 150.0
+offset_bottom = -132.0
+grow_horizontal = 2
+grow_vertical = 0
+mouse_filter = 2
+
+[node name="TreasuryText" type="Label" parent="HUD/Root/Treasury"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Gold 0"
+horizontal_alignment = 1
+
+[node name="Notice" type="PanelContainer" parent="HUD/Root"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -150.0
+offset_top = -214.0
+offset_right = 150.0
+offset_bottom = -176.0
+grow_horizontal = 2
+grow_vertical = 0
+mouse_filter = 2
+
+[node name="NoticeText" type="Label" parent="HUD/Root/Notice"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.94, 0.82, 0.54, 1)
+theme_override_font_sizes/font_size = 20
+horizontal_alignment = 1
+
 [node name="TopBar" type="PanelContainer" parent="HUD/Root"]
 layout_mode = 1
 anchors_preset = 1
@@ -104,61 +151,85 @@ anchor_top = 1.0
 anchor_right = 1.0
 anchor_bottom = 1.0
 offset_left = -330.0
-offset_top = -166.0
+offset_top = -180.0
 offset_right = -16.0
-offset_bottom = -100.0
+offset_bottom = -94.0
 grow_horizontal = 0
 grow_vertical = 0
 theme_override_colors/font_color = Color(1, 1, 1, 0.75)
 theme_override_font_sizes/font_size = 13
-text = "Left click: build / cycle · Right click: remove
+text = "Click a slot, then the island · or drag · Right click: pick up / cancel
 Drag: pan · Wheel: zoom · Esc: menu
-Debug: D damage · +/- tier · F1–F4 enemy types · V fog"
+Debug: D damage · +/- tier · F1–F4 enemies · V fog
+G +500 gold · R +5 stones · B all blueprints"
 horizontal_alignment = 2
 vertical_alignment = 2
 
 [node name="OverlayPanel" type="PanelContainer" parent="HUD/Root"]
 layout_mode = 1
-anchors_preset = 2
+anchors_preset = 3
+anchor_left = 1.0
 anchor_top = 1.0
+anchor_right = 1.0
 anchor_bottom = 1.0
-offset_left = 16.0
-offset_top = -118.0
-offset_right = 260.0
-offset_bottom = -16.0
+offset_left = -340.0
+offset_top = -84.0
+offset_right = -16.0
+offset_bottom = -20.0
+grow_horizontal = 0
 grow_vertical = 0
 
-[node name="Column" type="VBoxContainer" parent="HUD/Root/OverlayPanel"]
+[node name="Column" type="HBoxContainer" parent="HUD/Root/OverlayPanel"]
 layout_mode = 2
+theme_override_constants/separation = 10
+alignment = 2
 
 [node name="Legend" type="Label" parent="HUD/Root/OverlayPanel/Column"]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(76, 0)
 layout_mode = 2
 theme_override_font_sizes/font_size = 13
-text = "Map overlays"
+text = "Map
+overlays"
+vertical_alignment = 1
+autowrap_mode = 2
 
 [node name="OverlayIcons" type="HBoxContainer" parent="HUD/Root/OverlayPanel/Column"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/separation = 8
 
-[node name="ToolbarPanel" type="PanelContainer" parent="HUD/Root"]
+[node name="InventoryPanel" type="PanelContainer" parent="HUD/Root"]
 layout_mode = 1
 anchors_preset = 7
 anchor_left = 0.5
 anchor_top = 1.0
 anchor_right = 0.5
 anchor_bottom = 1.0
-offset_left = -250.0
-offset_top = -92.0
-offset_right = 250.0
-offset_bottom = -16.0
+offset_left = -530.0
+offset_top = -128.0
+offset_right = 160.0
+offset_bottom = -20.0
 grow_horizontal = 2
 grow_vertical = 0
 
-[node name="Toolbar" type="HBoxContainer" parent="HUD/Root/ToolbarPanel"]
+[node name="Inventory" type="VBoxContainer" parent="HUD/Root/InventoryPanel"]
 unique_name_in_owner = true
 layout_mode = 2
-theme_override_constants/separation = 6
-alignment = 1
 script = ExtResource("7_toolbar")
+
+[node name="MissionTube" type="Control" parent="HUD/Root"]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 16.0
+offset_top = -15.0
+offset_right = -16.0
+offset_bottom = -4.0
+grow_horizontal = 2
+grow_vertical = 0
+script = ExtResource("10_tube")
+

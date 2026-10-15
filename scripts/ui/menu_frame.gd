@@ -68,28 +68,115 @@ func _rivet(at: Vector2) -> void:
 	draw_circle(at + Vector2(-0.8, -0.8), 2.4, BRASS_LIGHT)
 
 
-## Copper pipes down both sides, with joint rings and a pressure gauge on the left.
+## Copper pipes down both sides: each comes out of a riveted junction box under the gears,
+## is fed by an elbow from the frame, runs down past a gauge (left) or a valve wheel (right)
+## and disappears into the rocky ledge at the bottom.
 func _draw_pipes() -> void:
-	for side in [INSET + 30.0, size.x - INSET - 30.0]:
-		var top := INSET + 70.0
-		var bottom := size.y - 120.0
-		draw_line(Vector2(side, top), Vector2(side, bottom), COPPER.darkened(0.35), 12.0)
-		draw_line(Vector2(side, top), Vector2(side, bottom), COPPER, 8.0)
-		draw_line(Vector2(side - 2, top), Vector2(side - 2, bottom), COPPER.lightened(0.35), 2.0)
-		var y := top + 40.0
-		while y < bottom:
-			draw_rect(Rect2(side - 9, y - 4, 18, 8), BRASS)
-			draw_rect(Rect2(side - 9, y - 4, 18, 8), BRASS_DARK, false, 1.5)
-			y += 90.0
-	var gauge := Vector2(INSET + 30.0, size.y * 0.42)
-	draw_circle(gauge, 22.0, BRASS_DARK)
-	draw_circle(gauge, 19.0, Color("efe4c8"))
+	var width := 11.0
+	for i in 2:
+		var left := i == 0
+		var x := INSET + 34.0 if left else size.x - INSET - 34.0
+		var box_y := INSET + GEAR_RADIUS * 1.75
+		var bottom := size.y - 30.0   # hidden by the ledge drawn afterwards
+		# Feed from the frame bar into the box: a short horizontal run and an elbow.
+		var frame_x := INSET + BAR * 0.5 if left else size.x - INSET - BAR * 0.5
+		var dir := 1.0 if left else -1.0
+		var elbow_r := 14.0
+		_pipe(Vector2(frame_x, box_y - 30.0), Vector2(x - dir * elbow_r, box_y - 30.0), width)
+		_elbow(Vector2(x - dir * elbow_r, box_y - 30.0 + elbow_r), elbow_r, -PI / 2.0 if left else -PI / 2.0, 0.0 if left else -PI, width)
+		_flange(Vector2(frame_x + dir * 6.0, box_y - 30.0), width, false)
+		# Main run down into the rocks.
+		_pipe(Vector2(x, box_y), Vector2(x, bottom), width)
+		var y := box_y + 70.0
+		while y < bottom - 60.0:
+			_flange(Vector2(x, y), width, true)
+			y += 110.0
+		_junction_box(Vector2(x, box_y))
+		if left:
+			# T-branch to a pressure gauge.
+			var gauge := Vector2(x + 40.0, size.y * 0.44)
+			_pipe(Vector2(x, gauge.y), gauge - Vector2(16, 0), 7.0)
+			_flange(Vector2(x, gauge.y), width, true)
+			_gauge(gauge)
+		else:
+			_valve(Vector2(x, size.y * 0.5))
+
+
+## Straight pipe from `a` to `b` with a dark outline, highlight and shadow side.
+func _pipe(a: Vector2, b: Vector2, width: float) -> void:
+	var d := (b - a).normalized()
+	var n := Vector2(-d.y, d.x)
+	if n.x + n.y < 0.0:
+		n = -n   # shading side: right / bottom
+	draw_line(a, b, COPPER.darkened(0.55), width + 3.0)
+	draw_line(a, b, COPPER, width)
+	draw_line(a + n * width * 0.28, b + n * width * 0.28, COPPER.darkened(0.3), width * 0.35)
+	draw_line(a - n * width * 0.22, b - n * width * 0.22, COPPER.lightened(0.45), maxf(1.5, width * 0.18))
+
+
+## Quarter bend around `center` from angle `from` to `to`.
+func _elbow(center: Vector2, radius: float, from: float, to: float, width: float) -> void:
+	draw_arc(center, radius, from, to, 12, COPPER.darkened(0.55), width + 3.0, true)
+	draw_arc(center, radius, from, to, 12, COPPER, width, true)
+	draw_arc(center, radius - width * 0.22, from, to, 12, COPPER.lightened(0.45), maxf(1.5, width * 0.18), true)
+
+
+## Bolted ring around a pipe.
+func _flange(at: Vector2, width: float, vertical_pipe: bool) -> void:
+	var size_v := Vector2(width + 10.0, 7.0) if vertical_pipe else Vector2(7.0, width + 10.0)
+	var r := Rect2(at - size_v / 2.0, size_v)
+	draw_rect(r.grow(1.0), BRASS_DARK)
+	draw_rect(r, BRASS)
+	draw_line(r.position + Vector2(1, 1), Vector2(r.end.x - 1, r.position.y + 1), BRASS_LIGHT, 1.0)
+	var bolts := [r.position + Vector2(2.5, 2.5), r.end - Vector2(2.5, 2.5)]
+	for b in bolts:
+		draw_circle(b, 1.4, IRON)
+
+
+## Riveted brass box the pipe comes out of.
+func _junction_box(top_center: Vector2) -> void:
+	var r := Rect2(top_center + Vector2(-19, -22), Vector2(38, 28))
+	draw_rect(r.grow(2.0), BRASS_DARK)
+	draw_rect(r, BRASS)
+	draw_rect(Rect2(r.position + Vector2(2, 2), Vector2(r.size.x - 4, 6)), BRASS_LIGHT.darkened(0.05))
+	draw_line(Vector2(r.position.x + 3, r.end.y - 2), Vector2(r.end.x - 3, r.end.y - 2), BRASS_DARK, 1.5)
+	for p in [r.position + Vector2(4, 4), Vector2(r.end.x - 4, r.position.y + 4),
+			Vector2(r.position.x + 4, r.end.y - 4), r.end - Vector2(4, 4)]:
+		_rivet_small(p)
+
+
+func _rivet_small(at: Vector2) -> void:
+	draw_circle(at, 2.2, BRASS_DARK)
+	draw_circle(at + Vector2(-0.5, -0.5), 1.3, BRASS_LIGHT)
+
+
+func _gauge(center: Vector2) -> void:
+	draw_circle(center + Vector2(1.5, 2), 22.0, Color(0, 0, 0, 0.35))
+	draw_circle(center, 22.0, BRASS_DARK)
+	draw_circle(center, 20.0, BRASS)
+	draw_circle(center, 16.5, Color("efe4c8"))
 	for i in 7:
 		var a := deg_to_rad(150.0 + i * 40.0)
-		draw_line(gauge + Vector2.from_angle(a) * 13.0, gauge + Vector2.from_angle(a) * 17.0, IRON, 1.5)
+		draw_line(center + Vector2.from_angle(a) * 11.0, center + Vector2.from_angle(a) * 15.0, IRON, 1.5)
 	var needle := deg_to_rad(210.0 + 70.0 * (0.5 + 0.5 * sin(_time * 1.3)) + 6.0 * sin(_time * 9.0))
-	draw_line(gauge, gauge + Vector2.from_angle(needle) * 15.0, Color("a8322a"), 2.0, true)
-	draw_circle(gauge, 3.0, IRON)
+	draw_line(center, center + Vector2.from_angle(needle) * 13.0, Color("a8322a"), 2.0, true)
+	draw_circle(center, 2.5, IRON)
+	# Glass reflection.
+	draw_arc(center, 13.0, deg_to_rad(200), deg_to_rad(250), 8, Color(1, 1, 1, 0.55), 2.0, true)
+
+
+## Hand wheel valve sitting on the pipe; turns slowly now and then.
+func _valve(center: Vector2) -> void:
+	_flange(center, 11.0, true)
+	var angle := sin(_time * 0.5) * 0.6
+	draw_circle(center + Vector2(1.5, 2), 17.0, Color(0, 0, 0, 0.3))
+	draw_arc(center, 15.0, 0, TAU, 24, Color("8a2a20").darkened(0.3), 5.0, true)
+	draw_arc(center, 15.0, 0, TAU, 24, Color("a8322a"), 3.0, true)
+	for k in 4:
+		var a := angle + k * PI / 2.0
+		draw_line(center, center + Vector2.from_angle(a) * 14.0, Color("8a2a20"), 3.0, true)
+	draw_circle(center, 4.5, BRASS_DARK)
+	draw_circle(center + Vector2(-1, -1), 2.5, BRASS_LIGHT)
 
 
 ## Moss and vines hanging from the top bar.

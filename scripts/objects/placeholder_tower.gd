@@ -1,5 +1,6 @@
 extends Node2D
-## Placeholder tower with a distinct silhouette per base tower type (GDD §6.4).
+## Tower visual. Uses generated painted sprites where they exist (so far: neutral walls,
+## which connect to neighbouring walls), otherwise a simple placeholder silhouette per type.
 ## Pops in when spawned and again whenever its type changes.
 
 @export var tower_type: StringName = &"attack":
@@ -10,6 +11,28 @@ extends Node2D
 			queue_redraw()
 
 @export var radius := 18.0
+## Must match the island view, so sprites line up with the tile art.
+@export var hex_size := 48.0
+
+const ART_DIR := "res://assets/generated/towers/"
+## Sprite canvas in art space (256 px = one tile wide); the tile centre sits at ART_ANCHOR.
+const ART_SIZE := Vector2(256, 320)
+const ART_ANCHOR := Vector2(128, 240)
+
+## Biome of the tile below, set by the island view.
+var biome: Biome.Type = Biome.Type.NEUTRAL:
+	set(value):
+		if value != biome:
+			biome = value
+			queue_redraw()
+## For walls: which of the 6 neighbours (HexMath.DIRECTIONS order) also hold a wall.
+var wall_links: Array[bool] = [false, false, false, false, false, false]:
+	set(value):
+		if value != wall_links:
+			wall_links = value
+			queue_redraw()
+
+static var _art_cache := {}
 
 ## Turret direction in radians; 0 points right, -PI/2 (default) points up.
 var aim_angle := -PI / 2.0:
@@ -42,6 +65,8 @@ func _pop() -> void:
 
 
 func _draw() -> void:
+	if tower_type == &"wall" and _draw_wall_art():
+		return
 	var accent: Color = ACCENTS.get(tower_type, Color.WHITE)
 	match tower_type:
 		&"wall":
@@ -83,6 +108,43 @@ func _draw() -> void:
 			draw_circle(Vector2.ZERO, radius * 0.2, accent)
 
 
+## Round base with a light rim, so towers read against painted terrain.
 func _draw_base() -> void:
-	draw_circle(Vector2(0, 3), radius, Color(0, 0, 0, 0.25))
+	draw_circle(Vector2(0, 4), radius + 2.0, Color(0, 0, 0, 0.45))
+	draw_circle(Vector2.ZERO, radius + 2.0, Color("e8e2d0"))
 	draw_circle(Vector2.ZERO, radius, BASE)
+
+
+func has_art() -> bool:
+	return tower_type == &"wall" and _art("wall_%s_post.png" % String(Biome.Type.find_key(biome)).to_lower()) != null
+
+
+## Connected wall: segments toward neighbouring walls behind the post, the post, then the
+## segments toward the front (so depth reads right). False if no art exists for the biome.
+func _draw_wall_art() -> bool:
+	var key := String(Biome.Type.find_key(biome)).to_lower()
+	var post := _art("wall_%s_post.png" % key)
+	if post == null:
+		return false
+	var rect := _art_rect()
+	for i in 6:
+		if wall_links[i] and HexMath.DIRECTIONS[i].y <= 0:
+			draw_texture_rect(_art("wall_%s_%d.png" % [key, i]), rect, false)
+	draw_texture_rect(post, rect, false)
+	for i in 6:
+		if wall_links[i] and HexMath.DIRECTIONS[i].y > 0:
+			draw_texture_rect(_art("wall_%s_%d.png" % [key, i]), rect, false)
+	return true
+
+
+## Sprite rect in local space, stretched like the tile art (see TerrainArt.tile_rect).
+func _art_rect() -> Rect2:
+	var art_scale := Vector2(HexMath.SQRT3 * hex_size, 2.0 * hex_size) / 256.0
+	return Rect2(-ART_ANCHOR * art_scale, ART_SIZE * art_scale)
+
+
+static func _art(file: String) -> Texture2D:
+	if not _art_cache.has(file):
+		var path := ART_DIR + file
+		_art_cache[file] = load(path) if ResourceLoader.exists(path) else null
+	return _art_cache[file]
