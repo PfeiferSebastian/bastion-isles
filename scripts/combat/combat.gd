@@ -26,6 +26,8 @@ extends Node2D
 ## damage) and this many more of them, compounding.
 const ROUND_STRENGTH := 1.2
 const ROUND_COUNT := 1.1
+## Endless mode: enemies get this much stronger with every wave.
+const ENDLESS_STEP := 0.03
 ## Seconds before the first enemies come, so the player can look around and build.
 @export var mission_start_delay := 10.0
 ## Seconds without enemies after which the fight counts as over and the ground is repaired.
@@ -86,6 +88,7 @@ func _ready() -> void:
 	add_child(_enemy_layer)
 	add_child(_projectile_layer)
 	mission_countdown = mission_start_delay
+	_apply_session()
 	_base_kill_goal = mission_kill_goal
 
 
@@ -242,14 +245,32 @@ func spawn_enemy(kind: StringName = &"", factor := 1.0, at: Variant = null, spee
 	return enemy
 
 
-## Enemy HP and damage multiplier of the current round.
+## Mission rules from the main menu's choice (GameSession): the mission's kill goal and
+## enemy strength and numbers; in endless mode no goal at all.
+var _mission_strength := 1.0
+var _mission_count := 1.0
+
+
+func _apply_session() -> void:
+	if GameSession.endless:
+		mission_kill_goal = 1 << 30
+		return
+	var rules := GameSession.mission_rules()
+	mission_kill_goal = rules.kill_goal
+	_mission_strength = rules.strength
+	_mission_count = rules.count
+
+
+## Enemy HP and damage multiplier: the mission's, the round's and in endless mode +ENDLESS_STEP
+## per wave.
 func strength_factor() -> float:
-	return pow(ROUND_STRENGTH, mission_round)
+	var endless_growth := 1.0 + ENDLESS_STEP * maxi(wave - 1, 0) if GameSession.endless else 1.0
+	return _mission_strength * pow(ROUND_STRENGTH, mission_round) * endless_growth
 
 
-## Enemy count multiplier of the current round.
+## Enemy count multiplier of the mission and the current round.
 func count_factor() -> float:
-	return pow(ROUND_COUNT, mission_round)
+	return _mission_count * pow(ROUND_COUNT, mission_round)
 
 
 ## Starts the next, harder round after a won mission: enemies 20% stronger, 10% more of them
@@ -332,9 +353,10 @@ func _on_enemy_died(enemy: Enemy) -> void:
 ## Fleeing a running mission: only Island.FLEE_KEEP of this mission's loot is kept (the
 ## rest is taken away again), towers destroyed this mission are rebuilt at level 0 and
 ## wasteland biome tiles come back at Tier 1. Returns {lost (same shape as mission_loot),
-## rebuilt}. Does nothing (returns {}) once the mission is won or lost.
+## rebuilt}. Does nothing (returns {}) once the mission is won or lost, and in endless mode,
+## where leaving is the only way out and keeps everything.
 func flee() -> Dictionary:
-	if mission_done or defeated:
+	if mission_done or defeated or GameSession.endless:
 		return {}
 	finish_wave_log()
 	var island := _view.island

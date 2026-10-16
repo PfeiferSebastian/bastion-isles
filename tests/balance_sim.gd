@@ -96,6 +96,7 @@ func _simulate(biome: Biome.Type, config: Dictionary, run_seed: int) -> Dictiona
 	world.add_child(combat)
 	root.add_child(world)
 	await process_frame  # _ready() runs once the world is inside the tree
+	combat.mission_kill_goal = 1 << 30  # again: _ready() applies the chosen mission's goal
 
 	var island := view.island
 	for coord in island.coords():

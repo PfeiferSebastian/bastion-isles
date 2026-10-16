@@ -1,6 +1,7 @@
 extends Control
 ## Main menu: title at the top, Start / Edit Island / Options / Exit at the bottom middle,
-## steampunk frame and a floating island over the cloud sky.
+## steampunk frame and a floating island over the cloud sky. Start opens the mission select:
+## numbered missions (1-1, 1-2 … 2-1 …), the endless mode below them and Back at the bottom.
 
 const GAME_SCENE := "res://main.tscn"
 
@@ -14,11 +15,13 @@ const GAME_SCENE := "res://main.tscn"
 @onready var _fullscreen: CheckButton = %Fullscreen
 @onready var _volume: HSlider = %Volume
 @onready var _back: Button = %Back
+var _missions_panel := PanelContainer.new()
 
 
 func _ready() -> void:
 	theme = MenuTheme.build()
-	_start.pressed.connect(_open_island.bind(false))
+	_build_mission_select()
+	_start.pressed.connect(_show_missions.bind(true))
 	_edit_island.pressed.connect(_open_island.bind(true))
 	_options.pressed.connect(_show_options.bind(true))
 	_exit.pressed.connect(get_tree().quit)
@@ -36,6 +39,77 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("ui_cancel") and _options_panel.visible:
 		_show_options(false)
 		get_viewport().set_input_as_handled()
+	elif event.is_action_pressed("ui_cancel") and _missions_panel.visible:
+		_show_missions(false)
+		get_viewport().set_input_as_handled()
+
+
+## The mission select overlay: a heading, one row of mission buttons per world, the endless
+## mode centred below and Back at the very bottom of the frame.
+func _build_mission_select() -> void:
+	_missions_panel.set_anchors_preset(Control.PRESET_CENTER)
+	_missions_panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_missions_panel.grow_vertical = Control.GROW_DIRECTION_BOTH
+	var content := VBoxContainer.new()
+	content.add_theme_constant_override("separation", 14)
+	_missions_panel.add_child(content)
+	var heading := Label.new()
+	heading.text = "Choose a mission"
+	heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	heading.add_theme_font_size_override("font_size", 34)
+	content.add_child(heading)
+	var grid := GridContainer.new()
+	grid.columns = GameSession.MISSIONS_PER_WORLD
+	grid.add_theme_constant_override("h_separation", 10)
+	grid.add_theme_constant_override("v_separation", 10)
+	content.add_child(grid)
+	for world in range(1, GameSession.WORLDS + 1):
+		for number in range(1, GameSession.MISSIONS_PER_WORLD + 1):
+			var which := Vector2i(world, number)
+			var button := _menu_button(GameSession.mission_name(which), Vector2(96, 48))
+			var rules := GameSession.mission_rules(which)
+			button.tooltip_text = "%d kills · enemies %d%% stronger, %d%% more of them" % [rules.kill_goal,
+				roundi((rules.strength - 1.0) * 100.0), roundi((rules.count - 1.0) * 100.0)]
+			button.pressed.connect(_start_mission.bind(which, false))
+			grid.add_child(button)
+	var endless := _menu_button("Endless mode", Vector2(260, 52))
+	endless.tooltip_text = "Waves without end that slowly get harder – leave whenever you like"
+	endless.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	endless.pressed.connect(_start_mission.bind(Vector2i(1, 1), true))
+	content.add_child(endless)
+	var spacer := Control.new()
+	spacer.custom_minimum_size = Vector2(0, 18)
+	content.add_child(spacer)
+	var back := _menu_button("Back", Vector2(200, 46))
+	back.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	back.pressed.connect(_show_missions.bind(false))
+	content.add_child(back)
+	_missions_panel.visible = false
+	add_child(_missions_panel)
+
+
+static func _menu_button(text: String, min_size: Vector2) -> Button:
+	var button := BrassButton.new()
+	button.text = text
+	button.custom_minimum_size = min_size
+	return button
+
+
+func _show_missions(open: bool) -> void:
+	_missions_panel.visible = open
+	_buttons.visible = not open
+	_island.visible = not open
+	if open:
+		_missions_panel.reset_size()
+		_missions_panel.position = (size - _missions_panel.size) / 2.0 + Vector2(0, 40)
+	else:
+		_start.grab_focus()
+
+
+func _start_mission(which: Vector2i, endless: bool) -> void:
+	GameSession.mission = which
+	GameSession.endless = endless
+	_open_island(false)
 
 
 func _layout() -> void:

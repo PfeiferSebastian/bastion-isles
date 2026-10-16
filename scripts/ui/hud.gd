@@ -114,7 +114,7 @@ func _ready() -> void:
 			notify("Round %d: enemies +%d%% stronger, %d%% more of them" % [combat.mission_round + 1,
 				roundi((combat.strength_factor() - 1.0) * 100.0), roundi((combat.count_factor() - 1.0) * 100.0)]))
 	# Flee: leave the island at once (it is saved, as with Leave).
-	var flee := OverlayIcon.new(&"flee", "Flee: leave the island now. You keep only 10% of this mission's loot; towers destroyed in it are rebuilt at level 0, wasteland biomes come back at Tier 1")
+	var flee := OverlayIcon.new(&"flee", "Flee: leave the island now. You keep only 10% of this mission's loot; towers destroyed in it are rebuilt at level 0, wasteland biomes come back at Tier 1. In endless mode you keep everything")
 	flee.toggle_mode = false
 	flee.pressed.connect(flee_requested.emit)
 	_overlay_icons.get_parent().add_child(VSeparator.new())
@@ -173,8 +173,9 @@ func _process(delta: float) -> void:
 		_stats.set_meta(&"info", "Wave %d · enemies in the sky: %d · killed so far: %d" % [combat.wave, combat.enemies().size(), combat.kills])
 		if not _edit_mode:
 			_update_mission()
+		_mission_tube.visible = not GameSession.endless and not _edit_mode
 		_mission_tube.value = combat.mission_progress()
-		_mission_tube.set_meta(&"info", "Mission progress: %d / %d kills (placeholder until zones)" % [mini(combat.kills, combat.mission_kill_goal), combat.mission_kill_goal])
+		_mission_tube.set_meta(&"info", "Mission %s: %d / %d kills (placeholder until zones)" % [GameSession.mission_name(), mini(combat.kills, combat.mission_kill_goal), combat.mission_kill_goal])
 	if view == null:
 		return
 	if _treasury_row.treasury != view.island.treasury:
@@ -298,11 +299,13 @@ func _update_mission() -> void:
 		return
 	_leave.visible = combat.mission_done
 	_proceed.visible = combat.mission_done
+	var title := "Endless mode" if GameSession.endless else "Mission " + GameSession.mission_name()
+	if combat.mission_round > 0:
+		title += " · round %d" % (combat.mission_round + 1)
 	if combat.mission_done:
-		_mission_text.text = "Round %d complete" % (combat.mission_round + 1) if combat.mission_round > 0 else "Mission complete"
+		_mission_text.text = title + " complete"
 	elif combat.mission_countdown > 0.0:
-		_mission_text.text = ("Round %d starts in %d" % [combat.mission_round + 1, ceili(combat.mission_countdown)]) if combat.mission_round > 0 \
-			else "Mission starts in %d" % ceili(combat.mission_countdown)
+		_mission_text.text = "%s starts in %d" % [title, ceili(combat.mission_countdown)]
 	_mission_panel.visible = combat.mission_done or combat.mission_countdown > 0.0
 	_mission_panel.reset_size()
 	_mission_panel.position.x = (_root.size.x - _mission_panel.size.x) / 2.0
