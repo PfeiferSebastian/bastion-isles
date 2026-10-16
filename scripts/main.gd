@@ -1,8 +1,8 @@
 extends Node2D
 ## Island scene: wires camera input to the island and the island to the HUD. Plays a mission,
 ## or in edit mode (GameSession.edit_mode) just lets the player build without enemies.
-## Esc drops the selected item, otherwise retreats to the main menu; leaving or retreating
-## saves the island (IslandSave).
+## Esc drops the selected item, otherwise flees to the main menu (see _flee); leaving or
+## fleeing saves the island (IslandSave).
 
 const MENU_SCENE := "res://scenes/ui/main_menu.tscn"
 
@@ -18,6 +18,7 @@ func _ready() -> void:
 	_hud.view = _island_view
 	_hud.combat = _combat
 	_hud.leave_requested.connect(_leave)
+	_hud.flee_requested.connect(_flee)
 	if GameSession.edit_mode:
 		_island_view.island.gains_xp = false
 		_combat.set_process(false)
@@ -34,7 +35,15 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		if not _island_view.held.is_empty():
 			_island_view.release_hold()
 		else:
-			_leave()
+			_flee()
+
+
+## Leaves a running mission as a flight (Combat.flee: most of this mission's loot is lost,
+## lost towers come back at level 0); after a win, a defeat or in edit mode it's a plain leave.
+func _flee() -> void:
+	if not GameSession.edit_mode:
+		_combat.flee()
+	_leave()
 
 
 ## Saves the island (repaired, as after any fight) and returns to the main menu.

@@ -227,6 +227,18 @@ func _test_health() -> void:
 	_check(lost.gold == 51 and loser.treasury.gold == 50, "defeat costs half the gold")
 	_check(lost.blueprints == 3 and loser.treasury.blueprints == 2, "defeat costs half the blueprints")
 	_check(lost.resources[Biome.Type.FOREST] == 2 and loser.treasury.resources[Biome.Type.FOREST] == 2, "defeat costs half of every resource")
+	# Fleeing rebuilds what this mission destroyed: towers at level 0, biome tiles at Tier 1.
+	var fled := Island.create_starter(2)
+	fled.set_biome(Vector2i(1, 0), Biome.Type.MOUNTAIN)
+	fled.set_tier(Vector2i(1, 0), 3)
+	fled.place_tower(Vector2i(1, 0), &"attack", 40, 2)
+	fled.damage_tower(Vector2i(1, 0), 100000.0)
+	fled.damage_tile(Vector2i(1, 0), 100000.0)
+	_check(fled.get_tower(Vector2i(1, 0)) == null and fled.get_tile(Vector2i(1, 0)).destroyed, "tower and ground destroyed")
+	_check(fled.rebuild_losses() == 1, "one tower rebuilt")
+	var back := fled.get_tower(Vector2i(1, 0))
+	_check(back != null and back.tier == 2 and back.level() == 0, "rebuilt at its tier, level 0")
+	_check(not fled.get_tile(Vector2i(1, 0)).destroyed and fled.get_tile(Vector2i(1, 0)).tier == 1 and fled.get_tile(Vector2i(1, 0)).biome == Biome.Type.MOUNTAIN, "wasteland biome back at Tier 1")
 	# Analysis counters and the battle log.
 	var track_island := Island.create_starter(1)
 	track_island.place_tower(Vector2i(1, 0), &"attack")

@@ -55,6 +55,12 @@ var _aura_cache: Dictionary = {}
 var _group_cache: Dictionary = {}
 ## Towers only gain experience while this is on (off when editing the island).
 var gains_xp := true
+## Towers destroyed this mission, as they stood ({coord, type, tier, is_part, merge_root,
+## merge_hexes}), and biome tiles turned to wasteland – fleeing rebuilds them (see
+## rebuild_losses).
+var lost_towers: Array[Dictionary] = []
+var wasted_tiles: Dictionary = {}
+
 ## Analysis: totals of the current wave per building type (&"hq" for the HQ), e.g.
 ## {&"attack": {&"damage": 120.0, &"lost": 1}}; the battle log reads and resets them.
 var wave_totals: Dictionary = {}
@@ -244,6 +250,7 @@ func damage_tile(coord: Vector2i, amount: float) -> void:
 	tile.hp = maxf(tile.hp - amount, 0.0)
 	if tile.hp <= 0.0 and not tile.is_hq:
 		tile.destroyed = true
+		wasted_tiles[coord] = true
 		tile.energy = 0.0
 		tile_destroyed.emit(coord)
 	tile_changed.emit(coord)
@@ -472,6 +479,9 @@ func _apply_damage(coord: Vector2i, amount: float) -> void:
 			wave_totals[lost_type] = {}
 		wave_totals[lost_type][&"lost"] = wave_totals[lost_type].get(&"lost", 0.0) + cluster_towers(coord)
 		for member in group:
+			var lost := get_tower(member)
+			lost_towers.append({coord = member, type = lost.type, tier = lost.tier, is_part = lost.is_part,
+				merge_root = lost.merge_root, merge_hexes = lost.merge_hexes.duplicate()})
 			get_tile(member).tower = null
 		for member in group:
 			tower_destroyed.emit(member)
@@ -896,6 +906,8 @@ func refund(item: Dictionary, price: Dictionary) -> void:
 
 ## Share of gold, blueprints and faction resources lost when the HQ falls.
 const DEFEAT_LOSS := 0.5
+## Share of this mission's loot kept when fleeing.
+const FLEE_KEEP := 0.1
 
 
 ## The HQ fell: loses DEFEAT_LOSS of gold, blueprints and every faction resource (rounded up)
@@ -913,6 +925,40 @@ func lose_resources() -> Dictionary:
 	if persist_blueprints:
 		IslandSave.save_blueprints(self)
 	return lost
+
+
+## Fleeing: rebuilds every tower destroyed this mission where its tile is free again (at its
+## tier, but level 0, merged towers merged again) and puts wasteland biome tiles back at
+## Tier 1. Returns how many towers came back.
+func rebuild_losses() -> int:
+	var rebuilt := 0
+	for lost in lost_towers:
+		var tile := get_tile(lost.coord)
+		if tile == null or tile.tower != null or tile.is_hq:
+			continue
+		tile.destroyed = false
+		var tower := Tower.new(lost.type, 1.0)
+		tower.tier = lost.tier
+		tower.is_part = lost.is_part
+		tower.merge_root = lost.merge_root
+		tower.merge_hexes.assign(lost.merge_hexes)
+		tile.tower = tower
+		rebuilt += 1
+	lost_towers.clear()
+	for coord in wasted_tiles:
+		var tile := get_tile(coord)
+		if tile and tile.biome != Biome.Type.NEUTRAL:
+			tile.tier = 1
+	wasted_tiles.clear()
+	_group_cache.clear()
+	_aura_cache.clear()
+	restore_tiles()
+	for coord in _tiles:
+		var tower := get_tower(coord)
+		if tower:
+			tower.hp = tower_max_hp(coord)
+			tile_changed.emit(coord)
+	return rebuilt
 
 
 ## Adds a found blueprint (saved right away).

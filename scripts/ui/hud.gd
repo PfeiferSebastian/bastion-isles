@@ -19,6 +19,8 @@ const OVERLAYS := [
 
 ## The player chose to leave: after completing the mission, or "Done" in edit mode.
 signal leave_requested
+## The player fled a running mission (flee icon).
+signal flee_requested
 
 ## Set by main; the HUD reads hover state and island data from it every frame.
 var view: IslandView:
@@ -112,9 +114,9 @@ func _ready() -> void:
 			notify("Round %d: enemies +%d%% stronger, %d%% more of them" % [combat.mission_round + 1,
 				roundi((combat.strength_factor() - 1.0) * 100.0), roundi((combat.count_factor() - 1.0) * 100.0)]))
 	# Flee: leave the island at once (it is saved, as with Leave).
-	var flee := OverlayIcon.new(&"flee", "Flee: leave the island now and return to the menu (the island is saved)")
+	var flee := OverlayIcon.new(&"flee", "Flee: leave the island now. You keep only 10% of this mission's loot; towers destroyed in it are rebuilt at level 0, wasteland biomes come back at Tier 1")
 	flee.toggle_mode = false
-	flee.pressed.connect(leave_requested.emit)
+	flee.pressed.connect(flee_requested.emit)
 	_overlay_icons.get_parent().add_child(VSeparator.new())
 	_overlay_icons.get_parent().add_child(flee)
 	_flee = flee

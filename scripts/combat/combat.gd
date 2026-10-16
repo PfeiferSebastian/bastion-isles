@@ -46,6 +46,9 @@ var mission_countdown := 0.0
 var mission_done := false
 ## The HQ was destroyed: the mission is lost.
 var defeated := false
+## Loot found this mission (fleeing keeps only Island.FLEE_KEEP of it):
+## {gold, blueprints, resources = {Biome.Type: n}, stones = {Biome.Type: n}}.
+var mission_loot := {gold = 0, blueprints = 0, resources = {}, stones = {}}
 ## Rounds proceeded past the first (0 = the first round).
 var mission_round := 0
 var _base_kill_goal := 0
@@ -286,6 +289,13 @@ func _on_enemy_died(enemy: Enemy) -> void:
 	var loot := Economy.roll_loot(enemy, _loot_rng, treasury.pity)
 	var at := enemy.global_position
 	treasury.add_gold(loot.gold)
+	mission_loot.gold += loot.gold
+	if loot.blueprint:
+		mission_loot.blueprints += 1
+	if loot.resource >= 0:
+		mission_loot.resources[loot.resource] = mission_loot.resources.get(loot.resource, 0) + 1
+	if loot.stone >= 0:
+		mission_loot.stones[loot.stone] = mission_loot.stones.get(loot.stone, 0) + 1
 	if not _wave_log.is_empty():
 		_wave_log.kills[String(enemy.kind)] = _wave_log.kills.get(String(enemy.kind), 0) + 1
 		_wave_log.loot.gold += loot.gold
@@ -317,6 +327,38 @@ func _on_enemy_died(enemy: Enemy) -> void:
 		_clear_sky()
 		finish_wave_log()
 		mission_completed.emit()
+
+
+## Fleeing a running mission: only Island.FLEE_KEEP of this mission's loot is kept (the
+## rest is taken away again), towers destroyed this mission are rebuilt at level 0 and
+## wasteland biome tiles come back at Tier 1. Returns {lost (same shape as mission_loot),
+## rebuilt}. Does nothing (returns {}) once the mission is won or lost.
+func flee() -> Dictionary:
+	if mission_done or defeated:
+		return {}
+	finish_wave_log()
+	var island := _view.island
+	var treasury := island.treasury
+	var keep := Island.FLEE_KEEP
+	var lost := {gold = 0, blueprints = 0, resources = {}, stones = {}}
+	lost.gold = mini(treasury.gold, mission_loot.gold - floori(mission_loot.gold * keep))
+	treasury.gold -= lost.gold
+	lost.blueprints = mini(treasury.blueprints, mission_loot.blueprints - floori(mission_loot.blueprints * keep))
+	treasury.blueprints -= lost.blueprints
+	for biome in mission_loot.resources:
+		var amount := mini(treasury.resources.get(biome, 0), mission_loot.resources[biome] - floori(mission_loot.resources[biome] * keep))
+		treasury.resources[biome] = treasury.resources.get(biome, 0) - amount
+		lost.resources[biome] = amount
+	for biome in mission_loot.stones:
+		var stone := Inventory.stone_item(biome)
+		var amount := mini(treasury.inventory.count(stone), mission_loot.stones[biome] - floori(mission_loot.stones[biome] * keep))
+		if amount > 0:
+			treasury.inventory.add(stone, -amount)
+		lost.stones[biome] = amount
+	treasury.changed.emit()
+	if island.persist_blueprints:
+		IslandSave.save_blueprints(island)
+	return {lost = lost, rebuilt = island.rebuild_losses()}
 
 
 ## Ends the mission as lost once the HQ has no HP left: the enemies leave, towers stop
