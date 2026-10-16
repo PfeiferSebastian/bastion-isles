@@ -83,7 +83,11 @@ static func draw_group(ci: CanvasItem, type: StringName, art: Dictionary, r: flo
 		for d in _link_dirs(art.links[i]):
 			_joint(ci, type, members[i] + d * link_length, d, r, m)
 	for i in members.size():
-		draw(ci, type, biome, members[i], r, [], 0.0, aim)
+		if art.parts[i]:
+			continue
+		# A merged tower is one big building over its hexes.
+		var size: int = art.sizes[i]
+		draw(ci, type, biome, art.big_centers[i], r * (1.0 + 0.45 * (size - 1)), [], 0.0, aim)
 
 
 static func _link_dirs(links: Array[bool]) -> Array[Vector2]:

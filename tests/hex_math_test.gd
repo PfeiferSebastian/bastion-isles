@@ -84,14 +84,14 @@ func _test_biomes_and_auras() -> void:
 	_check(not island.set_biome(Island.HQ_COORD, Biome.Type.FOREST), "hq stays neutral")
 	_check(island.add_tile(Vector2i(3, 0), Biome.Type.LAKE), "biome stone as new tile")
 	_check(island.get_tile(Vector2i(3, 0)).tier == 1, "new biome tile is tier 1")
-	# Mountain aura reaches the tile itself and its neighbours, scaled by tier.
+	# Biome auras only buff their own tile, scaled by its tier.
 	_check(is_equal_approx(island.aura_at(c).get(&"max_hp", 0.0), 0.05), "own mountain aura")
-	_check(is_equal_approx(island.aura_at(Vector2i(2, 0)).get(&"max_hp", 0.0), 0.05), "neighbour mountain aura")
+	_check(not island.aura_at(Vector2i(2, 0)).has(&"max_hp"), "biome auras no longer reach neighbours")
 	_check(not island.aura_at(Vector2i(-1, 0)).has(&"max_hp"), "aura does not reach distance 2")
 	island.set_tier(c, 3)
-	_check(is_equal_approx(island.aura_at(Vector2i(2, 0)).get(&"max_hp", 0.0), 0.15), "aura scales with tier")
+	_check(is_equal_approx(island.aura_at(c).get(&"max_hp", 0.0), 0.15), "aura scales with tier")
 	island.set_biome(Vector2i(2, 0), Biome.Type.MOUNTAIN)
-	_check(is_equal_approx(island.aura_at(Vector2i(2, 0)).get(&"max_hp", 0.0), 0.20), "auras stack")
+	_check(is_equal_approx(island.aura_at(Vector2i(2, 0)).get(&"max_hp", 0.0), 0.05), "each tile gets only its own aura")
 	_check(island.set_biome(c, Biome.Type.NEUTRAL) and island.get_tile(c).tier == 0, "revert to neutral")
 
 
@@ -144,7 +144,7 @@ func _test_health() -> void:
 	walls.add_xp(Vector2i(1, 0), 500.0)
 	_check(walls.get_tower(Vector2i(1, 0)).xp == 0.0, "no xp while switched off")
 	# Experience: exponential levels, +1% per level, shared in combined buildings.
-	_check(Tower.level_for_xp(0.0) == 1 and Tower.level_for_xp(Tower.xp_for_level(10)) == 10, "xp levels round trip")
+	_check(Tower.level_for_xp(0.0) == 0 and Tower.level_for_xp(Tower.xp_for_level(10)) == 10, "xp levels round trip")
 	_check(Tower.xp_for_level(10) > 200.0 and Tower.xp_for_level(10) < 400.0, "level 10 takes hundreds of xp")
 	_check(Tower.xp_for_level(50) > 2000.0, "level 50 takes thousands of xp")
 	_check(Tower.level_for_xp(1.0e9) == Tower.MAX_LEVEL, "max level 100")
@@ -155,8 +155,75 @@ func _test_health() -> void:
 	xp_island.add_xp(xc, Tower.xp_for_level(11))
 	xp_island.tick(0.01)
 	_check(xp_island.get_tower(xc).level() == 11, "xp raises the level")
-	_check(is_equal_approx(xp_island.effect_bonus(xc), 1.1), "level 11 gives +10% effect")
-	_check(xp_island.get_tile(xc).tier == 2, "level 10 raises the ground one tier")
+	_check(is_equal_approx(xp_island.effect_bonus(xc), 1.11), "level 11 gives +11% stats")
+	var veteran := Tower.new(&"attack", 100.0)
+	veteran.xp = Tower.xp_for_level(100)
+	_check(is_equal_approx(veteran.stat_factor(), 2.0) and veteran.perk_points() == 10, "level 100: +100% stats and 10 perk points")
+	var up_island := Island.create_starter(2)
+	var up := Vector2i(1, 0)
+	up_island.set_biome(up, Biome.Type.MOUNTAIN)
+	up_island.place_tower(up, &"attack", 100)
+	var cost := up_island.tier_up_cost(up)
+	_check(cost.resource == Biome.Type.MOUNTAIN and cost.gold > 0 and cost.amount > 0, "tier upgrade costs gold and the biome's resource")
+	_check(not up_island.upgrade_tower(up), "no upgrade without resources")
+	up_island.treasury.add_gold(cost.gold)
+	up_island.treasury.add_resource(Biome.Type.MOUNTAIN, cost.amount)
+	_check(up_island.upgrade_tower(up), "upgrade when paid")
+	var upgraded := up_island.get_tower(up)
+	_check(upgraded.tier == 2 and upgraded.level() == 0 and is_equal_approx(upgraded.stat_factor(), 2.5), "tier 2 keeps +100% and adds +50%")
+	_check(upgraded.perk_points() == 10, "perk points are kept through the tier jump")
+	# Merging: n touching towers of tier n become one n-hex tower.
+	var m_island := Island.create_starter(2)
+	var ma := Vector2i(1, 0)
+	var mb := Vector2i(2, 0)
+	var mc := Vector2i(2, -1)
+	for hex in [ma, mb, mc]:
+		m_island.set_biome(hex, Biome.Type.MOUNTAIN)
+	m_island.place_tower(ma, &"attack", 0, 1)
+	m_island.place_tower(mb, &"attack", 0, 1)
+	_check(m_island.merge_set(ma).is_empty(), "tier 1 towers can't merge")
+	m_island.get_tower(ma).tier = 2
+	m_island.get_tower(mb).tier = 2
+	m_island.get_tower(mb).xp = 500.0
+	var single_damage := AttackProfiles.for_tile(m_island, ma).damage
+	_check(m_island.merge_set(ma).size() == 2 and m_island.merge(ma), "two tier 2 towers merge")
+	_check(m_island.get_tower(ma).size() == 2 and m_island.get_tower(mb).is_part, "one 2-hex tower")
+	_check(m_island.get_tower(ma).level() == 0 and m_island.get_tower(ma).tier == 2, "merged tower keeps its tier, level 0")
+	_check(m_island.get_tile(ma).tier == 2 and m_island.get_tile(mb).tier == 2, "merged tower lifts its tiles to its tier")
+	_check(not m_island.acts(mb) and m_island.acts(ma), "only the root acts")
+	_check(AttackProfiles.for_tile(m_island, ma).damage > single_damage * 2.0 * 0.99, "a 2-hex tower has twice the effect")
+	m_island.get_tower(ma).tier = 3
+	m_island.get_tower(mb).tier = 3
+	m_island.place_tower(mc, &"attack", 0, 3)
+	_check(m_island.merge(mc) and m_island.get_tower(ma).size() == 3, "a merged tower grows with one more of its tier")
+	_check(m_island.cluster_towers(ma) == 1, "a merged tower counts as one in its cluster")
+	var m_loaded := Island.from_dict(JSON.parse_string(JSON.stringify(m_island.to_dict())))
+	_check(m_loaded.get_tower(ma).size() == 3 and m_loaded.get_tower(mc).is_part, "merged towers survive saving")
+	# Clusters: at most 3 towers of one type together.
+	var c_island := Island.create_starter(3)
+	for x in [1, 2, 3]:
+		c_island.place_tower(Vector2i(x, 0), &"energy")
+	_check(c_island.place_tower(Vector2i(3, -1), &"energy") == null, "no fourth tower in a cluster")
+	# Range: +0.1% per level.
+	var ranger := Tower.new(&"attack", 100.0)
+	ranger.xp = Tower.xp_for_level(100)
+	_check(is_equal_approx(ranger.range_factor(), 1.1), "range +10% at level 100")
+	# Stocks that already cover their set (e.g. after a tower was lost) become towers.
+	var stock := Island.create_starter(1)
+	stock.treasury.blueprints[&"aura"] = 2
+	stock.tick(0.01)
+	_check(stock.treasury.inventory.tower_count(&"aura") == 1 and stock.treasury.blueprints[&"aura"] == 1, "covered blueprint sets turn into towers")
+	stock.treasury.blueprints[&"repair"] = 2
+	stock.tick(0.01)
+	_check(stock.treasury.inventory.tower_count(&"repair") == 2 and stock.treasury.blueprints[&"repair"] == 0, "a repair set of 2 completes with one repair owned")
+	# Bad luck protection: favours the least found blueprint and resets when one drops.
+	var luck := Treasury.new()
+	luck.blueprints_found = {&"attack": 2, &"wall": 1}
+	_check(luck.least_found_blueprint() == &"energy", "least found blueprint is favoured")
+	luck.pity = 0.5
+	luck.add_blueprint(&"energy", 5)
+	_check(luck.pity == 0.0 and luck.blueprints_found[&"energy"] == 1, "a found blueprint resets the protection")
+	_check(xp_island.get_tile(xc).tier == 1, "levels no longer raise the ground")
 	xp_island.place_tower(Vector2i(2, 0), &"attack")
 	xp_island.tick(0.01)
 	_check(is_equal_approx(xp_island.get_tower(Vector2i(2, 0)).xp, xp_island.get_tower(xc).xp), "combined buildings split their xp")
@@ -307,7 +374,7 @@ func _test_energy() -> void:
 	_check(is_equal_approx(walls.tower_max_hp(Vector2i(1, 0)), 110.0), "wall buffs neighbour hp")
 	_check(is_equal_approx(walls.tower_max_hp(Vector2i(2, 0)), 400.0), "wall does not buff itself")
 	walls.set_biome(Vector2i(2, 0), Biome.Type.MOUNTAIN)
-	_check(is_equal_approx(walls.tower_max_hp(Vector2i(1, 0)), 100.0 * (1.0 + 0.05 + 0.20)), "mountain wall buffs more")
+	_check(is_equal_approx(walls.tower_max_hp(Vector2i(1, 0)), 100.0 * (1.0 + 0.20)), "mountain wall buffs more")
 
 
 func _test_ground_damage() -> void:
@@ -481,18 +548,17 @@ func _test_economy() -> void:
 	_check(t.add_blueprint(&"scout", 3) and t.inventory.count(Inventory.tower_item(&"scout")) == 1, "a full set makes a tower")
 	_check(t.blueprints[&"scout"] == 0, "the set is used up")
 	var bp_island := Island.create_starter(1)
-	_check(bp_island.blueprints_needed(&"scout") == Island.BLUEPRINTS_BASE, "a missing type needs the base set")
-	_check(bp_island.blueprints_needed(&"attack") == Island.BLUEPRINTS_BASE + 1, "each owned tower raises the set by one")
+	_check(bp_island.blueprints_needed(&"scout") == 1, "the first tower of a type needs one blueprint")
+	_check(bp_island.blueprints_needed(&"attack") == 2, "the next one needs two, and so on")
 	_check(bp_island.missing_blueprint_kinds().has(&"scout") and not bp_island.missing_blueprint_kinds().has(&"attack"), "missing types known")
 	# Blueprints are saved the moment they are found and come back even without an island save.
 	IslandSave.path = "user://test_island.json"
 	IslandSave.blueprint_path = "user://test_blueprints.json"
 	bp_island.persist_blueprints = true
-	bp_island.add_blueprint(&"aura")
-	bp_island.add_blueprint(&"scout")
-	bp_island.add_blueprint(&"scout")
+	_check(bp_island.add_blueprint(&"scout"), "the first scout needs one blueprint")
+	_check(not bp_island.add_blueprint(&"scout"), "the second scout needs two")
 	var reloaded := IslandSave.load_island(1)
-	_check(reloaded.treasury.blueprints.get(&"aura", 0) == 1, "blueprint progress survives without an island save")
+	_check(reloaded.treasury.blueprints.get(&"scout", 0) == 1, "blueprint progress survives without an island save")
 	_check(reloaded.treasury.inventory.count(Inventory.tower_item(&"scout")) == 1, "towers from blueprints survive without an island save")
 	_check(IslandSave.load_island(1).treasury.inventory.count(Inventory.tower_item(&"scout")) == 1, "and are handed out only once")
 	DirAccess.remove_absolute(IslandSave.path)
@@ -502,7 +568,9 @@ func _test_economy() -> void:
 	var inv := Inventory.new()
 	inv.add(Inventory.tower_item(&"wall", 1), 2)
 	inv.add(Inventory.tower_item(&"wall", 3))
-	_check(inv.tower_levels(&"wall") == [1, 3], "towers stack per level")
+	_check(inv.tower_stacks(&"wall") == [Vector2i(1, 1), Vector2i(3, 1)], "towers stack per level")
+	inv.add(Inventory.tower_item(&"wall", 5, 2))
+	_check(inv.tower_stacks(&"wall").back() == Vector2i(5, 2) and inv.tower_count(&"wall") == 4, "tiers stack apart")
 	_check(inv.take(Inventory.tower_item(&"wall", 1)) and inv.count(Inventory.tower_item(&"wall", 1)) == 1, "take one from a stack")
 	_check(not inv.take(Inventory.stone_item(Biome.Type.FOREST)), "no forest stone yet")
 	var island := Island.create_starter(2)

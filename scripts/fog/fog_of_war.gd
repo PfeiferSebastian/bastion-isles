@@ -86,7 +86,7 @@ func tick(delta: float) -> void:
 				_hold.erase(cell)
 	for coord in island.coords():
 		var tower := island.get_tower(coord)
-		if tower == null or tower.type != &"scout":
+		if tower == null or tower.type != &"scout" or tower.is_part:
 			continue
 		var profile := ScoutProfiles.for_tile(island, coord)
 		tower.aura_power = EnergyGrid.draw_energy(island, coord, profile.energy_per_second * delta)

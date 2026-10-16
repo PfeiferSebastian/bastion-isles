@@ -25,23 +25,33 @@ const DESCRIPTIONS := {
 		+ "Aura = regeneration · Energy = root network · Scout = sky stays open longer\n"
 		+ "Empty Forest towers keep working slowly. Good conductor (60%).",
 	Type.MOUNTAIN: "Bastion · fortress and firepower\n"
-		+ "Tile: +5% max HP per tier for itself and its neighbours.\n"
+		+ "Tile: +5% max HP per tier for its own building.\n"
 		+ "Towers: Attack = heavy long-range shells · Repair = big chunks\n"
 		+ "Aura = armour and HP · Energy = strong but short reach · Scout = wide view\n"
 		+ "Walls buff neighbours more. Becomes a big mountain from Tier 4. Poor conductor (25%).",
 	Type.PLAINS: "Mages · energy, lasers and barriers\n"
-		+ "Tile: +3% shield per tier for itself and its neighbours;\n"
+		+ "Tile: +3% shield per tier for its own building;\n"
 		+ "passes 10% per tier of the damage it takes on to neighbouring towers.\n"
 		+ "Towers: Attack = laser beam · Repair = moves HP from healthy to damaged\n"
 		+ "Aura = shield · Energy = evens out storage. Lets 45% pass.",
 	Type.SWAMP: "Necrolytes · poison, decay and draining\n"
-		+ "Tile: attacks of itself and its neighbours poison (+3% per tier).\n"
+		+ "Tile: its own building's attacks poison (+3% per tier).\n"
 		+ "Towers: Attack = weakens enemies · Repair = drains life from enemies\n"
 		+ "Aura = weakens enemies nearby · Energy = gains energy from deaths nearby\n"
 		+ "Empty Swamp towers drain energy from neighbours. Lets 35% pass.",
 	Type.LAKE: "Seafolk · still being designed\n"
 		+ "Works like plain ground for now.\nBest conductor (70%, +6% per tier).",
 }
+
+
+## Faction resource of each biome (loot; pays for tower tier upgrades on that biome).
+const RESOURCES := {
+	Type.FOREST: "Wood", Type.MOUNTAIN: "Ore", Type.PLAINS: "Aether", Type.SWAMP: "Life Essence", Type.LAKE: "Pearls",
+}
+
+
+static func resource_name(type: int) -> String:
+	return RESOURCES.get(type, "")
 
 
 static func description_of(type: Type) -> String:

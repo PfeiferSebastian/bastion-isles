@@ -13,8 +13,8 @@ var tiles := 0
 var stones: Dictionary[int, int] = {}      # Biome.Type -> count
 
 
-static func tower_item(type: StringName, level := 1) -> Dictionary:
-	return {kind = &"tower", type = type, level = level}
+static func tower_item(type: StringName, level := 0, tier := 1) -> Dictionary:
+	return {kind = &"tower", type = type, level = level, tier = tier}
 
 
 static func tile_item() -> Dictionary:
@@ -28,7 +28,8 @@ static func stone_item(biome: Biome.Type) -> Dictionary:
 static func label_of(item: Dictionary) -> String:
 	match item.get("kind", &""):
 		&"tower":
-			return "%s (Lv %d)" % [String(item.type).capitalize(), item.level]
+			var tier: int = item.get("tier", 1)
+			return "%s (%sLv %d)" % [String(item.type).capitalize(), "T%d " % tier if tier > 1 else "", item.level]
 		&"tile":
 			return "Tile"
 		&"stone":
@@ -39,7 +40,7 @@ static func label_of(item: Dictionary) -> String:
 func count(item: Dictionary) -> int:
 	match item.get("kind", &""):
 		&"tower":
-			return towers.get(_key(item.type, item.level), 0)
+			return towers.get(_key(item.type, item.level, item.get("tier", 1)), 0)
 		&"tile":
 			return tiles
 		&"stone":
@@ -50,7 +51,7 @@ func count(item: Dictionary) -> int:
 func add(item: Dictionary, amount := 1) -> void:
 	match item.kind:
 		&"tower":
-			var key := _key(item.type, item.level)
+			var key := _key(item.type, item.level, item.get("tier", 1))
 			towers[key] = towers.get(key, 0) + amount
 		&"tile":
 			tiles += amount
@@ -85,16 +86,26 @@ func load_dict(data: Dictionary) -> void:
 	changed.emit()
 
 
-## Levels of `type` the player has at least one of, ascending.
-func tower_levels(type: StringName) -> Array[int]:
-	var result: Array[int] = []
+## Stacks of `type` the player has at least one of, as Vector2i(level, tier), lowest tier
+## and level first.
+func tower_stacks(type: StringName) -> Array[Vector2i]:
+	var result: Array[Vector2i] = []
 	for key in towers:
 		var parts := key.split(":")
 		if StringName(parts[0]) == type and towers[key] > 0:
-			result.append(int(parts[1]))
-	result.sort()
+			result.append(Vector2i(int(parts[1]), int(parts[2]) if parts.size() > 2 else 1))
+	result.sort_custom(func(a: Vector2i, b: Vector2i) -> bool: return a.y < b.y if a.y != b.y else a.x < b.x)
 	return result
 
 
-static func _key(type: StringName, level: int) -> String:
-	return "%s:%d" % [type, level]
+## Towers of `type` in the inventory, all stacks together.
+func tower_count(type: StringName) -> int:
+	var total := 0
+	for stack in tower_stacks(type):
+		total += count(tower_item(type, stack.x, stack.y))
+	return total
+
+
+## Tier 1 keys stay "type:level" so older saves still load.
+static func _key(type: StringName, level: int, tier := 1) -> String:
+	return "%s:%d" % [type, level] if tier <= 1 else "%s:%d:%d" % [type, level, tier]

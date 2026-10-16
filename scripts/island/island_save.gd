@@ -21,7 +21,8 @@ static func save(island: Island) -> void:
 
 ## Blueprint progress and towers built from blueprints since the last island save.
 static func save_blueprints(island: Island) -> void:
-	_write(blueprint_path, {blueprints = island.treasury.blueprints, unsaved_towers = island.unsaved_towers})
+	_write(blueprint_path, {blueprints = island.treasury.blueprints, unsaved_towers = island.unsaved_towers,
+		blueprints_found = island.treasury.blueprints_found, pity = island.treasury.pity})
 
 
 ## The saved island (or a fresh one with `starter_radius`), with the separately kept
@@ -37,6 +38,7 @@ static func load_island(starter_radius: int) -> Island:
 		var progress: Dictionary = kept.get("blueprints", {})
 		for type in progress:
 			island.treasury.blueprints[StringName(type)] = int(progress[type])
+		island.treasury.load_luck(kept)
 		var towers: Array = kept.get("unsaved_towers", [])
 		for kind in towers:
 			island.treasury.inventory.add(Treasury.blueprint_item(StringName(kind)))

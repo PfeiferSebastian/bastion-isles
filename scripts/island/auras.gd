@@ -1,17 +1,17 @@
 class_name Auras
 extends RefCounted
-## Neighbour auras (GDD §5.4): every biome tile buffs itself and its 6 neighbours,
-## whatever their biome, scaled by its tier. Everything stacks.
+## Tile auras: every biome tile buffs only itself (no longer its neighbours, design update
+## 2026-10-16), scaled by its tier. Wall and Aura towers still buff the buildings around them.
 ## Values are shares (0.05 = +5%) per tier; placeholder numbers until playtesting.
 
-## Forest has no neighbour aura: its tile trait is passive energy (EnergyGrid).
+## Forest has no tile aura: its tile trait is passive energy (EnergyGrid).
 const PER_TIER := {
 	Biome.Type.MOUNTAIN: {&"max_hp": 0.05},
 	Biome.Type.PLAINS: {&"shield": 0.03},
 	Biome.Type.SWAMP: {&"poison": 0.03},
 }
 
-## Effects that belong to the tile itself and are not shared with neighbours.
+## More effects of the tile itself (kept apart from PER_TIER, which Aura towers boost).
 const SELF_PER_TIER := {
 	# Redistribution (from the former Desert): passes part of incoming damage to neighbours.
 	Biome.Type.PLAINS: {&"damage_spread": 0.10},
@@ -29,8 +29,8 @@ const LABELS := {
 }
 
 
-## Summed effects acting on the tile at `coord`: tile auras (boosted near Aura towers),
-## wall HP buffs and Aura tower buffs.
+## Summed effects acting on the tile at `coord`: its own tile aura (boosted near Aura
+## towers), wall HP buffs from neighbouring walls and Aura tower buffs.
 static func collect(island: Island, coord: Vector2i) -> Dictionary:
 	var result := {}
 	var center := island.get_tile(coord)
@@ -42,10 +42,9 @@ static func collect(island: Island, coord: Vector2i) -> Dictionary:
 	for n in HexMath.neighbors(coord):
 		var tile := island.get_tile(n)
 		if tile:
-			_add(result, PER_TIER, tile, _tile_boost(auras, n))
 			# Wall towers buff the HP of adjacent buildings (not their own tile).
 			if tile.tower and tile.tower.type == &"wall":
-				result[&"max_hp"] = result.get(&"max_hp", 0.0) + TowerDefs.WALL_NEIGHBOUR_HP.get(tile.biome, 0.1) * island.effect_bonus(n)
+				result[&"max_hp"] = result.get(&"max_hp", 0.0) + TowerDefs.WALL_NEIGHBOUR_HP.get(tile.biome, 0.1) * island.effect_bonus(n, false)
 	# Aura towers buff everything in their radius. No chaining: an Aura tower only
 	# receives its own buff, never another Aura tower's.
 	var own_aura := center.tower != null and center.tower.type == &"aura"
@@ -66,7 +65,7 @@ static func active_aura_towers(island: Island, coord: Vector2i, reach: int) -> D
 	var result := {}
 	for c in HexMath.area(coord, reach):
 		var tile := island.get_tile(c)
-		if tile and not tile.destroyed and tile.tower and tile.tower.type == &"aura" and tile.tower.aura_power > 0.0:
+		if tile and not tile.destroyed and tile.tower and tile.tower.type == &"aura" and not tile.tower.is_part and tile.tower.aura_power > 0.0:
 			result[c] = AuraProfiles.for_tile(island, c)
 	return result
 

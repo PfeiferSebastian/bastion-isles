@@ -76,6 +76,10 @@ static func for_tile(island: Island, coord: Vector2i) -> AttackProfile:
 	p.thorn_dps *= 1.0 + output
 	p.poison = aura.get(&"poison", 0.0)
 	var merged := island.effect_bonus(coord)
+	# Range grows slowly with level and tier, not with cluster or merge size.
+	var tower := island.get_tower(coord)
+	if tower:
+		p.range_hexes *= tower.range_factor()
 	p.damage *= merged
 	p.beam_dps *= merged
 	p.thorn_dps *= merged

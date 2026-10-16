@@ -39,6 +39,7 @@ const ENERGY_SHOWN_BELOW := 0.5
 ## Gap (in hex sides) at both ends of each status arc.
 const ARC_GAP := 0.08
 const WALL_REACH_COLOR := Color("9fb4d8")
+const MERGE_COLOR := Color("ffd27a")
 const ATTACK_REACH_COLOR := Color(1, 1, 1)
 
 var island: Island
@@ -113,6 +114,12 @@ func handle_tap(world_position: Vector2) -> void:
 	if not held.is_empty():
 		place_item(world_to_hex(world_position), held, world_position)
 		_keep_or_release()
+	elif overlay == &"merge":
+		var coord := world_to_hex(world_position)
+		if island.merge(coord):
+			message.emit(world_position, "Merged into a %d-hex tower" % island.get_tower(island.merge_root_of(coord)).size())
+		elif island.get_tower(coord):
+			message.emit(world_position, "Needs touching towers of this type and tier: %d hexes in all" % island.get_tower(coord).tier)
 
 
 ## Right click: drops the held item, otherwise picks up the top layer of the tile
@@ -129,8 +136,9 @@ func handle_secondary_tap(world_position: Vector2) -> void:
 func place_item(coord: Vector2i, item: Dictionary, world_position: Vector2) -> bool:
 	var inventory := island.treasury.inventory
 	if not _can_place(coord, item):
-		if item.kind == &"tower" and item.type == &"wall" and island.can_place(coord):
-			message.emit(world_position, "Wall sections are at most %d long" % Island.MAX_WALL_SECTION)
+		if item.kind == &"tower" and (island.can_place(coord) or island.get_tile(coord) == null) \
+				and island.cluster_with(coord, item.type) > Island.MAX_CLUSTER:
+			message.emit(world_position, "At most %d %s towers together" % [Island.MAX_CLUSTER, String(item.type).capitalize()])
 		return false
 	if inventory.count(item) <= 0:
 		message.emit(world_position, "No %s left" % Inventory.label_of(item))
@@ -147,7 +155,7 @@ func place_item(coord: Vector2i, item: Dictionary, world_position: Vector2) -> b
 					return false
 				inventory.take(Inventory.tile_item())
 				island.add_tile(coord)
-			if island.place_tower(coord, item.type, item.level) == null:
+			if island.place_tower(coord, item.type, item.level, item.get("tier", 1)) == null:
 				return false
 			inventory.take(item)
 			_spawn_tower_node(coord, item.type)
@@ -184,11 +192,16 @@ func pick_up(coord: Vector2i, world_position: Vector2) -> void:
 	if tile == null or tile.is_hq:
 		return
 	if tile.tower:
-		var level := tile.tower.level()
+		# A merged tower comes apart into its towers (at its tier, level 0 like after a merge).
+		var hexes := island.merge_hexes_of(coord)
+		var root_tower := island.get_tower(island.merge_root_of(coord))
+		var level := root_tower.level()
+		var tier := root_tower.tier
 		var type := island.remove_tower(coord)
-		_free_tower_node(coord)
-		inventory.add(Inventory.tower_item(type, level))
-		message.emit(world_position, "%s back to inventory" % String(type).capitalize())
+		for hex in hexes:
+			_free_tower_node(hex)
+		inventory.add(Inventory.tower_item(type, level, tier), hexes.size())
+		message.emit(world_position, "%s back to inventory%s" % [String(type).capitalize(), " (×%d)" % hexes.size() if hexes.size() > 1 else ""])
 	elif tile.biome != Biome.Type.NEUTRAL and not tile.destroyed:
 		var biome := tile.biome
 		island.set_biome(coord, Biome.Type.NEUTRAL)
@@ -234,6 +247,7 @@ func _keep_or_release() -> void:
 		release_hold()
 
 
+## U upgrades the hovered tower one tier (at level 100, if affordable).
 ## Debug keys: D damages, +/- change the tier, G gives gold, R biome stones and tiles,
 ## B a full blueprint set (one tower) of each type.
 func _unhandled_key_input(event: InputEvent) -> void:
@@ -241,6 +255,15 @@ func _unhandled_key_input(event: InputEvent) -> void:
 	if key == null or not key.pressed or key.echo:
 		return
 	match key.keycode:
+		KEY_U:
+			var cost := island.tier_up_cost(hovered_coord)
+			var at := hex_center_world(hovered_coord)
+			if cost.is_empty():
+				message.emit(at, "Tier upgrades need level %d" % Tower.MAX_LEVEL)
+			elif island.upgrade_tower(hovered_coord):
+				message.emit(at, "Tier %d!" % island.get_tower(hovered_coord).tier)
+			else:
+				message.emit(at, "Needs %d gold and %d %s" % [cost.gold, cost.amount, Biome.resource_name(cost.resource)])
 		KEY_D:
 			island.damage_tower(hovered_coord, debug_damage)
 		KEY_EQUAL, KEY_PLUS, KEY_KP_ADD:
@@ -292,7 +315,7 @@ func _on_tile_changed(_coord: Vector2i) -> void:
 func _refresh_tower_nodes() -> void:
 	for group in island.groups():
 		var lead: Node2D = _objects.get(group[0])
-		var combined: bool = group.size() > 1 and island.get_tower(group[0]).type != &"wall"
+		var combined: bool = group.size() > 1 and (island.get_tower(group[0]).type != &"wall" or island.cluster_towers(group[0]) < group.size())
 		for coord in group:
 			var node: Node2D = _objects.get(coord)
 			if node == null:
@@ -309,12 +332,16 @@ func _refresh_tower_nodes() -> void:
 
 
 ## What the lead node needs to draw a combined building, in its local space: the platform
-## outline, every member's centre, links and biome, and the main biome.
+## outline, every member's centre, links (none between hexes of one merged tower) and biome,
+## the main biome, and for merged towers where their one big building sits and its size.
 func _group_art(group: Array[Vector2i], origin: Vector2) -> Dictionary:
 	var platform := GroupShape.inset(GroupShape.outline(group, hex_size), hex_size * 0.07)
 	var members: Array[Vector2] = []
 	var member_links: Array = []
 	var member_biomes: Array = []
+	var parts: Array = []
+	var sizes: Array = []
+	var big_centers: Array = []
 	var biomes := {}
 	var center := Vector2.ZERO
 	for coord in group:
@@ -322,9 +349,22 @@ func _group_art(group: Array[Vector2i], origin: Vector2) -> Dictionary:
 		members.append(c)
 		center += c
 		var links: Array[bool] = []
+		var own := island.merge_hexes_of(coord)
 		for dir in HexMath.DIRECTIONS:
-			links.append(group.has(coord + dir))
+			links.append(group.has(coord + dir) and not own.has(coord + dir))
 		member_links.append(links)
+		var tower := island.get_tower(coord)
+		if tower.is_part:
+			parts.append(true)
+			sizes.append(1)
+			big_centers.append(c)
+		else:
+			parts.append(false)
+			sizes.append(tower.size())
+			var mid := Vector2.ZERO
+			for hex in own:
+				mid += HexMath.to_pixel(hex, hex_size) - origin
+			big_centers.append(mid / own.size())
 		var biome := island.get_tile(coord).biome
 		member_biomes.append(biome)
 		biomes[biome] = biomes.get(biome, 0) + 1
@@ -335,6 +375,7 @@ func _group_art(group: Array[Vector2i], origin: Vector2) -> Dictionary:
 	return {
 		platform = _offset(platform, -origin), members = members, links = member_links,
 		biomes = member_biomes, biome = main_biome, center = center / group.size(),
+		parts = parts, sizes = sizes, big_centers = big_centers,
 	}
 
 
@@ -383,6 +424,7 @@ func _draw_top() -> void:
 			_draw_arc(center, 0, 6, ratio, HP_LOW_COLOR.lerp(HP_FULL_COLOR, ratio), TRACK_COLOR)
 	for group in island.groups():
 		_draw_group_status(group)
+	_draw_tier_arrows()
 	_draw_overlay()
 	_draw_tower_reach()
 	_draw_hover()
@@ -438,6 +480,46 @@ func _draw_overlay() -> void:
 				_overlay_hp(coord, tile, hex)
 			&"tier":
 				_overlay_tier(tile, hex, center)
+			&"merge":
+				_overlay_merge(coord, tile, hex)
+
+
+## Merge mode: towers that can merge glow gold together with the towers they would merge
+## with; every other building is greyed out.
+func _overlay_merge(coord: Vector2i, tile: IslandTile, hex: PackedVector2Array) -> void:
+	if tile.tower == null:
+		return
+	var mergeable := false
+	for other in island.coords():
+		if island.get_tower(other) == null or island.get_tower(other).type != tile.tower.type:
+			continue
+		var set := island.merge_set(other)
+		if set.has(island.merge_root_of(coord)):
+			mergeable = true
+			break
+	if mergeable:
+		_canvas.draw_colored_polygon(hex, Color(MERGE_COLOR, 0.35))
+		_canvas.draw_polyline(_closed(hex), MERGE_COLOR, 3.0, true)
+	else:
+		_canvas.draw_colored_polygon(hex, Color(0.15, 0.15, 0.15, 0.55))
+
+
+## A gold up arrow over buildings at level 100 that can go up a tier.
+func _draw_tier_arrows() -> void:
+	for coord in island.coords():
+		var tower := island.get_tower(coord)
+		if tower == null or tower.is_part or not tower.can_tier_up():
+			continue
+		var at := Vector2.ZERO
+		for hex in island.merge_hexes_of(coord):
+			at += HexMath.to_pixel(hex, hex_size)
+		at = at / island.merge_hexes_of(coord).size() + Vector2(0, -hex_size * 0.55)
+		var bob := sin(Time.get_ticks_msec() / 250.0) * 2.0
+		var arrow := PackedVector2Array([Vector2(0, -9), Vector2(8, 0), Vector2(3, 0), Vector2(3, 8), Vector2(-3, 8), Vector2(-3, 0), Vector2(-8, 0)])
+		var shifted := _offset(arrow, at + Vector2(0, bob))
+		_canvas.draw_colored_polygon(_offset(shifted, Vector2(1, 2)), Color(0, 0, 0, 0.4))
+		_canvas.draw_colored_polygon(shifted, MenuTheme.BRASS_LIGHT)
+		_canvas.draw_polyline(_closed(shifted), MenuTheme.BRASS_DARK, 1.5, true)
 
 
 ## Generators bright, storages saturated by their reserve (grey = empty, full yellow = full,
@@ -535,7 +617,7 @@ func _can_place(coord: Vector2i, item: Dictionary) -> bool:
 		&"tower":
 			if tile == null:
 				return island.can_add_tile(coord) and island.treasury.inventory.count(Inventory.tile_item()) > 0 \
-					and (item.type != &"wall" or island.wall_section_with(coord) <= Island.MAX_WALL_SECTION)
+					and island.cluster_with(coord, item.type) <= Island.MAX_CLUSTER
 			return island.can_place_tower(coord, item.type)
 		&"tile":
 			return island.can_add_tile(coord)

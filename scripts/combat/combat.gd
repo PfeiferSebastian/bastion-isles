@@ -237,7 +237,8 @@ func _on_enemy_died(enemy: Enemy) -> void:
 	kills += 1
 	EnergyGrid.notify_enemy_died(_view.island, _view.world_to_hex(enemy.global_position))
 	var treasury := _view.island.treasury
-	var loot := Economy.roll_loot(enemy, _loot_rng, _view.island.missing_blueprint_kinds())
+	var loot := Economy.roll_loot(enemy, _loot_rng, _view.island.missing_blueprint_kinds(),
+		treasury.pity, treasury.least_found_blueprint())
 	var at := enemy.global_position
 	treasury.add_gold(loot.gold)
 	popup(at, "+%d gold" % loot.gold, Color("ffd23f"))
@@ -246,6 +247,12 @@ func _on_enemy_died(enemy: Enemy) -> void:
 		treasury.inventory.add(stone)
 		popup(at + Vector2(0, -16), "+1 " + Inventory.label_of(stone), Color("8fd3ff"))
 		item_found.emit("Found: %s" % Inventory.label_of(stone))
+	if loot.resource >= 0:
+		treasury.add_resource(loot.resource)
+		popup(at + Vector2(0, -48), "+1 " + Biome.resource_name(loot.resource), Biome.color_of(loot.resource).lightened(0.3))
+	if loot.blueprint == &"":
+		# Bad luck protection: the least found blueprint gets a little likelier.
+		treasury.pity += Economy.PITY_STEP
 	if loot.blueprint != &"":
 		var name := String(loot.blueprint).capitalize()
 		var built := _view.island.add_blueprint(loot.blueprint)
@@ -457,7 +464,7 @@ func _towers_attack(delta: float) -> void:
 	var island := _view.island
 	for coord in island.coords():
 		var tower := island.get_tower(coord)
-		if tower == null or tower.type != &"attack":
+		if tower == null or tower.type != &"attack" or tower.is_part:
 			continue
 		var profile := AttackProfiles.for_tile(island, coord)
 		var origin := _view.hex_center_world(coord)
@@ -530,7 +537,7 @@ func _aura_debuffs() -> void:
 	var island := _view.island
 	for coord in island.coords():
 		var tower := island.get_tower(coord)
-		if tower == null or tower.type != &"aura" or tower.aura_power <= 0.0:
+		if tower == null or tower.type != &"aura" or tower.aura_power <= 0.0 or tower.is_part:
 			continue
 		var profile := AuraProfiles.for_tile(island, coord)
 		if profile.enemy_weaken <= 0.0:
@@ -553,7 +560,7 @@ func _towers_repair(delta: float) -> void:
 	var island := _view.island
 	for coord in island.coords():
 		var tower := island.get_tower(coord)
-		if tower == null or tower.type != &"repair":
+		if tower == null or tower.type != &"repair" or tower.is_part:
 			continue
 		tower.attack_cooldown = maxf(tower.attack_cooldown - delta, 0.0)
 		if tower.attack_cooldown > 0.0:

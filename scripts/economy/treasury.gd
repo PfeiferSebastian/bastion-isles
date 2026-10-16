@@ -14,6 +14,13 @@ const STONE_BIOMES: Array[Biome.Type] = [
 
 var gold := 0
 var blueprints: Dictionary[StringName, int] = {}
+## Faction resources (Biome.Type -> amount): Wood, Ore, Aether, Life Essence, Pearls.
+var resources: Dictionary[int, int] = {}
+## Blueprints found so far per kind, for the bad luck protection.
+var blueprints_found: Dictionary[StringName, int] = {}
+## Bad luck protection: extra chance for the least found blueprint, grows every kill
+## without a blueprint and resets when one is found.
+var pity := 0.0
 var inventory := Inventory.new()
 
 
@@ -23,7 +30,8 @@ func _init(starting_gold := 0) -> void:
 
 
 func to_dict() -> Dictionary:
-	return {gold = gold, blueprints = blueprints, inventory = inventory.to_dict()}
+	return {gold = gold, blueprints = blueprints, inventory = inventory.to_dict(), resources = resources,
+		blueprints_found = blueprints_found, pity = pity}
 
 
 ## Replaces gold, blueprints and inventory with saved data (see to_dict()).
@@ -35,7 +43,44 @@ func load_dict(data: Dictionary) -> void:
 		blueprints[StringName(type)] = int(saved[type])
 	if data.has("inventory"):
 		inventory.load_dict(data.inventory)
+	resources.clear()
+	var saved_resources: Dictionary = data.get("resources", {})
+	for biome in saved_resources:
+		resources[int(biome)] = int(saved_resources[biome])
+	load_luck(data)
 	changed.emit()
+
+
+## Bad luck protection state from saved data.
+func load_luck(data: Dictionary) -> void:
+	var found: Dictionary = data.get("blueprints_found", {})
+	for kind in found:
+		blueprints_found[StringName(kind)] = int(found[kind])
+	pity = float(data.get("pity", pity))
+
+
+## The blueprint kind found least often so far (the bad luck protection favours it).
+func least_found_blueprint() -> StringName:
+	var best: StringName = &""
+	for kind in Economy.blueprint_kinds():
+		if best == &"" or blueprints_found.get(kind, 0) < blueprints_found.get(best, 0):
+			best = kind
+	return best
+
+
+func add_resource(biome: int, amount := 1) -> void:
+	resources[biome] = resources.get(biome, 0) + amount
+	changed.emit()
+
+
+## Spends gold and one faction resource together; false (and nothing spent) if short.
+func spend(gold_cost: int, biome: int, amount: int) -> bool:
+	if gold < gold_cost or resources.get(biome, 0) < amount:
+		return false
+	gold -= gold_cost
+	resources[biome] -= amount
+	changed.emit()
+	return true
 
 
 ## The inventory item a blueprint set of `kind` becomes.
@@ -64,5 +109,7 @@ func add_blueprint(kind: StringName, needed: int) -> bool:
 	if built:
 		blueprints[kind] -= needed
 		inventory.add(blueprint_item(kind))
+	blueprints_found[kind] = blueprints_found.get(kind, 0) + 1
+	pity = 0.0
 	changed.emit()
 	return built

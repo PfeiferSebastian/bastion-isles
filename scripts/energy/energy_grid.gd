@@ -45,10 +45,10 @@ const FOREST_SLOW_EFFICIENCY := 0.33
 
 static func capacity(tile: IslandTile) -> float:
 	if is_storage(tile):
-		return STORAGE_CAPACITY
+		return STORAGE_CAPACITY * tile.tower.stat_factor()
 	if tile.tower == null or not TowerDefs.ENERGY_CONSUMERS.has(tile.tower.type):
 		return 0.0
-	return BASE_CAPACITY + CAPACITY_PER_TIER * tile.tier
+	return (BASE_CAPACITY + CAPACITY_PER_TIER * tile.tier) * tile.tower.stat_factor()
 
 
 ## Storehouse tiles store energy for others (see STORAGE_CAPACITY).
@@ -82,7 +82,7 @@ static func generator_at(island: Island, coord: Vector2i) -> EnergyProfile:
 		return null
 	if tile.is_hq:
 		return EnergyProfiles.hq()
-	if tile.tower and tile.tower.type == &"energy":
+	if tile.tower and tile.tower.type == &"energy" and not tile.tower.is_part:
 		return EnergyProfiles.for_tile(island, coord)
 	return null
 

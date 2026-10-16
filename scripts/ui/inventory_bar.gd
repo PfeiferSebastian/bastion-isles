@@ -67,9 +67,7 @@ func _rebuild() -> void:
 	_tab_info[TERRAIN_TAB] = "Terrain: %d tiles and biome stones in the inventory" % terrain
 	for i in TowerDefs.TYPES.size():
 		var type: StringName = TowerDefs.TYPES[i]
-		var owned := 0
-		for level in inventory.tower_levels(type):
-			owned += inventory.count(Inventory.tower_item(type, level))
+		var owned := inventory.tower_count(type)
 		_tabs.set_tab_title(i + 1, "%s (%d)" % [String(type).capitalize(), owned])
 		_tab_info[i + 1] = "%s (%d in the inventory)\n%s" % [String(type).capitalize(), owned, TowerDefs.description_of(type)]
 	for child in _slots.get_children():
@@ -80,11 +78,12 @@ func _rebuild() -> void:
 			_add_slot(STONE_KINDS[biome], Inventory.stone_item(biome))
 	else:
 		var type: StringName = TowerDefs.TYPES[_tabs.current_tab - 1]
-		var levels := inventory.tower_levels(type)
-		if levels.is_empty():
-			levels = [1]
-		for level in levels:
-			_add_slot(type, Inventory.tower_item(type, level), "Lv%d" % level)
+		# The fresh level 0 stack always shows (it carries the blueprint progress).
+		var stacks := inventory.tower_stacks(type)
+		if not stacks.has(Vector2i(0, 1)):
+			stacks.push_front(Vector2i(0, 1))
+		for stack in stacks:
+			_add_slot(type, Inventory.tower_item(type, stack.x, stack.y), ("T%d " % stack.y if stack.y > 1 else "") + "Lv%d" % stack.x)
 
 
 ## A slot selects its item (click) or starts a drag; empty stacks are greyed out.
@@ -92,7 +91,8 @@ func _add_slot(kind: StringName, item: Dictionary, badge := "") -> void:
 	var amount := view.island.treasury.inventory.count(item)
 	var slot := ToolIcon.new(kind, "×%d" % amount, "")
 	slot.badge = badge
-	var blueprint_kind: StringName = &"tile" if item.kind == &"tile" else (item.type if item.kind == &"tower" and item.level == 1 else &"")
+	var fresh_tower: bool = item.kind == &"tower" and item.level == 0 and item.get("tier", 1) == 1
+	var blueprint_kind: StringName = &"tile" if item.kind == &"tile" else (item.type if fresh_tower else &"")
 	if blueprint_kind != &"":
 		# Blueprints toward the next one: "have/need" in the corner, plus the build wipe when empty.
 		var have: int = view.island.treasury.blueprints.get(blueprint_kind, 0)
@@ -103,7 +103,7 @@ func _add_slot(kind: StringName, item: Dictionary, badge := "") -> void:
 	slot.button_group = _group
 	# Towers and tiles show their blueprint progress (a dark build wipe while none are in
 	# stock), so only other empty stacks are faded.
-	var has_progress: bool = item.kind == &"tile" or (item.kind == &"tower" and item.level == 1)
+	var has_progress: bool = blueprint_kind != &""
 	slot.modulate = Color.WHITE if amount > 0 or has_progress else Color(1, 1, 1, 0.4)
 	slot.disabled = amount <= 0
 	slot.button_down.connect(func() -> void:
@@ -122,8 +122,10 @@ static func describe(item: Dictionary, island: Island = null) -> String:
 			text += "\nNew neutral ground next to the island (towers on an empty hex take one along).\n" + Biome.description_of(Biome.Type.NEUTRAL)
 		&"tower":
 			text += "\n" + TowerDefs.description_of(item.type)
-			if item.level > 1:
-				text += "\nKeeps its level: +%d%% effect" % roundi(Tower.LEVEL_BONUS * (item.level - 1) * 100.0)
+			var stored := Tower.new(item.type, 1.0)
+			stored.tier = item.get("tier", 1)
+			stored.xp = Tower.xp_for_level(item.level)
+			text += "\nKeeps its level and tier: stats +%d%%" % roundi((stored.stat_factor() - 1.0) * 100.0)
 	return text
 
 

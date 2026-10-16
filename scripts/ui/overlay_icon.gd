@@ -56,6 +56,11 @@ func _draw() -> void:
 		&"pause":
 			draw_rect(Rect2(c + Vector2(-10, -12), Vector2(7, 24)), MenuTheme.BRASS_LIGHT)
 			draw_rect(Rect2(c + Vector2(3, -12), Vector2(7, 24)), MenuTheme.BRASS_LIGHT)
+		&"merge":
+			# Two arrows pointing at each other.
+			var gold := MenuTheme.BRASS_LIGHT
+			draw_colored_polygon(PackedVector2Array([c + Vector2(-2, 0), c + Vector2(-11, -9), c + Vector2(-11, -3), c + Vector2(-18, -3), c + Vector2(-18, 3), c + Vector2(-11, 3), c + Vector2(-11, 9)]), gold)
+			draw_colored_polygon(PackedVector2Array([c + Vector2(2, 0), c + Vector2(11, -9), c + Vector2(11, -3), c + Vector2(18, -3), c + Vector2(18, 3), c + Vector2(11, 3), c + Vector2(11, 9)]), gold)
 		&"flee":
 			# Open door with an arrow running out of it.
 			draw_rect(Rect2(c + Vector2(-14, -14), Vector2(14, 28)), Color("6b4a2e"))

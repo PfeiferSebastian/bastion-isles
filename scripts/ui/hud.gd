@@ -7,13 +7,14 @@ extends CanvasLayer
 ## that shows every hover text.
 
 ## Shown in the info window while nothing with a description is hovered.
-const HELP := "Click a slot, then the island · or drag a slot onto it\nRight click: pick up / cancel\nDrag: pan · Wheel: zoom · Esc: menu\nP: waves on/off · W: spawn a wave\n\nDebug: D damage · +/- tier · F1–F4 enemies · V fog\nG +500 gold · R +5 stones and tiles · B a tower of each type"
+const HELP := "Click a slot, then the island · or drag a slot onto it\nRight click: pick up / cancel\nDrag: pan · Wheel: zoom · Esc: menu\nP: waves on/off · W: spawn a wave · U: tier upgrade (level 100)\n\nDebug: D damage · +/- tier · F1–F4 enemies · V fog\nG +500 gold · R +5 stones and tiles · B a tower of each type"
 
 const OVERLAYS := [
 	[&"energy", "Energy: generators bright, storages by fill (red = empty), empty tiles show how much they let through"],
 	[&"repair", "Repair: tiles covered by Repair towers in green, damaged buildings and ground outlined in red"],
 	[&"hp", "Hitpoints: tower HP where a tower stands, otherwise ground HP – green full, red low"],
 	[&"tier", "Tiers: light = Tier 0, dark = Tier 7"],
+	[&"merge", "Merge: n touching towers of tier n (same type) become one n-hex tower with n× the effect; it keeps its tier, starts again at level 0 and lifts its biome tiles to its tier. A merged tower grows with one more of its tier. Click a glowing tower to merge it"],
 ]
 
 ## The player chose to leave: after completing the mission, or "Done" in edit mode.
@@ -24,6 +25,11 @@ var view: IslandView:
 	set(value):
 		view = value
 		view.island.tower_levelled.connect(_on_tower_levelled)
+		view.island.blueprint_set_completed.connect(func(kind: StringName) -> void:
+			notify("Blueprints complete: +1 %s" % ("Tile" if kind == &"tile" else String(kind).capitalize() + " tower")))
+		view.island.towers_merged.connect(func(hexes: Array[Vector2i]) -> void:
+			var tower := view.island.get_tower(hexes[0])
+			notify("%s merged: %d hexes, Tier %d" % [String(tower.type).capitalize(), hexes.size(), tower.tier]))
 var combat: Combat:
 	set(value):
 		combat = value
@@ -32,13 +38,13 @@ var combat: Combat:
 
 
 ## Announces level-ups of buildings (every few levels, and when their ground rises a tier).
-func _on_tower_levelled(coord: Vector2i, level: int, tier_up: bool) -> void:
+func _on_tower_levelled(coord: Vector2i, level: int) -> void:
 	var tower := view.island.get_tower(coord)
 	if tower == null:
 		return
 	var text := "%s reached level %d" % [String(tower.type).capitalize(), level]
-	if tier_up:
-		text += " · its ground rises to Tier %d" % view.island.get_tile(coord).tier
+	if level >= Tower.MAX_LEVEL and tower.tier < Tower.MAX_TIER:
+		text += " · hover it and press U for Tier %d" % (tower.tier + 1)
 	notify(text)
 
 ## Find and level-up notices stack below the overlay icons; each stays NOTICE_TIME seconds,
@@ -72,7 +78,7 @@ var _locked_overlay: StringName = &""
 @onready var _leave: Button = %Leave
 @onready var _proceed: Button = %Proceed
 @onready var _treasury_panel: Control = %Treasury
-@onready var _treasury_text: Label = %TreasuryText
+@onready var _treasury_row: TreasuryRow = %TreasuryRow
 @onready var _mission_tube: ProgressTube = %MissionTube
 @onready var _overlay_icons: HBoxContainer = %OverlayIcons
 @onready var _inventory: InventoryBar = %Inventory
@@ -160,9 +166,12 @@ func _process(delta: float) -> void:
 		_mission_tube.set_meta(&"info", "Mission progress: %d / %d kills (placeholder until zones)" % [mini(combat.kills, combat.mission_kill_goal), combat.mission_kill_goal])
 	if view == null:
 		return
-	_treasury_text.text = _describe_treasury(view.island.treasury)
+	if _treasury_row.treasury != view.island.treasury:
+		_treasury_row.treasury = view.island.treasury
+	_treasury_panel.set_meta(&"info", _describe_treasury(view.island.treasury))
 	_treasury_panel.reset_size()
-	_treasury_panel.position.x = _inventory_panel.position.x + (_inventory_panel.size.x - _treasury_panel.size.x) / 2.0
+	# Sits on the console rail at the left, above the inventory.
+	_treasury_panel.position.x = _inventory_panel.position.x + 24.0
 	_info.text = _hover_text()
 	_overlay_panel.reset_size()
 	_notices.position = _overlay_panel.position + Vector2(0, _overlay_panel.size.y + 8.0)
@@ -234,8 +243,12 @@ func _on_overlay_toggled(on: bool, icon: OverlayIcon) -> void:
 	_set_overlay(_locked_overlay)
 
 
+## Hover text of the gold plaque: gold and every faction resource by name.
 static func _describe_treasury(t: Treasury) -> String:
-	return "Gold %d" % t.gold
+	var parts: PackedStringArray = ["Gold %d" % t.gold]
+	for biome in Treasury.STONE_BIOMES:
+		parts.append("%s %d (%s)" % [Biome.resource_name(biome), t.resources.get(biome, 0), Biome.name_of(biome)])
+	return " · ".join(parts) + "\nFaction resources drop from enemies and pay for tier upgrades."
 
 
 ## What a click with the held inventory item would do here.
@@ -281,13 +294,16 @@ func _describe_building(coord: Vector2i, tile: IslandTile) -> PackedStringArray:
 	var tower := tile.tower
 	var lines: PackedStringArray = []
 	var level := tower.level()
-	var head := "%s · Level %d" % [String(tower.type).capitalize(), level]
+	var head := "%s · %sLevel %d" % [String(tower.type).capitalize(), "Tier %d · " % tower.tier if tower.tier > 1 else "", level]
 	if level < Tower.MAX_LEVEL:
 		var from := Tower.xp_for_level(level)
 		head += " (%d / %d XP)" % [floori(tower.xp - from), ceili(Tower.xp_for_level(level + 1) - from)]
-	var size := island.group_of(coord).size()
+	var root_tower := island.get_tower(island.merge_root_of(coord))
+	if root_tower.size() >= 2:
+		head += " · merged ×%d" % root_tower.size()
+	var size := island.cluster_towers(coord)
 	if size >= 2:
-		head += " · combined ×%d" % size
+		head += " · cluster of %d" % size
 	lines.append(head)
 	var pools: PackedStringArray = []
 	var hp := island.group_pool(coord, &"hp")
@@ -308,14 +324,27 @@ func _describe_building(coord: Vector2i, tile: IslandTile) -> PackedStringArray:
 			lines.append(_describe_aura(AuraProfiles.for_tile(island, coord), tower.aura_power))
 		&"scout":
 			lines.append(_describe_scout(ScoutProfiles.for_tile(island, coord), tower.aura_power))
-	var bonus := roundi((island.effect_bonus(coord) - 1.0) * 100.0)
-	if bonus > 0:
-		var parts: PackedStringArray = []
-		if level > 1:
-			parts.append("level +%d%%" % roundi((tower.level_bonus() - 1.0) * 100.0))
-		if size >= 2:
-			parts.append("combined +%d%%" % roundi(Island.MERGE_BONUS * 100.0))
-		lines.append("Effect +%d%% (%s)" % [bonus, ", ".join(parts)])
+	var parts: PackedStringArray = ["level +%d%%" % roundi(tower.level_bonus() * 100.0)]
+	if tower.tier > 1:
+		parts.append("tiers +%d%%" % roundi(tower.tier_bonus() * 100.0))
+	if size >= 2:
+		parts.append("combined effect +%d%%" % roundi(Island.MERGE_BONUS * 100.0))
+	if root_tower.size() >= 2:
+		parts.append("merged effect ×%d" % root_tower.size())
+	# Perk points are shared within a cluster.
+	var perks := 0
+	var counted := {}
+	for member in island.group_of(coord):
+		var root := island.merge_root_of(member)
+		if not counted.has(root):
+			counted[root] = true
+			perks += island.get_tower(root).perk_points()
+	lines.append("Stats +%d%% (%s) · perk points %d%s" % [roundi((tower.stat_factor() - 1.0) * 100.0), ", ".join(parts), perks, " (shared)" if size >= 2 else ""])
+	if not island.merge_set(coord).is_empty():
+		lines.append("Can merge – use the merge icon (top left) and click it")
+	var cost := island.tier_up_cost(coord)
+	if not cost.is_empty():
+		lines.append("Ready for Tier %d – press U (%d gold, %d %s)" % [tower.tier + 1, cost.gold, cost.amount, Biome.resource_name(cost.resource)])
 	return lines
 
 

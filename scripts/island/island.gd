@@ -9,7 +9,12 @@ signal tile_changed(coord: Vector2i)
 signal tower_destroyed(coord: Vector2i)
 signal tile_destroyed(coord: Vector2i)
 ## A building (group) reached a level worth announcing; `tier_up` if its ground rose a tier.
-signal tower_levelled(coord: Vector2i, level: int, tier_up: bool)
+signal tower_levelled(coord: Vector2i, level: int)
+## A blueprint set was completed outside a kill (the set got smaller, e.g. after a tower was
+## lost or the rules changed): one `kind` went into the inventory.
+signal blueprint_set_completed(kind: StringName)
+## Towers merged into one tower covering `hexes`.
+signal towers_merged(hexes: Array[Vector2i])
 
 const HQ_COORD := Vector2i.ZERO
 ## Share of a tower's max shield that refills per second.
@@ -25,13 +30,16 @@ const TILE_HP_PER_TIER := 100.0
 const MERGE_BONUS := 0.3
 ## Blueprints for a tower: this many, plus one for every tower of that type already owned
 ## (for tiles: one for every unused tile in the inventory).
-const BLUEPRINTS_BASE := 2
-## Longest wall section (connected walls) that may be built.
-const MAX_WALL_SECTION := 3
-## Every this many tower levels the biome tile under the tower rises one tier (up to MAX_TIER).
-const LEVELS_PER_TIER := 10
+const BLUEPRINTS_BASE := 1
+## Tier upgrade cost per tower: gold × the new tier, and faction resource × the new tier
+## (the resource of the tile's biome; neutral ground takes whichever the player has most of).
+const TIER_UP_GOLD := 100
+const TIER_UP_RESOURCE := 10
+## Most towers of one type in a cluster (neighbours that combine); a merged tower counts once.
+const MAX_CLUSTER := 3
+## Highest biome tile tier; merged towers lift their tiles to their own tier.
 const MAX_TIER := 7
-## Level-ups are announced every this many levels (and on every tier-up).
+## Level-ups are announced every this many levels (and at level 100).
 const ANNOUNCE_EVERY := 5
 ## XP sources: walls per point of damage taken; time-based towers per second of work.
 const WALL_XP_PER_DAMAGE := 0.1
@@ -90,7 +98,9 @@ func to_dict() -> Dictionary:
 		var tile := _tiles[coord]
 		tiles.append({q = coord.x, r = coord.y, biome = int(tile.biome), tier = tile.tier,
 			hq = tile.is_hq, tower = String(tile.tower.type) if tile.tower else "",
-			xp = tile.tower.xp if tile.tower else 0.0, tier_ups = tile.tower.tier_ups if tile.tower else 0})
+			xp = tile.tower.xp if tile.tower else 0.0,
+			tower_tier = tile.tower.tier if tile.tower else 1,
+			part_of = [tile.tower.merge_root.x, tile.tower.merge_root.y] if tile.tower and tile.tower.is_part else []})
 	return {tiles = tiles, treasury = treasury.to_dict()}
 
 
@@ -110,9 +120,22 @@ static func from_dict(data: Dictionary) -> Island:
 		if String(entry.tower) != "":
 			var tower := island.place_tower(Vector2i(int(entry.q), int(entry.r)), StringName(entry.tower))
 			if tower:
+				tower.tier = int(entry.get("tower_tier", 1))
+				var part_of: Array = entry.get("part_of", [])
+				if part_of.size() == 2:
+					tower.is_part = true
+					tower.merge_root = Vector2i(int(part_of[0]), int(part_of[1]))
 				tower.xp = float(entry.get("xp", 0.0))
 				tower.level_seen = tower.level()
-				tower.tier_ups = int(entry.get("tier_ups", 0))
+	# Rebuild the hex lists of merged towers from their parts.
+	for coord in island._tiles:
+		var part := island.get_tower(coord)
+		if part and part.is_part and island.get_tower(part.merge_root):
+			var root_tower := island.get_tower(part.merge_root)
+			if root_tower.merge_hexes.is_empty():
+				root_tower.merge_hexes.append(part.merge_root)
+			root_tower.merge_hexes.append(coord)
+			root_tower.merge_hexes.sort()
 	for coord in island._tiles:
 		island._tiles[coord].hp = island.tile_max_hp(coord)
 	island.treasury.load_dict(data.get("treasury", {}))
@@ -348,14 +371,14 @@ func can_place(coord: Vector2i) -> bool:
 
 ## Places a new tower of `type` at `level` (towers keep their level in the inventory). Its
 ## tier-ups for those levels are counted as given, so moving it doesn't raise a new tile.
-func place_tower(coord: Vector2i, type: StringName, level := 1) -> Tower:
+func place_tower(coord: Vector2i, type: StringName, level := 0, tier := 1) -> Tower:
 	if not can_place_tower(coord, type):
 		return null
 	var tile := get_tile(coord)
 	tile.tower = Tower.new(type, 1.0)
+	tile.tower.tier = tier
 	tile.tower.xp = Tower.xp_for_level(level)
 	tile.tower.level_seen = level
-	tile.tower.tier_ups = level / LEVELS_PER_TIER
 	tile.tower.hp = tower_max_hp(coord)
 	tile_changed.emit(coord)
 	return tile.tower
@@ -374,12 +397,14 @@ func change_tower_type(coord: Vector2i, type: StringName) -> bool:
 
 
 ## Returns the type of the removed tower, or &"" if the tile was empty.
+## Takes the tower on `coord` off the island (a merged tower with all its hexes).
 func remove_tower(coord: Vector2i) -> StringName:
 	var tower := get_tower(coord)
 	if tower == null:
 		return &""
-	get_tile(coord).tower = null
-	tile_changed.emit(coord)
+	for hex in merge_hexes_of(coord):
+		get_tile(hex).tower = null
+		tile_changed.emit(hex)
 	return tower.type
 
 
@@ -392,7 +417,7 @@ func tower_max_hp(coord: Vector2i) -> float:
 	var tower := get_tower(coord)
 	if tower == null:
 		return 0.0
-	return TowerDefs.base_hp(tower.type) * (1.0 + aura_at(coord).get(&"max_hp", 0.0))
+	return TowerDefs.base_hp(tower.type) * (1.0 + aura_at(coord).get(&"max_hp", 0.0)) * tower.stat_factor()
 
 
 func tower_max_shield(coord: Vector2i) -> float:
@@ -473,10 +498,51 @@ func group_of(coord: Vector2i) -> Array[Vector2i]:
 	return group
 
 
-## Total effect multiplier of the tower on `coord`: combined building × level.
-func effect_bonus(coord: Vector2i) -> float:
+## Total effect multiplier of the tower on `coord`: cluster bonus × level and tier × the
+## size of a merged tower (a 2-hex tower works twice as hard). Walls' neighbour buff leaves
+## the size out (`with_size`), since every part of a merged wall buffs on its own.
+func effect_bonus(coord: Vector2i, with_size := true) -> float:
 	var tower := get_tower(coord)
-	return merge_bonus(coord) * (tower.level_bonus() if tower else 1.0)
+	if tower == null:
+		return 1.0
+	var size := get_tower(merge_root_of(coord)).size() if with_size else 1
+	return merge_bonus(coord) * tower.stat_factor() * size
+
+
+## What a tier upgrade of the building on `coord` costs (for its whole combined building):
+## {gold, resource (Biome.Type), amount}, or {} if it can't go up a tier yet.
+func tier_up_cost(coord: Vector2i) -> Dictionary:
+	var tower := get_tower(coord)
+	if tower == null or not tower.can_tier_up():
+		return {}
+	var size := group_of(coord).size()
+	var biome := get_tile(coord).biome
+	if biome == Biome.Type.NEUTRAL:
+		biome = Treasury.STONE_BIOMES[0]
+		for b in Treasury.STONE_BIOMES:
+			if treasury.resources.get(b, 0) > treasury.resources.get(biome, 0):
+				biome = b
+	var next := tower.tier + 1
+	return {gold = TIER_UP_GOLD * next * size, resource = biome, amount = TIER_UP_RESOURCE * next * size}
+
+
+## Raises the building on `coord` (with its whole combined building) one tier if it is at
+## level 100 and the player can pay. Returns true on success.
+func upgrade_tower(coord: Vector2i) -> bool:
+	var cost := tier_up_cost(coord)
+	if cost.is_empty() or not treasury.spend(cost.gold, cost.resource, cost.amount):
+		return false
+	for member in group_of(coord):
+		var tower := get_tower(member)
+		var ratio := tower.hp / tower_max_hp(member)
+		tower.tier += 1
+		tower.xp = 0.0
+		tower.level_seen = 0
+		tower.hp = ratio * tower_max_hp(member)
+		tile_changed.emit(member)
+	for member in group_of(coord):
+		_lift_merged_tiles(member)
+	return true
 
 
 ## Experience for the tower on `coord` (shared with its combined building at the next even-out).
@@ -486,36 +552,135 @@ func add_xp(coord: Vector2i, amount: float) -> void:
 		tower.xp = minf(tower.xp + amount, Tower.xp_for_level(Tower.MAX_LEVEL))
 
 
-## Announces new levels and raises the ground one tier every LEVELS_PER_TIER levels.
+## Announces new levels every few levels and at level 100.
 func _check_levels() -> void:
 	for group in groups():
 		var level := get_tower(group[0]).level()
-		var seen := 1
-		var tier_up := false
+		var seen := 0
 		for member in group:
-			var tower := get_tower(member)
-			seen = maxi(seen, tower.level_seen)
-			while tower.tier_ups < level / LEVELS_PER_TIER:
-				tower.tier_ups += 1
-				tier_up = _raise_tier(member) or tier_up
+			seen = maxi(seen, get_tower(member).level_seen)
 		if level <= seen:
 			continue
 		for member in group:
 			get_tower(member).level_seen = level
-		if tier_up or level / ANNOUNCE_EVERY > seen / ANNOUNCE_EVERY:
-			tower_levelled.emit(group[0], level, tier_up)
+		if level / ANNOUNCE_EVERY > seen / ANNOUNCE_EVERY or level >= Tower.MAX_LEVEL:
+			tower_levelled.emit(group[0], level)
 
 
-## One tier up for a biome tile (neutral ground stays Tier 0), keeping its HP share.
-func _raise_tier(coord: Vector2i) -> bool:
-	var tile := get_tile(coord)
-	if tile.biome == Biome.Type.NEUTRAL or tile.tier >= MAX_TIER:
+# --- Merging ---------------------------------------------------------------
+
+## The root hex of the (possibly merged) tower on `coord`.
+func merge_root_of(coord: Vector2i) -> Vector2i:
+	var tower := get_tower(coord)
+	return tower.merge_root if tower and tower.is_part else coord
+
+
+## All hexes of the (possibly merged) tower on `coord`.
+func merge_hexes_of(coord: Vector2i) -> Array[Vector2i]:
+	var root := merge_root_of(coord)
+	var tower := get_tower(root)
+	var result: Array[Vector2i] = []
+	if tower == null:
+		return result
+	if tower.merge_hexes.is_empty():
+		result.append(root)
+		return result
+	return tower.merge_hexes
+
+
+## Whether the tower on `coord` acts (shoots, repairs, buffs, generates): single towers and
+## the roots of merged towers do, the other hexes of a merged tower don't.
+func acts(coord: Vector2i) -> bool:
+	var tower := get_tower(coord)
+	return tower != null and not tower.is_part
+
+
+## Towers that would merge with the one on `coord`, as their root hexes (the tower's own root
+## first), or [] if it can't merge: n towers of tier n – touching, same type and tier – whose
+## hexes add up to exactly n become one n-hex tower. A merged tower grows the same way: a
+## 2-hex Tier 3 tower plus one more Tier 3 tower makes a 3-hex tower.
+func merge_set(coord: Vector2i) -> Array[Vector2i]:
+	var root := merge_root_of(coord)
+	var tower := get_tower(root)
+	var none: Array[Vector2i] = []
+	if tower == null or tower.tier < 2:
+		return none
+	var chosen: Array[Vector2i] = [root]
+	var hexes := tower.size()
+	while hexes < tower.tier:
+		var next := _merge_candidate(chosen, tower, tower.tier - hexes)
+		if next == Vector2i(9999, 9999):
+			return none
+		chosen.append(next)
+		hexes += get_tower(next).size()
+	return chosen if hexes == tower.tier and chosen.size() >= 2 else none
+
+
+## A touching tower (root hex) of the same type and tier with at most `room` hexes, or
+## Vector2i(9999, 9999) if there is none.
+func _merge_candidate(chosen: Array[Vector2i], like: Tower, room: int) -> Vector2i:
+	var best := Vector2i(9999, 9999)
+	for member in chosen:
+		for hex in merge_hexes_of(member):
+			for n in HexMath.neighbors(hex):
+				var other := get_tower(n)
+				if other == null or other.type != like.type or other.tier != like.tier:
+					continue
+				var other_root := merge_root_of(n)
+				if chosen.has(other_root) or get_tower(other_root).size() > room:
+					continue
+				if best == Vector2i(9999, 9999) or get_tower(other_root).size() > get_tower(best).size():
+					best = other_root
+	return best
+
+
+## Merges the tower on `coord` with its merge set into one tower. It keeps its tier (and so
+## its tier bonus and perk points), starts again at level 0 and lifts its tiles to its tier.
+func merge(coord: Vector2i) -> bool:
+	var set := merge_set(coord)
+	if set.is_empty():
 		return false
-	var ratio := tile.hp / tile_max_hp(coord)
-	tile.tier += 1
-	tile.hp = ratio * tile_max_hp(coord)
-	tile_changed.emit(coord)
+	var hexes: Array[Vector2i] = []
+	for member in set:
+		hexes.append_array(merge_hexes_of(member))
+	hexes.sort()
+	var group := group_of(coord)
+	var hp_share := group_pool(coord, &"hp")
+	var ratio := hp_share.x / maxf(hp_share.y, 0.001)
+	for hex in hexes:
+		var tower := get_tower(hex)
+		tower.xp = 0.0
+		tower.level_seen = 0
+		tower.is_part = hex != hexes[0]
+		tower.merge_root = hexes[0]
+		tower.merge_hexes.clear()
+		if hex == hexes[0]:
+			tower.merge_hexes.assign(hexes)
+	_group_cache.clear()
+	_aura_cache.clear()
+	_set_group_pool(group, &"hp", ratio * group_pool(coord, &"hp").y)
+	_lift_merged_tiles(hexes[0])
+	for hex in hexes:
+		tile_changed.emit(hex)
+	towers_merged.emit(hexes)
 	return true
+
+
+## Merged towers lift the biome tiles under them to their own tier (neutral ground stays 0).
+func _lift_merged_tiles(coord: Vector2i) -> void:
+	var root := merge_root_of(coord)
+	var tower := get_tower(root)
+	if tower == null or tower.size() < 2:
+		return
+	for hex in tower.merge_hexes:
+		var tile := get_tile(hex)
+		var target := mini(tower.tier, MAX_TIER)
+		if tile.biome == Biome.Type.NEUTRAL or tile.tier >= target:
+			continue
+		var ratio := tile.hp / tile_max_hp(hex)
+		tile.tier = target
+		tile.hp = ratio * tile_max_hp(hex)
+		tile_changed.emit(hex)
 
 
 ## Effect multiplier of the tower on `coord`: 1 + MERGE_BONUS in a combined building.
@@ -523,24 +688,30 @@ func merge_bonus(coord: Vector2i) -> float:
 	return 1.0 + MERGE_BONUS if group_of(coord).size() >= 2 else 1.0
 
 
-## Size of the wall section a new wall on `coord` would join (itself included).
-func wall_section_with(coord: Vector2i) -> int:
-	var size := 1
-	var counted := {}
+## Towers in the cluster on `coord` (a merged tower counts once).
+func cluster_towers(coord: Vector2i) -> int:
+	var roots := {}
+	for member in group_of(coord):
+		roots[merge_root_of(member)] = true
+	return roots.size()
+
+
+## Towers in the cluster a new tower of `type` on `coord` would join (itself included).
+func cluster_with(coord: Vector2i, type: StringName) -> int:
+	var roots := {}
 	for n in HexMath.neighbors(coord):
 		var tower := get_tower(n)
-		if tower == null or tower.type != &"wall" or counted.has(n):
+		if tower == null or tower.type != type:
 			continue
 		for member in group_of(n):
-			counted[member] = true
-		size += group_of(n).size()
-	return size
+			roots[merge_root_of(member)] = true
+	return roots.size() + 1
 
 
-## Whether a tower of `type` may go on `coord`: a free tile, and walls only up to
-## MAX_WALL_SECTION in a row.
+## Whether a tower of `type` may go on `coord`: a free tile, and at most MAX_CLUSTER towers of
+## one type clustering together.
 func can_place_tower(coord: Vector2i, type: StringName) -> bool:
-	return can_place(coord) and (type != &"wall" or wall_section_with(coord) <= MAX_WALL_SECTION)
+	return can_place(coord) and cluster_with(coord, type) <= MAX_CLUSTER
 
 
 ## Towers of `type` the player owns: standing on the island plus in the inventory.
@@ -550,8 +721,7 @@ func towers_owned(type: StringName) -> int:
 		var tower := get_tower(coord)
 		if tower and tower.type == type:
 			owned += 1
-	for level in treasury.inventory.tower_levels(type):
-		owned += treasury.inventory.count(Inventory.tower_item(type, level))
+	owned += treasury.inventory.tower_count(type)
 	return owned
 
 
@@ -582,6 +752,24 @@ func add_blueprint(type: StringName) -> bool:
 	if persist_blueprints:
 		IslandSave.save_blueprints(self)
 	return built
+
+
+## Turns every blueprint stock that already covers its set into items. Sets get smaller when
+## towers are lost (or picked up into nothing), so stocks can reach their set without a new
+## find; checked every tick and after loading.
+func complete_blueprint_sets() -> void:
+	var built := false
+	for kind in Economy.blueprint_kinds():
+		while treasury.blueprints.get(kind, 0) >= blueprints_needed(kind):
+			treasury.blueprints[kind] -= blueprints_needed(kind)
+			treasury.inventory.add(Treasury.blueprint_item(kind))
+			unsaved_towers.append(String(kind))
+			blueprint_set_completed.emit(kind)
+			built = true
+	if built:
+		treasury.changed.emit()
+		if persist_blueprints:
+			IslandSave.save_blueprints(self)
 
 
 ## Every building group on the island (single towers are groups of one).
@@ -695,19 +883,20 @@ func tick(delta: float) -> void:
 				power = EnergyGrid.draw_energy(self, coord, gain * TowerDefs.SHIELD_ENERGY_PER_HP)
 			tower.shield += gain * power
 		tower.shield = minf(tower.shield, max_shield)
-		var xp_rate: float = XP_PER_SECOND.get(tower.type, 0.0)
+		var xp_rate: float = XP_PER_SECOND.get(tower.type, 0.0) if not tower.is_part else 0.0
 		if tower.type == &"aura" or tower.type == &"scout":
 			xp_rate *= tower.aura_power
 		add_xp(coord, xp_rate * delta)
 	_even_out_groups()
 	_check_levels()
+	complete_blueprint_sets()
 
 
 ## Aura towers pay their energy every frame; their power scales the buff (0 = off).
 func _power_auras(delta: float) -> void:
 	for coord in _tiles:
 		var tower := get_tower(coord)
-		if tower and tower.type == &"aura":
+		if tower and tower.type == &"aura" and not tower.is_part:
 			var energy := AuraProfiles.for_tile(self, coord).energy_per_second * delta
 			tower.aura_power = EnergyGrid.draw_energy(self, coord, energy)
 
