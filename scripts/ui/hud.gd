@@ -7,7 +7,7 @@ extends CanvasLayer
 ## that shows every hover text.
 
 ## Shown in the info window while nothing with a description is hovered.
-const HELP := "Click a slot, then the island · or drag a slot onto it\nRight click: pick up / cancel\nDrag: pan · Wheel: zoom · Esc: menu\nP: waves on/off · W: spawn a wave · U: tier upgrade (level 100)\n\nDebug: D damage · +/- tier · F1–F4 enemies · V fog\nG +500 gold · R +5 stones and tiles · B +10 blueprints"
+const HELP := "Click a slot, then the island · or drag a slot onto it\nRight click: pick up / cancel\nDrag: pan · Wheel: zoom · Esc: menu\nP: waves on/off · W: spawn a wave · U: tier upgrade (level 100) · I: analysis view\n\nDebug: D damage · +/- tier · F1–F4 enemies · V fog\nG +500 gold · R +5 stones and tiles · B +10 blueprints"
 
 const OVERLAYS := [
 	[&"energy", "Energy: generators bright, storages by fill (red = empty), empty tiles show how much they let through"],
@@ -59,6 +59,15 @@ var _spawn := OverlayIcon.new(&"spawn", "Spawn a wave now (W)")
 var _edit_mode := false
 var _flee: OverlayIcon
 
+## Analysis view (key I): extra numbers for balancing in the info window.
+var _analysis := false
+
+## Icons for the info window, and how far a long info text is scrolled (mouse wheel).
+var _icons := IconCache.new()
+var _info_text := ""
+var _info_scroll := 0.0
+const INFO_SCROLL_STEP := 30.0
+
 ## Overlay locked on by clicking an icon; hovering another icon previews it temporarily.
 var _locked_overlay: StringName = &""
 
@@ -67,7 +76,7 @@ var _locked_overlay: StringName = &""
 @onready var _overlay_panel: PanelContainer = %OverlayPanel
 @onready var _inventory_panel: Control = %InventoryPanel
 @onready var _info_panel: Control = %InfoPanel
-@onready var _info: Label = %Info
+@onready var _info: RichTextLabel = %Info
 @onready var _top_bar: PanelContainer = %TopBar
 @onready var _wave_row: HBoxContainer = %Row
 @onready var _stats: Label = %Stats
@@ -123,6 +132,7 @@ func _ready() -> void:
 	_overlay_panel.add_theme_stylebox_override("panel", panel)
 	_top_bar.add_theme_stylebox_override("panel", panel)
 	_deck.windows = [_inventory_panel, _info_panel, _treasury_panel]
+	add_child(_icons)
 	_notices.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_notices.add_theme_constant_override("separation", 4)
 	_root.add_child(_notices)
@@ -170,9 +180,60 @@ func _process(delta: float) -> void:
 	_treasury_panel.reset_size()
 	# Sits on the console rail at the left, above the inventory.
 	_treasury_panel.position.x = _inventory_panel.position.x + 24.0
-	_info.text = _hover_text()
+	_show_info(_hover_text())
 	_overlay_panel.reset_size()
 	_notices.position = _overlay_panel.position + Vector2(0, _overlay_panel.size.y + 8.0)
+
+
+## Shows `text` in the info window. "{icon:kind}" in it becomes that inventory icon. A new
+## text starts unscrolled.
+func _show_info(text: String) -> void:
+	if text != _info_text:
+		_info_text = text
+		_info_scroll = 0.0
+		_info.clear()
+		var parts := text.split("{icon:")
+		_info.add_text(parts[0])
+		for i in range(1, parts.size()):
+			var close := parts[i].find("}")
+			var texture := _icons.get_icon(StringName(parts[i].substr(0, close)))
+			if texture:
+				_info.add_image(texture, 15, 15)
+				_info.add_text(" ")
+			_info.add_text(parts[i].substr(close + 1))
+	var room := _info.get_parent_control().size.y
+	_info_scroll = clampf(_info_scroll, 0.0, maxf(_info.get_content_height() - room, 0.0))
+	_info.position.y = -_info_scroll
+
+
+## I toggles the analysis view.
+func _unhandled_key_input(event: InputEvent) -> void:
+	var key := event as InputEventKey
+	if key and key.pressed and not key.echo and key.keycode == KEY_I:
+		_analysis = not _analysis
+		notify("Analysis view %s (I)" % ("on – hover a building or the HQ" if _analysis else "off"))
+
+
+## The mouse wheel scrolls a long info text while an item or control with a description is
+## hovered (over the map it keeps zooming).
+func _input(event: InputEvent) -> void:
+	var wheel := event as InputEventMouseButton
+	if wheel == null or not wheel.pressed:
+		return
+	if wheel.button_index != MOUSE_BUTTON_WHEEL_UP and wheel.button_index != MOUSE_BUTTON_WHEEL_DOWN:
+		return
+	var over_text := not _inventory.hovered_item.is_empty() or _inventory.hovered_tab_info() != ""
+	var control := get_viewport().gui_get_hovered_control()
+	while control and not over_text:
+		over_text = control.has_meta(&"info")
+		control = control.get_parent_control()
+	# With the analysis view on, the wheel scrolls the long text of the hovered building too.
+	if _analysis and control == null and get_viewport().gui_get_hovered_control() == null and view and view.island.get_tower(view.hovered_coord):
+		over_text = true
+	if not over_text or _info.get_content_height() <= _info.get_parent_control().size.y:
+		return
+	_info_scroll += INFO_SCROLL_STEP * (1.0 if wheel.button_index == MOUSE_BUTTON_WHEEL_DOWN else -1.0)
+	get_viewport().set_input_as_handled()
 
 
 ## Every hover text goes into the info window (no floating tooltips): an inventory slot,
@@ -266,69 +327,72 @@ func _describe_tile(coord: Vector2i) -> String:
 		lines.append(price)
 	if tile.tower:
 		lines.append_array(_describe_building(coord, tile))
-	var what := "HQ" if tile.is_hq else "%s · Tier %d" % [Biome.name_of(tile.biome), tile.tier]
+		lines.append("")
+	var what := "HQ" if tile.is_hq else "%s ground · Tier %d" % [Biome.name_of(tile.biome), tile.tier]
 	if tile.destroyed:
 		what += " · WASTELAND"
-	lines.append("%s%s · Ground HP %d / %d" % ["Ground: " if tile.tower else "", what, ceili(tile.hp), roundi(view.island.tile_max_hp(coord))])
+	lines.append("{icon:%s}%s" % [IconCache.biome_kind(tile.biome), what])
+	lines.append("Ground HP %d / %d" % [ceili(tile.hp), roundi(view.island.tile_max_hp(coord))])
 	if tile.tower == null and not tile.is_hq:
 		lines.append("Conducts %d%% of passing energy" % roundi(EnergyGrid.pass_through(tile, view.island) * 100.0))
 	if tile.is_hq:
 		var cannon := AttackProfiles.hq()
-		lines.append("Cannon: %.0f dmg every %.1fs · range %.1f hex · no energy" % [cannon.damage, cannon.cooldown, cannon.range_hexes])
-	var generator := EnergyGrid.generator_at(view.island, coord)
-	if generator:
-		lines.append("Generator: %.1f/s · reach %d · %s" % [generator.output, generator.reach(), _describe_falloff(generator)])
-	var effects := view.island.aura_at(coord)
-	if not effects.is_empty():
-		lines.append("Auras: " + Auras.describe(effects))
-	return "
-".join(lines)
+		lines.append("Cannon: %.0f damage every %.1f s (%.1f dps)" % [cannon.damage, cannon.cooldown, cannon.damage / cannon.cooldown])
+		lines.append("Cannon range: %.1f hexes, no energy" % cannon.range_hexes)
+		lines.append_array(_describe_generator(EnergyGrid.generator_at(view.island, coord)))
+	if _analysis and tile.tower:
+		lines.append("")
+		lines.append_array(Analysis.building_lines(view.island, coord))
+	if _analysis and tile.is_hq:
+		lines.append("")
+		lines.append_array(Analysis.island_lines(view.island, combat))
+	var sources := Auras.sources(view.island, coord)
+	if not sources.is_empty():
+		lines.append("Effects here:")
+		for source in sources:
+			lines.append("{icon:%s}%s: %s" % [source.icon, source.name, Auras.describe(source.effects)])
+	return "\n".join(lines)
 
 
-## The building on `coord`: name, level and combined size; its (shared) pools; what it does
-## right now; and where its effect bonus comes from.
+## The building on `coord`, one stat per line: name, level and XP; its (shared) pools with
+## modifiers; what it does; where its bonuses come from; what it can do next.
 func _describe_building(coord: Vector2i, tile: IslandTile) -> PackedStringArray:
 	var island := view.island
 	var tower := tile.tower
 	var lines: PackedStringArray = []
 	var level := tower.level()
-	var head := "%s · %sLevel %d" % [String(tower.type).capitalize(), "Tier %d · " % tower.tier if tower.tier > 1 else "", level]
+	var root_tower := island.get_tower(island.merge_root_of(coord))
+	var size := island.cluster_towers(coord)
+	var head := "{icon:%s}%s · %sLevel %d" % [tower.type, String(tower.type).capitalize(), "Tier %d · " % tower.tier if tower.tier > 1 else "", level]
+	lines.append(head)
 	if level < Tower.MAX_LEVEL:
 		var from := Tower.xp_for_level(level)
-		head += " (%d / %d XP)" % [floori(tower.xp - from), ceili(Tower.xp_for_level(level + 1) - from)]
-	var root_tower := island.get_tower(island.merge_root_of(coord))
+		lines.append("XP %d / %d" % [floori(tower.xp - from), ceili(Tower.xp_for_level(level + 1) - from)])
 	if root_tower.size() >= 2:
-		head += " · merged ×%d" % root_tower.size()
-	var size := island.cluster_towers(coord)
+		lines.append("Merged: %d hexes, ×%d effect" % [root_tower.size(), root_tower.size()])
 	if size >= 2:
-		head += " · cluster of %d" % size
-	lines.append(head)
-	var pools: PackedStringArray = []
+		lines.append("Cluster of %d: shared HP, shield, energy, XP and perks, +%d%% effect" % [size, roundi(Island.MERGE_BONUS * 100.0)])
 	var hp := island.group_pool(coord, &"hp")
-	pools.append("HP %d / %d" % [ceili(hp.x), roundi(hp.y)])
+	lines.append("HP %d / %d%s" % [ceili(hp.x), roundi(hp.y), _modifier(island.tower_max_hp(coord) / TowerDefs.base_hp(tower.type))])
 	var shield := island.group_pool(coord, &"shield")
 	if shield.y > 0.0:
-		pools.append("Shield %d / %d" % [ceili(shield.x), roundi(shield.y)])
+		lines.append("Shield %d / %d" % [ceili(shield.x), roundi(shield.y)])
 	var energy := island.group_pool(coord, &"energy")
 	if energy.y > 0.0:
-		pools.append("Energy %.0f / %.0f" % [energy.x, energy.y])
-	lines.append(" · ".join(pools))
+		lines.append("Energy %.0f / %.0f%s" % [energy.x, energy.y, _modifier(tower.stat_factor())])
 	match tower.type:
 		&"attack":
-			lines.append(_describe_attack(AttackProfiles.for_tile(island, coord)))
+			lines.append_array(_describe_attack(AttackProfiles.for_tile(island, coord), tower.range_factor()))
 		&"repair":
-			lines.append(_describe_repair(RepairProfiles.for_tile(island, coord)))
+			lines.append_array(_describe_repair(RepairProfiles.for_tile(island, coord)))
 		&"aura":
-			lines.append(_describe_aura(AuraProfiles.for_tile(island, coord), tower.aura_power))
+			lines.append_array(_describe_aura(AuraProfiles.for_tile(island, coord), tower.aura_power))
 		&"scout":
-			lines.append(_describe_scout(ScoutProfiles.for_tile(island, coord), tower.aura_power))
-	var parts: PackedStringArray = ["level +%d%%" % roundi(tower.level_bonus() * 100.0)]
-	if tower.tier > 1:
-		parts.append("tiers +%d%%" % roundi(tower.tier_bonus() * 100.0))
-	if size >= 2:
-		parts.append("combined effect +%d%%" % roundi(Island.MERGE_BONUS * 100.0))
-	if root_tower.size() >= 2:
-		parts.append("merged effect ×%d" % root_tower.size())
+			lines.append_array(_describe_scout(ScoutProfiles.for_tile(island, coord), tower.aura_power))
+		&"energy":
+			lines.append_array(_describe_generator(EnergyGrid.generator_at(island, coord)))
+	lines.append("Stats +%d%% (level +%d%%%s)" % [roundi((tower.stat_factor() - 1.0) * 100.0), roundi(tower.level_bonus() * 100.0),
+		", tiers +%d%%" % roundi(tower.tier_bonus() * 100.0) if tower.tier > 1 else ""])
 	# Perk points are shared within a cluster.
 	var perks := 0
 	var counted := {}
@@ -337,29 +401,48 @@ func _describe_building(coord: Vector2i, tile: IslandTile) -> PackedStringArray:
 		if not counted.has(root):
 			counted[root] = true
 			perks += island.get_tower(root).perk_points()
-	lines.append("Stats +%d%% (%s) · perk points %d%s" % [roundi((tower.stat_factor() - 1.0) * 100.0), ", ".join(parts), perks, " (shared)" if size >= 2 else ""])
+	lines.append("Perk points %d%s" % [perks, " (shared)" if size >= 2 else ""])
 	if not island.merge_set(coord).is_empty():
-		lines.append("Can merge – use the merge icon (top left) and click it")
+		lines.append("Can merge – merge icon (top left), then click it")
 	var cost := island.tier_up_cost(coord)
 	if not cost.is_empty():
 		lines.append("Ready for Tier %d – press U (%d gold, %d %s)" % [tower.tier + 1, cost.gold, cost.amount, Biome.resource_name(cost.resource)])
 	return lines
 
 
-static func _describe_attack(p: AttackProfile) -> String:
-	var parts: PackedStringArray = []
+## " (+25%)" for a multiplier of 1.25, "" when there is none.
+static func _modifier(factor: float) -> String:
+	var percent := roundi((factor - 1.0) * 100.0)
+	if percent == 0:
+		return ""
+	return " (%s%d%%)" % ["+" if percent > 0 else "", percent]
+
+
+static func _describe_attack(p: AttackProfile, range_factor: float) -> PackedStringArray:
+	var lines: PackedStringArray = []
 	if p.has_projectile():
-		parts.append("%.0f dmg every %.1fs (%.1f energy)" % [p.damage, p.cooldown, p.energy_per_shot])
+		lines.append("Damage %.0f every %.1f s (%.1f dps)" % [p.damage, p.cooldown, p.damage / maxf(p.cooldown, 0.001)])
+		lines.append("Energy %.1f per shot" % p.energy_per_shot)
 	if p.beam_dps > 0.0:
-		parts.append("%d laser × %.1f dps (%.1f energy/s)" % [p.beam_count, p.beam_dps, p.beam_energy * p.beam_count])
+		lines.append("Laser %.1f damage/s × %d" % [p.beam_dps, p.beam_count])
+		lines.append("Energy %.1f/s for the laser" % (p.beam_energy * p.beam_count))
 	if p.thorn_dps > 0.0:
-		parts.append("thorns %.1f dps × %d" % [p.thorn_dps, p.thorn_max])
+		lines.append("Thorns %.1f damage/s, up to %d stacks" % [p.thorn_dps, p.thorn_max])
 	if p.weaken > 0.0:
-		parts.append("weaken %d%%" % roundi(p.weaken * 100.0))
+		lines.append("Weakens enemies %d%%" % roundi(p.weaken * 100.0))
 	if p.poison > 0.0:
-		parts.append("poison %d%%" % roundi(p.poison * 100.0))
-	parts.append("range %.1f hex" % p.range_hexes)
-	return " · ".join(parts)
+		lines.append("Poison %d%%" % roundi(p.poison * 100.0))
+	lines.append("Range %.1f hexes%s" % [p.range_hexes, _modifier(range_factor)])
+	return lines
+
+
+static func _describe_generator(p: EnergyProfile) -> PackedStringArray:
+	var lines: PackedStringArray = []
+	if p == null:
+		return lines
+	lines.append("Generates %.1f energy/s" % p.output)
+	lines.append("Reach %d hexes (%s)" % [p.reach(), _describe_falloff(p)])
+	return lines
 
 
 static func _describe_falloff(p: EnergyProfile) -> String:
@@ -372,34 +455,39 @@ static func _describe_falloff(p: EnergyProfile) -> String:
 	return text
 
 
-static func _describe_repair(p: RepairProfile) -> String:
+static func _describe_repair(p: RepairProfile) -> PackedStringArray:
 	var what := ""
 	match p.mode:
 		&"over_time":
-			what = "%.0f HP over %.0fs" % [p.amount, p.duration]
+			what = "Repairs %.0f HP over %.0f s" % [p.amount, p.duration]
 		&"redistribute":
-			what = "moves %.0f HP from healthy to damaged" % p.amount
+			what = "Moves %.0f HP from healthy to damaged" % p.amount
 		&"lifesteal":
-			what = "drains %.0f HP from enemies" % p.amount
+			what = "Drains %.0f HP from enemies" % p.amount
 		_:
-			what = "%.0f HP" % p.amount
-	if p.targets > 1:
-		what += " × %d targets" % p.targets
-	return "%s every %.1fs (%.1f energy) · reach %d" % [what, p.cooldown, p.energy_per_heal, p.reach()]
+			what = "Repairs %.0f HP" % p.amount
+	var lines: PackedStringArray = [what + (" × %d targets" % p.targets if p.targets > 1 else "")]
+	lines.append("Every %.1f s (%.1f HP/s), %.1f energy each" % [p.cooldown, p.amount * p.targets / maxf(p.cooldown, 0.001), p.energy_per_heal])
+	lines.append("Reach %d hexes" % p.reach())
+	return lines
 
 
-static func _describe_aura(p: AuraProfile, power: float) -> String:
-	var parts: PackedStringArray = []
+static func _describe_aura(p: AuraProfile, power: float) -> PackedStringArray:
+	var lines: PackedStringArray = []
 	if not p.effects.is_empty():
-		parts.append(Auras.describe(p.effects))
+		lines.append("Buff: " + Auras.describe(p.effects))
 	if p.enemy_weaken > 0.0:
-		parts.append("weakens enemies %d%%" % roundi(p.enemy_weaken * 100.0))
+		lines.append("Weakens enemies %d%%" % roundi(p.enemy_weaken * 100.0))
 	if p.tile_aura_boost > 0.0:
-		parts.append("tile auras +%d%%" % roundi(p.tile_aura_boost * 100.0))
-	var state := "no energy – off" if power <= 0.0 else ("%d%% power" % roundi(power * 100.0))
-	return "%s · radius %d · %.1f energy/s · %s" % [" · ".join(parts), p.radius, p.energy_per_second, state]
+		lines.append("Tile auras +%d%%" % roundi(p.tile_aura_boost * 100.0))
+	lines.append("Radius %d" % p.radius)
+	lines.append("Energy %.1f/s · %s" % [p.energy_per_second, "no energy – off" if power <= 0.0 else "%d%% power" % roundi(power * 100.0)])
+	return lines
 
 
-static func _describe_scout(p: ScoutProfile, power: float) -> String:
-	var state := "no energy – blind" if power <= 0.0 else ("%d%% power" % roundi(power * 100.0))
-	return "keeps radius %d open · sky stays open ×%.1f after · %.1f energy/s · %s" % [p.radius, p.hold_factor, p.energy_per_second, state]
+static func _describe_scout(p: ScoutProfile, power: float) -> PackedStringArray:
+	return PackedStringArray([
+		"Keeps the sky open in radius %d" % p.radius,
+		"Sky stays open ×%.1f as long afterwards" % p.hold_factor,
+		"Energy %.1f/s · %s" % [p.energy_per_second, "no energy – blind" if power <= 0.0 else "%d%% power" % roundi(power * 100.0)],
+	])

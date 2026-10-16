@@ -122,7 +122,15 @@ static func tick(island: Island, delta: float) -> void:
 		var profile := generator_at(island, coord)
 		if profile == null:
 			continue
-		distribute(island, coord, profile, profile.output * delta)
+		var budget := profile.output * delta
+		var left := distribute(island, coord, profile, budget)
+		island.track(coord, &"delivered", budget - left)
+		island.track(coord, &"wasted", left)
+		var generator := island.get_tower(coord)
+		if generator and budget - left > 0.0:
+			generator.did_work = true
+		if generator:
+			generator.saw_target = left < budget
 		if profile.special == &"conduit":
 			_balance(island, coord, profile, delta)
 	# Storehouses hand their energy on to buildings that run low (never to other storehouses).
@@ -175,11 +183,13 @@ static func draw_energy(island: Island, coord: Vector2i, amount: float) -> float
 		return 1.0
 	if tile.energy >= amount:
 		tile.energy -= amount
+		island.track(coord, &"energy_used", amount)
 		return 1.0
 	# Combined buildings share their stored energy.
 	if tile.tower and island.group_pool(coord, &"energy").x >= amount:
 		island.pull_group_energy(coord, amount - tile.energy)
 		tile.energy = 0.0
+		island.track(coord, &"energy_used", amount)
 		return 1.0
 	if tile.biome == Biome.Type.SWAMP and _drain_neighbours(island, coord, amount - tile.energy):
 		tile.energy = 0.0

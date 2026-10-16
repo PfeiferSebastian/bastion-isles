@@ -55,6 +55,11 @@ var _aura_cache: Dictionary = {}
 var _group_cache: Dictionary = {}
 ## Towers only gain experience while this is on (off when editing the island).
 var gains_xp := true
+## Analysis: totals of the current wave per building type (&"hq" for the HQ), e.g.
+## {&"attack": {&"damage": 120.0, &"lost": 1}}; the battle log reads and resets them.
+var wave_totals: Dictionary = {}
+## Seconds the uptime averages span (roughly the last minute).
+const UPTIME_SPAN := 60.0
 ## Save found blueprints right away (IslandSave); only the player's island in the game does.
 var persist_blueprints := false
 ## Towers and tiles bought with blueprints since the island was last saved.
@@ -448,6 +453,7 @@ func damage_tower(coord: Vector2i, amount: float) -> void:
 func _apply_damage(coord: Vector2i, amount: float) -> void:
 	if get_tower(coord) == null:
 		return
+	track(coord, &"taken", amount)
 	var group := group_of(coord)
 	if get_tower(coord).type == &"wall":
 		add_xp(coord, amount * WALL_XP_PER_DAMAGE)
@@ -461,6 +467,10 @@ func _apply_damage(coord: Vector2i, amount: float) -> void:
 	var absorbed := minf(shield, amount)
 	hp -= amount - absorbed
 	if hp <= 0.0:
+		var lost_type := get_tower(coord).type
+		if not wave_totals.has(lost_type):
+			wave_totals[lost_type] = {}
+		wave_totals[lost_type][&"lost"] = wave_totals[lost_type].get(&"lost", 0.0) + cluster_towers(coord)
 		for member in group:
 			get_tile(member).tower = null
 		for member in group:
@@ -548,7 +558,57 @@ func upgrade_tower(coord: Vector2i) -> bool:
 func add_xp(coord: Vector2i, amount: float) -> void:
 	var tower := get_tower(coord)
 	if tower and gains_xp and amount > 0.0:
+		var before := tower.xp
 		tower.xp = minf(tower.xp + amount, Tower.xp_for_level(Tower.MAX_LEVEL))
+		tower.xp_this_tick += tower.xp - before
+
+
+## Analysis: adds `amount` to counter `key` of the building on `coord` (wave and mission) and
+## to the wave totals of its type.
+func track(coord: Vector2i, key: StringName, amount: float) -> void:
+	if amount <= 0.0:
+		return
+	var tower := get_tower(coord)
+	var type: StringName = &"hq" if coord == HQ_COORD else (tower.type if tower else &"")
+	if type == &"":
+		return
+	if tower:
+		tower.wave_stats[key] = tower.wave_stats.get(key, 0.0) + amount
+		tower.mission_stats[key] = tower.mission_stats.get(key, 0.0) + amount
+	if not wave_totals.has(type):
+		wave_totals[type] = {}
+	wave_totals[type][key] = wave_totals[type].get(key, 0.0) + amount
+
+
+## A new wave starts: per-tower wave counters and the wave totals begin at zero.
+func start_wave_stats() -> void:
+	wave_totals.clear()
+	for coord in _tiles:
+		var tower := get_tower(coord)
+		if tower:
+			tower.wave_stats.clear()
+
+
+## Updates the uptime and XP-rate averages of every acting tower and clears the flags.
+func _update_analysis(delta: float) -> void:
+	var k := clampf(delta / UPTIME_SPAN, 0.0, 1.0)
+	for coord in _tiles:
+		var tower := get_tower(coord)
+		if tower == null or tower.is_part:
+			continue
+		var powered := EnergyGrid.capacity(get_tile(coord)) <= 0.0 or group_pool(coord, &"energy").x > 0.01
+		if tower.type == &"aura" or tower.type == &"scout":
+			powered = tower.aura_power > 0.0
+			tower.saw_target = true
+			tower.did_work = powered
+		tower.uptime_powered = lerpf(tower.uptime_powered, 1.0 if powered else 0.0, k)
+		tower.uptime_target = lerpf(tower.uptime_target, 1.0 if tower.saw_target else 0.0, k)
+		tower.uptime_working = lerpf(tower.uptime_working, 1.0 if tower.did_work else 0.0, k)
+		if delta > 0.0:
+			tower.xp_per_minute = lerpf(tower.xp_per_minute, tower.xp_this_tick / delta * 60.0, k)
+		tower.saw_target = false
+		tower.did_work = false
+		tower.xp_this_tick = 0.0
 
 
 ## Announces new levels every few levels and at level 100.
@@ -758,6 +818,19 @@ func price_of(item: Dictionary) -> Dictionary:
 	return {currency = CURRENCY_BLUEPRINTS, amount = blueprint_cost(kind)}
 
 
+## How many more of `kind` the player's blueprints could buy, each one costing one more
+## than the last (only this kind; all blueprints spent on it).
+func affordable_count(kind: StringName) -> int:
+	var left := treasury.blueprints
+	var cost := blueprint_cost(kind)
+	var count := 0
+	while left >= cost:
+		left -= cost
+		cost += 1
+		count += 1
+	return count
+
+
 ## How much of a price's currency the player has.
 func funds(currency: int) -> int:
 	return treasury.blueprints if currency == CURRENCY_BLUEPRINTS else treasury.resources.get(currency, 0)
@@ -927,6 +1000,7 @@ func tick(delta: float) -> void:
 		add_xp(coord, xp_rate * delta)
 	_even_out_groups()
 	_check_levels()
+	_update_analysis(delta)
 
 
 ## Aura towers pay their energy every frame; their power scales the buff (0 = off).

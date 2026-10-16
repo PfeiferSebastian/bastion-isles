@@ -50,6 +50,8 @@ var fog: FogOfWar
 var _view: IslandView
 ## Waves sent so far.
 var wave := 0
+## The wave being logged (see BattleLog), or {} before the first wave.
+var _wave_log: Dictionary = {}
 var _wave_timer := 0.0
 var _quiet_time := 0.0
 var _enemy_layer := Node2D.new()
@@ -146,7 +148,12 @@ func spawn_wave() -> void:
 		return
 	mission_countdown = 0.0
 	_wave_timer = wave_interval
+	finish_wave_log()
 	wave += 1
+	_view.island.start_wave_stats()
+	_wave_log = {started = Time.get_unix_time_from_system(), mission_round = mission_round + 1, wave = wave,
+		strength = strength_factor(), enemies = {}, enemy_hp = 0.0, kills = {},
+		loot = {gold = 0, blueprints = 0, stones = 0, resources = {}}}
 	var groups: Array = []
 	for kind in EnemyDefs.wave_plan(wave, count_factor()):
 		if groups.is_empty() or groups[-1][0] != kind or groups[-1].size() >= formation_size:
@@ -180,6 +187,36 @@ func _spawn_formation(kinds: Array, angle: float) -> void:
 			leader = enemy
 
 
+## Writes the wave being logged to the battle log: what came, what died, the loot, what each
+## building type did (Island.wave_totals) and the island's make-up. Called when the next wave
+## starts, the mission is won or the player leaves.
+func finish_wave_log() -> void:
+	if _wave_log.is_empty():
+		return
+	var island := _view.island
+	var buildings := {}
+	var tiles := {}
+	for coord in island.coords():
+		var tile := island.get_tile(coord)
+		var biome := Biome.name_of(tile.biome)
+		tiles[biome] = tiles.get(biome, 0) + 1
+		if tile.tower and not tile.tower.is_part:
+			var key := "%s T%d" % [tile.tower.type, tile.tower.tier]
+			buildings[key] = buildings.get(key, 0) + 1
+	var by_type := {}
+	for type in island.wave_totals:
+		var counters := {}
+		for key in island.wave_totals[type]:
+			counters[String(key)] = snappedf(island.wave_totals[type][key], 0.1)
+		by_type[String(type)] = counters
+	_wave_log.duration = snappedf(Time.get_unix_time_from_system() - _wave_log.started, 0.1)
+	_wave_log.enemy_hp = roundi(_wave_log.enemy_hp)
+	_wave_log.buildings = by_type
+	_wave_log.island = {buildings = buildings, tiles = tiles}
+	BattleLog.append(_wave_log)
+	_wave_log = {}
+
+
 ## Spawns one enemy of `kind` (random mix if empty) on a ring around the island; none once
 ## the mission is done.
 func spawn_enemy(kind: StringName = &"", factor := 1.0, at: Variant = null, speed_factor := -1.0) -> Enemy:
@@ -188,6 +225,9 @@ func spawn_enemy(kind: StringName = &"", factor := 1.0, at: Variant = null, spee
 	var enemy := Enemy.new()
 	enemy.setup(kind if kind != &"" else EnemyDefs.pick_random(), factor, speed_factor)
 	enemy.died.connect(_on_enemy_died)
+	if not _wave_log.is_empty():
+		_wave_log.enemies[String(enemy.kind)] = _wave_log.enemies.get(String(enemy.kind), 0) + 1
+		_wave_log.enemy_hp += enemy.max_hp
 	_enemy_layer.add_child(enemy)
 	enemy.global_position = at if at != null else _view.global_position + Vector2.from_angle(randf() * TAU) * spawn_distance
 	return enemy
@@ -240,6 +280,14 @@ func _on_enemy_died(enemy: Enemy) -> void:
 	var loot := Economy.roll_loot(enemy, _loot_rng, treasury.pity)
 	var at := enemy.global_position
 	treasury.add_gold(loot.gold)
+	if not _wave_log.is_empty():
+		_wave_log.kills[String(enemy.kind)] = _wave_log.kills.get(String(enemy.kind), 0) + 1
+		_wave_log.loot.gold += loot.gold
+		_wave_log.loot.blueprints += 1 if loot.blueprint else 0
+		_wave_log.loot.stones += 1 if loot.stone >= 0 else 0
+		if loot.resource >= 0:
+			var resource_name := Biome.resource_name(loot.resource)
+			_wave_log.loot.resources[resource_name] = _wave_log.loot.resources.get(resource_name, 0) + 1
 	popup(at, "+%d gold" % loot.gold, Color("ffd23f"))
 	if loot.stone >= 0:
 		var stone := Inventory.stone_item(loot.stone)
@@ -261,6 +309,7 @@ func _on_enemy_died(enemy: Enemy) -> void:
 		# The fight is won: towers stop gaining experience.
 		_view.island.gains_xp = false
 		_clear_sky()
+		finish_wave_log()
 		mission_completed.emit()
 
 
@@ -466,21 +515,27 @@ func _towers_attack(delta: float) -> void:
 		var range_px := profile.range_hexes * HexMath.SQRT3 * _view.hex_size
 		var targets := _targets_in_range(origin, range_px)
 		tower.attack_cooldown = maxf(tower.attack_cooldown - delta, 0.0)
+		# Reloading after a shot counts as working.
+		tower.did_work = tower.did_work or tower.attack_cooldown > 0.0
 		if targets.is_empty():
 			continue
+		tower.saw_target = true
 		_view.aim_tower(coord, (targets[0].global_position - origin).angle())
 		var beams := mini(profile.beam_count, targets.size())
 		if beams > 0:
 			var beam_power := EnergyGrid.draw_energy(island, coord, profile.beam_energy * beams * delta)
 			for i in beams:
-				_fire_beam(origin, targets[i], profile, beam_power, delta)
+				_fire_beam(origin, targets[i], profile, beam_power, delta, coord)
+			if beam_power > 0.0:
+				tower.did_work = true
 			island.add_xp(coord, beam_power * delta)
 		if profile.has_projectile() and tower.attack_cooldown <= 0.0:
 			var power := EnergyGrid.draw_energy(island, coord, profile.energy_per_shot)
 			if power > 0.0:
 				# Below 1 (e.g. Forest without energy) the tower fires more slowly.
 				tower.attack_cooldown = profile.cooldown / power
-				_fire_projectile(origin, targets[0], profile)
+				_fire_projectile(origin, targets[0], profile, coord)
+				tower.did_work = true
 				island.add_xp(coord, 1.0)
 
 
@@ -511,20 +566,32 @@ func _targets_in_range(origin: Vector2, range_px: float) -> Array[Enemy]:
 
 
 ## The laser stops at its target and only damages that enemy.
-func _fire_beam(origin: Vector2, target: Enemy, profile: AttackProfile, power: float, delta: float) -> void:
+func _fire_beam(origin: Vector2, target: Enemy, profile: AttackProfile, power: float, delta: float, source := Vector2i(9999, 9999)) -> void:
 	if power <= 0.0:
 		return
+	var before := target.hp
 	target.take_damage(profile.beam_dps * power * delta)
+	_credit(target, before, source)
 	_beams.append(PackedVector2Array([origin, target.global_position]))
 	_beam_colors.append(profile.beam_color)
 
 
-func _fire_projectile(origin: Vector2, target: Enemy, profile: AttackProfile) -> void:
+func _fire_projectile(origin: Vector2, target: Enemy, profile: AttackProfile, source := Island.HQ_COORD) -> void:
 	var projectile := Projectile.new()
 	projectile.target = target
 	projectile.profile = profile
+	projectile.on_hit = _credit.bind(source)
 	_projectile_layer.add_child(projectile)
 	projectile.global_position = origin
+
+
+## Analysis: credits the damage a hit did (and a kill) to the building on `source`.
+func _credit(target: Enemy, before: float, source: Vector2i) -> void:
+	if source == Vector2i(9999, 9999):
+		return
+	_view.island.track(source, &"damage", before - maxf(target.hp, 0.0))
+	if target.is_dead:
+		_view.island.track(source, &"kills", 1.0)
 
 
 ## Swamp Aura towers weaken every enemy inside their radius.
@@ -558,12 +625,14 @@ func _towers_repair(delta: float) -> void:
 		if tower == null or tower.type != &"repair" or tower.is_part:
 			continue
 		tower.attack_cooldown = maxf(tower.attack_cooldown - delta, 0.0)
+		tower.did_work = tower.did_work or tower.attack_cooldown > 0.0
 		if tower.attack_cooldown > 0.0:
 			continue
 		var profile := RepairProfiles.for_tile(island, coord)
 		var damaged := island.damaged_in_reach(coord, profile.reach())
 		if damaged.is_empty():
 			continue
+		tower.saw_target = true
 		# Only pay (and cool down) when the heal actually happens.
 		if not _can_repair(coord, profile, damaged):
 			continue
@@ -571,6 +640,7 @@ func _towers_repair(delta: float) -> void:
 		if power <= 0.0:
 			continue
 		tower.attack_cooldown = profile.cooldown / power
+		tower.did_work = true
 		island.add_xp(coord, 1.0)
 		match profile.mode:
 			&"redistribute":
@@ -582,8 +652,9 @@ func _towers_repair(delta: float) -> void:
 					var amount := profile.amount * profile.falloff[HexMath.distance(coord, target.coord)]
 					if profile.mode == &"over_time":
 						island.add_heal_over_time(target.coord, target.tower, amount, profile.duration)
+						island.track(coord, &"healed", amount)
 					else:
-						island.heal(target.coord, target.tower, amount)
+						island.track(coord, &"healed", island.heal(target.coord, target.tower, amount))
 					_flash(coord, target.coord, profile.color)
 
 
@@ -603,7 +674,7 @@ func _redistribute(coord: Vector2i, profile: RepairProfile, damaged: Array[Dicti
 	var donor := _donor_for(coord, profile, target)
 	var wanted := profile.amount * profile.falloff[HexMath.distance(coord, target.coord)]
 	var taken := island.drain(donor.coord, donor.tower, wanted)
-	island.heal(target.coord, target.tower, taken)
+	island.track(coord, &"healed", island.heal(target.coord, target.tower, taken))
 	_flash(donor.coord, target.coord, profile.color)
 
 
@@ -636,7 +707,7 @@ func _lifesteal(coord: Vector2i, profile: RepairProfile, target: Dictionary) -> 
 	enemy.take_damage(profile.amount)
 	var stolen := before - maxf(enemy.hp, 0.0)
 	var share := profile.falloff[HexMath.distance(coord, target.coord)]
-	_view.island.heal(target.coord, target.tower, stolen * share)
+	_view.island.track(coord, &"healed", _view.island.heal(target.coord, target.tower, stolen * share))
 	_heal_flashes.append({from = enemy.global_position, to = origin, color = profile.color, time = HEAL_FLASH_TIME})
 	_flash(coord, target.coord, profile.color)
 

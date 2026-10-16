@@ -40,6 +40,23 @@ var merge_hexes: Array[Vector2i] = []
 var is_part := false
 var merge_root := Vector2i.ZERO
 
+# --- Analysis (see Island.track and the HUD's analysis view) ---
+## Counters for the current wave and the whole mission: &"damage", &"kills", &"taken",
+## &"healed", &"energy_used", &"delivered", &"wasted".
+var wave_stats: Dictionary = {}
+var mission_stats: Dictionary = {}
+## Shares of roughly the last minute (moving averages): had energy, had something to work
+## on, actually worked.
+var uptime_powered := 1.0
+var uptime_target := 0.0
+var uptime_working := 0.0
+## Set during a tick by whoever notices, read and cleared by Island.tick.
+var saw_target := false
+var did_work := false
+## XP per minute (moving average) and the XP gained since the last tick.
+var xp_per_minute := 0.0
+var xp_this_tick := 0.0
+
 
 func _init(tower_type: StringName, max_hp: float) -> void:
 	type = tower_type

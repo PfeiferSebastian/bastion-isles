@@ -4,6 +4,8 @@ extends Node2D
 
 var target: Enemy
 var profile: AttackProfile
+## Called after the hit with (target, its HP before), for the analysis counters.
+var on_hit: Callable
 
 
 func _process(delta: float) -> void:
@@ -13,7 +15,10 @@ func _process(delta: float) -> void:
 	var to := target.global_position - global_position
 	var step := profile.projectile_speed * delta
 	if to.length() <= step:
+		var before := target.hp
 		profile.apply_hit(target)
+		if on_hit.is_valid():
+			on_hit.call(target, before)
 		queue_free()
 	else:
 		global_position += to.normalized() * step

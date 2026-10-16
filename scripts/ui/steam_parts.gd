@@ -1,7 +1,7 @@
 class_name SteamParts
 extends RefCounted
 ## Steampunk pieces drawn in code onto any CanvasItem: copper pipes and elbows, bolted
-## flanges, rivets and gears. Shared by the main menu frame
+## flanges and rivets. Shared by the main menu frame
 ## and the in-game console.
 
 const BRASS := MenuTheme.BRASS
@@ -45,23 +45,3 @@ static func rivet(ci: CanvasItem, at: Vector2, radius := 3.6) -> void:
 	ci.draw_circle(at + Vector2(0.6, 0.9), radius, Color(0, 0, 0, 0.35))
 	ci.draw_circle(at, radius, BRASS_DARK)
 	ci.draw_circle(at + Vector2(-0.22, -0.22) * radius, radius * 0.66, BRASS_LIGHT)
-
-
-## Gear with `teeth`, turned by `angle`.
-static func gear(ci: CanvasItem, center: Vector2, radius: float, teeth: int, angle: float, color := BRASS) -> void:
-	var points := PackedVector2Array()
-	var tooth := TAU / teeth
-	for t in teeth:
-		var a := angle + t * tooth
-		points.append(center + Vector2.from_angle(a) * radius * 0.82)
-		points.append(center + Vector2.from_angle(a + tooth * 0.15) * radius)
-		points.append(center + Vector2.from_angle(a + tooth * 0.45) * radius)
-		points.append(center + Vector2.from_angle(a + tooth * 0.6) * radius * 0.82)
-	ci.draw_colored_polygon(points, color)
-	ci.draw_polyline(points + PackedVector2Array([points[0]]), color.darkened(0.45), 2.0, true)
-	ci.draw_circle(center, radius * 0.6, color.darkened(0.15))
-	for s in 4:
-		var a := angle + s * TAU / 4.0
-		ci.draw_line(center, center + Vector2.from_angle(a) * radius * 0.6, color.darkened(0.45), radius * 0.12, true)
-	ci.draw_circle(center, radius * 0.2, color.lightened(0.2))
-	ci.draw_circle(center, radius * 0.08, IRON)

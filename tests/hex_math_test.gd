@@ -212,11 +212,25 @@ func _test_health() -> void:
 	var shop := Island.create_starter(1)
 	shop.treasury.add_blueprint(3)
 	_check(shop.blueprint_cost(&"aura") == 1 and shop.blueprint_cost(&"repair") == 2, "price grows with the towers owned")
+	_check(shop.affordable_count(&"aura") == 2 and shop.affordable_count(&"repair") == 1, "3 blueprints buy 2 auras (1+2) or 1 repair (2)")
 	_check(shop.ensure_item(Inventory.tower_item(&"aura")) and shop.treasury.blueprints == 2, "buy an aura tower for 1 blueprint")
 	_check(shop.blueprint_cost(&"aura") == 2, "the next aura costs 2")
 	_check(not shop.ensure_item(Inventory.tower_item(&"repair", 5)), "levelled towers can't be bought")
 	_check(shop.ensure_item(Inventory.tower_item(&"aura")), "an aura in stock needs no purchase")
 	_check(not shop.can_get(Inventory.stone_item(Biome.Type.FOREST)), "biome stones can't be bought")
+	# Analysis counters and the battle log.
+	var track_island := Island.create_starter(1)
+	track_island.place_tower(Vector2i(1, 0), &"attack")
+	track_island.track(Vector2i(1, 0), &"damage", 12.0)
+	_check(track_island.get_tower(Vector2i(1, 0)).wave_stats[&"damage"] == 12.0 and track_island.wave_totals[&"attack"][&"damage"] == 12.0, "damage is tracked per tower and type")
+	track_island.start_wave_stats()
+	_check(track_island.get_tower(Vector2i(1, 0)).wave_stats.is_empty() and track_island.get_tower(Vector2i(1, 0)).mission_stats[&"damage"] == 12.0, "a new wave resets only the wave counters")
+	BattleLog.path = "user://test_battle_log.jsonl"
+	for i in BattleLog.MAX_WAVES + 5:
+		BattleLog.append({wave = i})
+	_check(BattleLog.count() == BattleLog.MAX_WAVES and int(BattleLog.entries()[0].wave) == 5, "the battle log keeps the last 100 waves")
+	DirAccess.remove_absolute(BattleLog.path)
+	BattleLog.path = "user://battle_log.jsonl"
 	# Bad luck protection: only for blueprints, resets when one drops.
 	var luck := Treasury.new()
 	luck.pity = 0.5

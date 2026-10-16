@@ -60,6 +60,39 @@ static func collect(island: Island, coord: Vector2i) -> Dictionary:
 	return result
 
 
+## The effects acting on `coord`, split by where they come from (same sums as collect()):
+## [{icon (IconCache kind), name, effects}] for the tile's own biome, each neighbouring wall
+## and each Aura tower in range.
+static func sources(island: Island, coord: Vector2i) -> Array:
+	var list: Array = []
+	var center := island.get_tile(coord)
+	if center == null:
+		return list
+	var auras := active_aura_towers(island, coord, TowerDefs.AURA_RADIUS_MAX + 1)
+	var own := {}
+	_add(own, PER_TIER, center, _tile_boost(auras, coord))
+	_add(own, SELF_PER_TIER, center, 1.0)
+	if not own.is_empty():
+		list.append({icon = IconCache.biome_kind(center.biome), name = "%s tile (Tier %d)" % [Biome.name_of(center.biome), center.tier], effects = own})
+	for n in HexMath.neighbors(coord):
+		var tile := island.get_tile(n)
+		if tile and tile.tower and tile.tower.type == &"wall":
+			list.append({icon = &"wall", name = "Wall next to it",
+				effects = {&"max_hp": TowerDefs.WALL_NEIGHBOUR_HP.get(tile.biome, 0.1) * island.effect_bonus(n, false)}})
+	var own_aura := center.tower != null and center.tower.type == &"aura"
+	for source in auras:
+		if own_aura and source != coord:
+			continue
+		var profile: AuraProfile = auras[source]
+		if HexMath.distance(source, coord) > profile.radius or profile.effects.is_empty():
+			continue
+		var effects := {}
+		for key in profile.effects:
+			effects[key] = profile.effects[key] * island.get_tower(source).aura_power
+		list.append({icon = &"aura", name = "Obelisk" if source != coord else "Own obelisk", effects = effects})
+	return list
+
+
 ## Powered Aura towers within `reach` of `coord`, as {coord: AuraProfile}.
 static func active_aura_towers(island: Island, coord: Vector2i, reach: int) -> Dictionary:
 	var result := {}

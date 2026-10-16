@@ -69,8 +69,11 @@ func _rebuild() -> void:
 	for i in TowerDefs.TYPES.size():
 		var type: StringName = TowerDefs.TYPES[i]
 		var owned := inventory.tower_count(type)
-		_tabs.set_tab_title(i + 1, "%s (%d)" % [String(type).capitalize(), owned])
-		_tab_info[i + 1] = "%s (%d in the inventory)\n%s" % [String(type).capitalize(), owned, TowerDefs.description_of(type)]
+		# In stock, plus how many the blueprints could buy ("Attack (1+2)").
+		var buyable := view.island.affordable_count(type)
+		_tabs.set_tab_title(i + 1, "%s (%d%s)" % [String(type).capitalize(), owned, "+%d" % buyable if buyable > 0 else ""])
+		_tab_info[i + 1] = "%s: %d in the inventory, %d more affordable with your %d blueprints\n%s" % [
+			String(type).capitalize(), owned, buyable, treasury.blueprints, TowerDefs.description_of(type)]
 	for child in _slots.get_children():
 		child.queue_free()
 	if _tabs.current_tab == TERRAIN_TAB:

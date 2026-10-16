@@ -25,8 +25,15 @@ func _get_minimum_size() -> Vector2:
 	var font := get_theme_default_font()
 	var width := 0.0
 	for entry in _entries():
-		width += ICON * 2.0 + 5.0 + font.get_string_size(str(entry[1]), HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE).x + GAP
-	return Vector2(width - GAP, 22)
+		width += ICON * 2.0 + 5.0 + font.get_string_size(str(entry[1]), HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE).x
+		width += GAP + _extra_gap(entry)
+	# The last gap becomes a little room before the plaque's right edge.
+	return Vector2(width - GAP + 6.0, 22)
+
+
+## A wider gap after the gold, setting it apart from the other counts.
+static func _extra_gap(entry: Array) -> float:
+	return 6.0 if entry[0] == -1 else 0.0
 
 
 ## [biome, or -1 for gold and -2 for blueprints, amount] for everything shown.
@@ -61,4 +68,4 @@ func _draw() -> void:
 		draw_string_outline(font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE, 3, Color(0, 0, 0, 0.7))
 		draw_string(font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE, tint)
 		x += ICON * 2.0 + 5.0 + font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE).x
-		x += GAP + (6.0 if entry[0] < 0 else 0.0)
+		x += GAP + _extra_gap(entry)

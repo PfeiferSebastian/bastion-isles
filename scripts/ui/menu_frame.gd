@@ -1,6 +1,6 @@
 extends Control
 ## Decorative steampunk frame for the main menu, drawn in code: brass border with rivets,
-## copper pipes with a pressure gauge, turning corner gears, hanging moss at the top and
+## copper pipes with a pressure gauge and a valve, hanging moss at the top and
 ## a grassy rock ledge growing over the bottom edge.
 
 const BRASS := MenuTheme.BRASS
@@ -15,7 +15,8 @@ const GRASS_LIGHT := Color("7cc35a")
 
 const INSET := 12.0
 const BAR := 14.0
-const GEAR_RADIUS := 44.0
+## Room kept at the top of the side pipes, where their junction boxes sit.
+const CORNER_SPACE := 44.0
 
 var _time := 0.0
 var _rocks := PackedVector2Array()
@@ -39,7 +40,6 @@ func _draw() -> void:
 	_draw_border()
 	_draw_moss()
 	_draw_ledge()
-	_draw_gears()
 
 
 # --- Pieces --------------------------------------------------------------
@@ -68,7 +68,7 @@ func _rivet(at: Vector2) -> void:
 	draw_circle(at + Vector2(-0.8, -0.8), 2.4, BRASS_LIGHT)
 
 
-## Copper pipes down both sides: each comes out of a riveted junction box under the gears,
+## Copper pipes down both sides: each comes out of a riveted junction box near the top,
 ## is fed by an elbow from the frame, runs down past a gauge (left) or a valve wheel (right)
 ## and disappears into the rocky ledge at the bottom.
 func _draw_pipes() -> void:
@@ -76,7 +76,7 @@ func _draw_pipes() -> void:
 	for i in 2:
 		var left := i == 0
 		var x := INSET + 34.0 if left else size.x - INSET - 34.0
-		var box_y := INSET + GEAR_RADIUS * 1.75
+		var box_y := INSET + CORNER_SPACE * 1.75
 		var bottom := size.y - 30.0   # hidden by the ledge drawn afterwards
 		# Feed from the frame bar into the box: a short horizontal run and an elbow.
 		var frame_x := INSET + BAR * 0.5 if left else size.x - INSET - BAR * 0.5
@@ -225,22 +225,3 @@ func _draw_ledge() -> void:
 		var lean := blade[2] + sin(_time * 1.5 + bx * 0.03) * 0.15
 		var tip := root + Vector2(lean * blade[1], -blade[1])
 		draw_line(root, tip, GRASS_LIGHT if int(bx) % 3 == 0 else GRASS, 2.0, true)
-
-
-func _draw_gears() -> void:
-	var r := GEAR_RADIUS
-	var spots := [
-		Vector2(INSET + r * 0.55, INSET + r * 0.55),
-		Vector2(size.x - INSET - r * 0.55, INSET + r * 0.55),
-	]
-	for i in spots.size():
-		var direction := 1.0 if i % 2 == 0 else -1.0
-		_gear(spots[i], r, 12, _time * 0.4 * direction, BRASS)
-		# Small gear meshing with the big one.
-		var small_at: Vector2 = spots[i] + Vector2(r * 1.25 * (1.0 if i == 0 else -1.0), r * 0.55)
-		_gear(small_at, r * 0.45, 8, -_time * 0.4 * direction * 12.0 / 8.0, COPPER)
-
-
-func _gear(center: Vector2, radius: float, teeth: int, angle: float, color: Color) -> void:
-	SteamParts.gear(self, center, radius, teeth, angle, color)
-

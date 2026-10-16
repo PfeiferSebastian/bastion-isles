@@ -3,8 +3,8 @@ extends Control
 ## Brass and iron console along the bottom of the combat screen, drawn in code behind the
 ## inventory, the gold plaque and the info window. It follows those windows: a low deck
 ## under the inventory that steps up into a raised cabinet for the info window on the
-## right. Bevelled window frames with rivets, a brass rail along the top edge and gears
-## behind it give it a 3D steampunk look. Static: it only redraws when a window moves.
+## right. Bevelled window frames with rivets and a brass rail along the top edge give it a 3D
+## steampunk look. Static: it only redraws when a window moves.
 ## Blocks clicks to the map inside its outline.
 
 const IRON := Color("3a2e24")
@@ -47,7 +47,6 @@ func _draw() -> void:
 		Vector2(step_x, high.position.y + STEP), Vector2(step_x + STEP, high.position.y),
 		Vector2(size.x, high.position.y), Vector2(size.x, size.y),
 	])
-	_draw_gears(low.position.y, step_x)
 	_draw_body(low.position.y)
 	_draw_rail()
 	for i in windows.size():
@@ -112,14 +111,6 @@ func _draw_window_frame(r: Rect2, plaque: bool) -> void:
 		return
 	for p in [frame.position, Vector2(frame.end.x, frame.position.y), Vector2(frame.position.x, frame.end.y), frame.end]:
 		SteamParts.rivet(self, p + (frame.get_center() - p).sign() * 4.5, 2.6)
-
-
-## Gears behind the rail: a meshing pair at the step up to the cabinet and one at the left end.
-func _draw_gears(top: float, step_x: float) -> void:
-	var big := Vector2(step_x - 52.0, top - 14.0)
-	SteamParts.gear(self, big, 34.0, 12, 0.0, MenuTheme.BRASS)
-	SteamParts.gear(self, big + Vector2(-40.0, -22.0), 16.0, 8, 0.2, MenuTheme.COPPER)
-	SteamParts.gear(self, Vector2(14.0, top - 12.0), 30.0, 10, 0.4, MenuTheme.COPPER)
 
 
 ## Height of the console's top edge at `x`.

@@ -39,6 +39,8 @@ func _unhandled_key_input(event: InputEvent) -> void:
 
 ## Saves the island (repaired, as after any fight) and returns to the main menu.
 func _leave() -> void:
+	if not GameSession.edit_mode:
+		_combat.finish_wave_log()
 	_island_view.island.restore_tiles()
 	IslandSave.save(_island_view.island)
 	get_tree().change_scene_to_file(MENU_SCENE)
