@@ -109,8 +109,14 @@ func _add_slot(kind: StringName, item: Dictionary, badge := "") -> void:
 	slot.modulate = Color.WHITE if amount > 0 or not price.is_empty() else Color(1, 1, 1, 0.4)
 	slot.disabled = not island.can_get(item)
 	slot.button_down.connect(func() -> void:
-		if view.island.ensure_item(item):
-			view.begin_drag(item))
+		var shop := view.island
+		var paid := shop.price_of(item)
+		var bought := shop.treasury.inventory.count(item) <= 0
+		if shop.ensure_item(item):
+			view.begin_drag(item)
+			# A right click before placing undoes the purchase.
+			if bought:
+				view.note_purchase(item, paid))
 	_slots.add_child(slot)
 
 

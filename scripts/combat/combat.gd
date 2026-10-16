@@ -35,12 +35,17 @@ const ROUND_COUNT := 1.1
 signal item_found(text: String)
 ## The mission goal is reached: no more enemies spawn and the player may leave.
 signal mission_completed
+## The HQ fell: the mission is lost and half of all resources with it (`lost`, see
+## Island.lose_resources).
+signal mission_failed(lost: Dictionary)
 
 var waves_enabled := true
 var kills := 0
 ## Seconds until the mission starts (enemies spawn only after that).
 var mission_countdown := 0.0
 var mission_done := false
+## The HQ was destroyed: the mission is lost.
+var defeated := false
 ## Rounds proceeded past the first (0 = the first round).
 var mission_round := 0
 var _base_kill_goal := 0
@@ -84,12 +89,13 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	if mission_countdown > 0.0:
 		mission_countdown = maxf(mission_countdown - delta, 0.0)
-	elif waves_enabled and not mission_done:
+	elif waves_enabled and not mission_done and not defeated:
 		_wave_timer -= delta
 		if enemies().is_empty():
 			_wave_timer = minf(_wave_timer, wave_gap_when_clear)
 		if _wave_timer <= 0.0:
 			spawn_wave()
+	_check_defeat()
 	_beams.clear()
 	_beam_colors.clear()
 	for enemy in enemies():
@@ -220,7 +226,7 @@ func finish_wave_log() -> void:
 ## Spawns one enemy of `kind` (random mix if empty) on a ring around the island; none once
 ## the mission is done.
 func spawn_enemy(kind: StringName = &"", factor := 1.0, at: Variant = null, speed_factor := -1.0) -> Enemy:
-	if mission_done or enemies().size() >= max_enemies:
+	if mission_done or defeated or enemies().size() >= max_enemies:
 		return null
 	var enemy := Enemy.new()
 	enemy.setup(kind if kind != &"" else EnemyDefs.pick_random(), factor, speed_factor)
@@ -311,6 +317,23 @@ func _on_enemy_died(enemy: Enemy) -> void:
 		_clear_sky()
 		finish_wave_log()
 		mission_completed.emit()
+
+
+## Ends the mission as lost once the HQ has no HP left: the enemies leave, towers stop
+## gaining experience and half of all resources are lost.
+func _check_defeat() -> void:
+	if defeated or mission_done:
+		return
+	var hq := _view.island.get_tile(Island.HQ_COORD)
+	if hq == null or hq.hp > 0.0:
+		return
+	defeated = true
+	_view.island.gains_xp = false
+	_clear_sky()
+	if not _wave_log.is_empty():
+		_wave_log.result = "defeat"
+	finish_wave_log()
+	mission_failed.emit(_view.island.lose_resources())
 
 
 ## Mission won: the remaining enemies vanish in a puff (no loot) and all shots in flight go.

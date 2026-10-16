@@ -33,6 +33,7 @@ var combat: Combat:
 		combat = value
 		combat.item_found.connect(notify)
 		combat.mission_completed.connect(func() -> void: notify("Mission complete! No more enemies are coming."))
+		combat.mission_failed.connect(_on_mission_failed)
 
 
 ## Announces level-ups of buildings (every few levels, and when their ground rises a tier).
@@ -273,9 +274,26 @@ func show_edit_mode() -> void:
 	_mission_panel.position.x = (_root.size.x - _mission_panel.size.x) / 2.0
 
 
+## The HQ fell: says what was lost.
+func _on_mission_failed(lost: Dictionary) -> void:
+	var parts: PackedStringArray = ["%d gold" % lost.gold, "%d blueprints" % lost.blueprints]
+	for biome in lost.resources:
+		parts.append("%d %s" % [lost.resources[biome], Biome.resource_name(biome)])
+	notify("Your bastion has fallen! Lost: " + ", ".join(parts))
+
+
 ## Top centre: countdown before the mission starts, then nothing, then "complete" with Leave
-## and Proceed (a harder next round).
+## and Proceed (a harder next round) – or, if the HQ fell, "fallen" with Leave only.
 func _update_mission() -> void:
+	if combat.defeated:
+		_mission_text.text = "Bastion fallen – half of your resources are lost"
+		_leave.visible = true
+		_leave.set_meta(&"info", "Return to the menu – the island is kept (repaired), lost buildings stay lost")
+		_proceed.visible = false
+		_mission_panel.visible = true
+		_mission_panel.reset_size()
+		_mission_panel.position.x = (_root.size.x - _mission_panel.size.x) / 2.0
+		return
 	_leave.visible = combat.mission_done
 	_proceed.visible = combat.mission_done
 	if combat.mission_done:

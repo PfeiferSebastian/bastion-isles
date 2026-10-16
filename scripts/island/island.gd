@@ -876,6 +876,45 @@ func ensure_item(item: Dictionary) -> bool:
 	return true
 
 
+## Undoes a purchase that wasn't placed: takes `item` back out of the inventory and refunds
+## `price` (from price_of at the time of buying).
+func refund(item: Dictionary, price: Dictionary) -> void:
+	if price.is_empty() or not treasury.inventory.take(item):
+		return
+	if price.currency == CURRENCY_BLUEPRINTS:
+		treasury.blueprints += price.amount
+		var kind := String(purchase_kind(item))
+		var at := unsaved_towers.rfind(kind)
+		if at >= 0:
+			unsaved_towers.remove_at(at)
+		if persist_blueprints:
+			IslandSave.save_blueprints(self)
+	else:
+		treasury.resources[price.currency] = treasury.resources.get(price.currency, 0) + price.amount
+	treasury.changed.emit()
+
+
+## Share of gold, blueprints and faction resources lost when the HQ falls.
+const DEFEAT_LOSS := 0.5
+
+
+## The HQ fell: loses DEFEAT_LOSS of gold, blueprints and every faction resource (rounded up)
+## and returns what was lost: {gold, blueprints, resources = {Biome.Type: amount}}.
+func lose_resources() -> Dictionary:
+	var lost := {gold = ceili(treasury.gold * DEFEAT_LOSS), blueprints = ceili(treasury.blueprints * DEFEAT_LOSS), resources = {}}
+	treasury.gold -= lost.gold
+	treasury.blueprints -= lost.blueprints
+	for biome in treasury.resources:
+		var amount := ceili(treasury.resources[biome] * DEFEAT_LOSS)
+		treasury.resources[biome] -= amount
+		if amount > 0:
+			lost.resources[biome] = amount
+	treasury.changed.emit()
+	if persist_blueprints:
+		IslandSave.save_blueprints(self)
+	return lost
+
+
 ## Adds a found blueprint (saved right away).
 func add_blueprint() -> void:
 	treasury.add_blueprint()

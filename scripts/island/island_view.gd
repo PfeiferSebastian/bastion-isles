@@ -58,6 +58,8 @@ var _canvas: CanvasItem = self
 var _hex_points: PackedVector2Array
 var _font: Font
 var _dragging := false
+## A slot purchase not placed yet: {item, price} (see note_purchase), or {}.
+var _pending_purchase: Dictionary = {}
 var _drag_start := Vector2.ZERO
 
 const DRAG_THRESHOLD := 10.0
@@ -184,6 +186,7 @@ func place_item(coord: Vector2i, item: Dictionary, world_position: Vector2) -> b
 					inventory.add(Inventory.stone_item(tile.biome))
 				inventory.take(item)
 				island.set_biome(coord, item.biome)
+	_pending_purchase = {}
 	return true
 
 
@@ -217,9 +220,19 @@ func hold(item: Dictionary) -> void:
 	held = item
 
 
+## Drops the held item. If it was bought by pressing its slot and not placed yet, the
+## purchase is undone (item back, price refunded).
 func release_hold() -> void:
+	if not _pending_purchase.is_empty() and _pending_purchase.item == held:
+		island.refund(_pending_purchase.item, _pending_purchase.price)
+	_pending_purchase = {}
 	held = {}
 	_dragging = false
+
+
+## Remembers a purchase made by pressing a slot, so cancelling before placing refunds it.
+func note_purchase(item: Dictionary, price: Dictionary) -> void:
+	_pending_purchase = {item = item, price = price}
 
 
 ## Starts dragging `item` from the inventory; releasing over the map places it once.

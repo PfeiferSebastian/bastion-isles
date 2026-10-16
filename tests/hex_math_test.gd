@@ -218,6 +218,15 @@ func _test_health() -> void:
 	_check(not shop.ensure_item(Inventory.tower_item(&"repair", 5)), "levelled towers can't be bought")
 	_check(shop.ensure_item(Inventory.tower_item(&"aura")), "an aura in stock needs no purchase")
 	_check(not shop.can_get(Inventory.stone_item(Biome.Type.FOREST)), "biome stones can't be bought")
+	# Defeat: half of gold, blueprints and faction resources are lost (rounded up).
+	var loser := Island.create_starter(1)
+	loser.treasury.gold = 101
+	loser.treasury.blueprints = 5
+	loser.treasury.add_resource(Biome.Type.FOREST, 4)
+	var lost := loser.lose_resources()
+	_check(lost.gold == 51 and loser.treasury.gold == 50, "defeat costs half the gold")
+	_check(lost.blueprints == 3 and loser.treasury.blueprints == 2, "defeat costs half the blueprints")
+	_check(lost.resources[Biome.Type.FOREST] == 2 and loser.treasury.resources[Biome.Type.FOREST] == 2, "defeat costs half of every resource")
 	# Analysis counters and the battle log.
 	var track_island := Island.create_starter(1)
 	track_island.place_tower(Vector2i(1, 0), &"attack")
