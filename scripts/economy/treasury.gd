@@ -1,9 +1,8 @@
 class_name Treasury
 extends RefCounted
-## What the player owns (GDD §9): gold (unlimited), blueprint pieces, and the inventory of
-## placeable items. A full set of blueprints of one kind (see Island.blueprints_needed)
-## becomes a tower of that type, or a neutral tile, in the inventory; that is the only way to
-## get new towers and tiles.
+## What the player owns (GDD §9): gold (unlimited), blueprints, faction resources and the inventory of
+## placeable items. Blueprints are a currency: new towers and tiles are bought with them
+## (Island.ensure_item); that is the only way to get them.
 
 signal changed
 
@@ -13,13 +12,12 @@ const STONE_BIOMES: Array[Biome.Type] = [
 ]
 
 var gold := 0
-var blueprints: Dictionary[StringName, int] = {}
+## Blueprints: the currency for new towers and tiles (see Island.blueprint_cost).
+var blueprints := 0
 ## Faction resources (Biome.Type -> amount): Wood, Ore, Aether, Life Essence, Pearls.
 var resources: Dictionary[int, int] = {}
-## Blueprints found so far per kind, for the bad luck protection.
-var blueprints_found: Dictionary[StringName, int] = {}
-## Bad luck protection: extra chance for the least found blueprint, grows every kill
-## without a blueprint and resets when one is found.
+## Bad luck protection: extra blueprint chance per kill, grows every kill without a blueprint
+## and resets when one is found. Rare drops (biome stones) don't get it.
 var pity := 0.0
 var inventory := Inventory.new()
 
@@ -30,42 +28,45 @@ func _init(starting_gold := 0) -> void:
 
 
 func to_dict() -> Dictionary:
-	return {gold = gold, blueprints = blueprints, inventory = inventory.to_dict(), resources = resources,
-		blueprints_found = blueprints_found, pity = pity}
+	return {gold = gold, blueprints = blueprints, inventory = inventory.to_dict(), resources = resources, pity = pity}
 
 
 ## Replaces gold, blueprints and inventory with saved data (see to_dict()).
 func load_dict(data: Dictionary) -> void:
 	gold = int(data.get("gold", gold))
-	blueprints.clear()
-	var saved: Dictionary = data.get("blueprints", {})
-	for type in saved:
-		blueprints[StringName(type)] = int(saved[type])
+	blueprints = blueprints_from(data.get("blueprints", 0))
 	if data.has("inventory"):
 		inventory.load_dict(data.inventory)
 	resources.clear()
 	var saved_resources: Dictionary = data.get("resources", {})
 	for biome in saved_resources:
 		resources[int(biome)] = int(saved_resources[biome])
-	load_luck(data)
+	pity = float(data.get("pity", pity))
 	changed.emit()
 
 
-## Bad luck protection state from saved data.
-func load_luck(data: Dictionary) -> void:
-	var found: Dictionary = data.get("blueprints_found", {})
-	for kind in found:
-		blueprints_found[StringName(kind)] = int(found[kind])
-	pity = float(data.get("pity", pity))
+## A saved blueprint count; older saves kept blueprints per tower type, which are added up.
+static func blueprints_from(saved: Variant) -> int:
+	if saved is Dictionary:
+		var total := 0
+		for kind in saved:
+			total += int(saved[kind])
+		return total
+	return int(saved)
 
 
-## The blueprint kind found least often so far (the bad luck protection favours it).
-func least_found_blueprint() -> StringName:
-	var best: StringName = &""
-	for kind in Economy.blueprint_kinds():
-		if best == &"" or blueprints_found.get(kind, 0) < blueprints_found.get(best, 0):
-			best = kind
-	return best
+func add_blueprint(amount := 1) -> void:
+	blueprints += amount
+	pity = 0.0
+	changed.emit()
+
+
+func spend_blueprints(amount: int) -> bool:
+	if blueprints < amount:
+		return false
+	blueprints -= amount
+	changed.emit()
+	return true
 
 
 func add_resource(biome: int, amount := 1) -> void:
@@ -83,7 +84,7 @@ func spend(gold_cost: int, biome: int, amount: int) -> bool:
 	return true
 
 
-## The inventory item a blueprint set of `kind` becomes.
+## The inventory item bought for blueprints as `kind` (a tower type or &"tile").
 static func blueprint_item(kind: StringName) -> Dictionary:
 	return Inventory.tile_item() if kind == &"tile" else Inventory.tower_item(kind)
 
@@ -100,16 +101,3 @@ func spend_gold(amount: int) -> bool:
 	changed.emit()
 	return true
 
-
-## Adds a blueprint of `kind` (a tower type or &"tile"); with `needed` of them the set
-## becomes one of that kind in the inventory. Returns true then.
-func add_blueprint(kind: StringName, needed: int) -> bool:
-	blueprints[kind] = blueprints.get(kind, 0) + 1
-	var built := blueprints[kind] >= needed
-	if built:
-		blueprints[kind] -= needed
-		inventory.add(blueprint_item(kind))
-	blueprints_found[kind] = blueprints_found.get(kind, 0) + 1
-	pity = 0.0
-	changed.emit()
-	return built

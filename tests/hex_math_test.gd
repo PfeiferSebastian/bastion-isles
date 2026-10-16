@@ -208,21 +208,25 @@ func _test_health() -> void:
 	var ranger := Tower.new(&"attack", 100.0)
 	ranger.xp = Tower.xp_for_level(100)
 	_check(is_equal_approx(ranger.range_factor(), 1.1), "range +10% at level 100")
-	# Stocks that already cover their set (e.g. after a tower was lost) become towers.
-	var stock := Island.create_starter(1)
-	stock.treasury.blueprints[&"aura"] = 2
-	stock.tick(0.01)
-	_check(stock.treasury.inventory.tower_count(&"aura") == 1 and stock.treasury.blueprints[&"aura"] == 1, "covered blueprint sets turn into towers")
-	stock.treasury.blueprints[&"repair"] = 2
-	stock.tick(0.01)
-	_check(stock.treasury.inventory.tower_count(&"repair") == 2 and stock.treasury.blueprints[&"repair"] == 0, "a repair set of 2 completes with one repair owned")
-	# Bad luck protection: favours the least found blueprint and resets when one drops.
+	# Blueprints are a currency: towers and tiles are bought with them.
+	var shop := Island.create_starter(1)
+	shop.treasury.add_blueprint(3)
+	_check(shop.blueprint_cost(&"aura") == 1 and shop.blueprint_cost(&"repair") == 2, "price grows with the towers owned")
+	_check(shop.ensure_item(Inventory.tower_item(&"aura")) and shop.treasury.blueprints == 2, "buy an aura tower for 1 blueprint")
+	_check(shop.blueprint_cost(&"aura") == 2, "the next aura costs 2")
+	_check(not shop.ensure_item(Inventory.tower_item(&"repair", 5)), "levelled towers can't be bought")
+	_check(shop.ensure_item(Inventory.tower_item(&"aura")), "an aura in stock needs no purchase")
+	_check(not shop.can_get(Inventory.stone_item(Biome.Type.FOREST)), "biome stones can't be bought")
+	# Bad luck protection: only for blueprints, resets when one drops.
 	var luck := Treasury.new()
-	luck.blueprints_found = {&"attack": 2, &"wall": 1}
-	_check(luck.least_found_blueprint() == &"energy", "least found blueprint is favoured")
 	luck.pity = 0.5
-	luck.add_blueprint(&"energy", 5)
-	_check(luck.pity == 0.0 and luck.blueprints_found[&"energy"] == 1, "a found blueprint resets the protection")
+	luck.add_blueprint()
+	_check(luck.pity == 0.0 and luck.blueprints == 1, "a found blueprint resets the protection")
+	var luck_enemy := Enemy.new()
+	luck_enemy.setup(&"rammer")
+	_check(Economy.blueprint_chance(luck_enemy, 0.1) > Economy.blueprint_chance(luck_enemy), "the protection raises the blueprint chance")
+	_check(is_equal_approx(Economy.stone_chance(luck_enemy), Economy.STONE_DROP_CHANCE * EnemyDefs.DROP_FACTOR[&"rammer"]), "rare drops get no protection")
+	luck_enemy.free()
 	_check(xp_island.get_tile(xc).tier == 1, "levels no longer raise the ground")
 	xp_island.place_tower(Vector2i(2, 0), &"attack")
 	xp_island.tick(0.01)
@@ -542,24 +546,17 @@ func _test_economy() -> void:
 	var t := Treasury.new(100)
 	_check(t.spend_gold(60) and t.gold == 40, "spend gold")
 	_check(not t.spend_gold(50) and t.gold == 40, "cannot overspend gold")
-	# Blueprints: a full set of one type becomes a tower in the inventory.
-	_check(not t.add_blueprint(&"scout", 3) and not t.add_blueprint(&"scout", 3), "two of three blueprints are not a tower yet")
-	_check(t.inventory.count(Inventory.tower_item(&"scout")) == 0, "no scout tower yet")
-	_check(t.add_blueprint(&"scout", 3) and t.inventory.count(Inventory.tower_item(&"scout")) == 1, "a full set makes a tower")
-	_check(t.blueprints[&"scout"] == 0, "the set is used up")
+	# Blueprints are a currency; found ones are saved at once, as are towers bought with them.
 	var bp_island := Island.create_starter(1)
-	_check(bp_island.blueprints_needed(&"scout") == 1, "the first tower of a type needs one blueprint")
-	_check(bp_island.blueprints_needed(&"attack") == 2, "the next one needs two, and so on")
-	_check(bp_island.missing_blueprint_kinds().has(&"scout") and not bp_island.missing_blueprint_kinds().has(&"attack"), "missing types known")
-	# Blueprints are saved the moment they are found and come back even without an island save.
 	IslandSave.path = "user://test_island.json"
 	IslandSave.blueprint_path = "user://test_blueprints.json"
 	bp_island.persist_blueprints = true
-	_check(bp_island.add_blueprint(&"scout"), "the first scout needs one blueprint")
-	_check(not bp_island.add_blueprint(&"scout"), "the second scout needs two")
+	bp_island.add_blueprint()
+	bp_island.add_blueprint()
+	_check(bp_island.ensure_item(Inventory.tower_item(&"scout")) and bp_island.treasury.blueprints == 1, "buy a scout for 1 blueprint")
 	var reloaded := IslandSave.load_island(1)
-	_check(reloaded.treasury.blueprints.get(&"scout", 0) == 1, "blueprint progress survives without an island save")
-	_check(reloaded.treasury.inventory.count(Inventory.tower_item(&"scout")) == 1, "towers from blueprints survive without an island save")
+	_check(reloaded.treasury.blueprints == 1, "blueprints survive without an island save")
+	_check(reloaded.treasury.inventory.count(Inventory.tower_item(&"scout")) == 1, "towers bought with blueprints survive without an island save")
 	_check(IslandSave.load_island(1).treasury.inventory.count(Inventory.tower_item(&"scout")) == 1, "and are handed out only once")
 	DirAccess.remove_absolute(IslandSave.path)
 	DirAccess.remove_absolute(IslandSave.blueprint_path)
@@ -587,13 +584,15 @@ func _test_economy() -> void:
 	strong.setup(&"bomber", 6.0)
 	_check(Economy.roll_loot(weak, rng).gold == 1, "light enemy gives 1 gold")
 	_check(is_equal_approx(Economy.stone_chance(weak), 0.001 * EnemyDefs.DROP_FACTOR[&"rammer"]), "biome stones are very rare")
-	_check(Economy.blueprint_chance(weak, true) > Economy.blueprint_chance(weak, false), "missing types drop a bit more often")
-	var tile_set := Island.create_starter(1)
-	var needed := tile_set.blueprints_needed(&"tile")
-	for i in needed - 1:
-		tile_set.add_blueprint(&"tile")
-	var before := tile_set.treasury.inventory.tiles
-	_check(tile_set.add_blueprint(&"tile") and tile_set.treasury.inventory.tiles == before + 1, "tile blueprints make a tile")
+	# Biome stones cost their faction resource: 1 for the first tile of that biome, then 2, 3 …
+	var biomes := Island.create_starter(1)
+	var forest := Inventory.stone_item(Biome.Type.FOREST)
+	_check(biomes.biome_cost(Biome.Type.FOREST) == 1 and not biomes.can_get(forest), "the first forest costs 1 wood")
+	biomes.treasury.add_resource(Biome.Type.FOREST, 3)
+	_check(biomes.ensure_item(forest) and biomes.treasury.resources[Biome.Type.FOREST] == 2, "buy a forest stone for 1 wood")
+	biomes.set_biome(Vector2i(1, 0), Biome.Type.FOREST)
+	biomes.treasury.inventory.take(forest)
+	_check(biomes.biome_cost(Biome.Type.FOREST) == 2, "the second forest costs 2")
 	_check(Economy.kill_gold(strong) == 5, "heavy enemy gives 5 gold")
 	_check(Economy.kill_gold(strong) > Economy.kill_gold(weak), "stronger enemies give more gold")
 	_check(Economy.stone_chance(strong) > Economy.stone_chance(weak), "big ships drop a little more often")

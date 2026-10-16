@@ -7,7 +7,7 @@ extends CanvasLayer
 ## that shows every hover text.
 
 ## Shown in the info window while nothing with a description is hovered.
-const HELP := "Click a slot, then the island · or drag a slot onto it\nRight click: pick up / cancel\nDrag: pan · Wheel: zoom · Esc: menu\nP: waves on/off · W: spawn a wave · U: tier upgrade (level 100)\n\nDebug: D damage · +/- tier · F1–F4 enemies · V fog\nG +500 gold · R +5 stones and tiles · B a tower of each type"
+const HELP := "Click a slot, then the island · or drag a slot onto it\nRight click: pick up / cancel\nDrag: pan · Wheel: zoom · Esc: menu\nP: waves on/off · W: spawn a wave · U: tier upgrade (level 100)\n\nDebug: D damage · +/- tier · F1–F4 enemies · V fog\nG +500 gold · R +5 stones and tiles · B +10 blueprints"
 
 const OVERLAYS := [
 	[&"energy", "Energy: generators bright, storages by fill (red = empty), empty tiles show how much they let through"],
@@ -25,8 +25,6 @@ var view: IslandView:
 	set(value):
 		view = value
 		view.island.tower_levelled.connect(_on_tower_levelled)
-		view.island.blueprint_set_completed.connect(func(kind: StringName) -> void:
-			notify("Blueprints complete: +1 %s" % ("Tile" if kind == &"tile" else String(kind).capitalize() + " tower")))
 		view.island.towers_merged.connect(func(hexes: Array[Vector2i]) -> void:
 			var tower := view.island.get_tower(hexes[0])
 			notify("%s merged: %d hexes, Tier %d" % [String(tower.type).capitalize(), hexes.size(), tower.tier]))
@@ -245,10 +243,10 @@ func _on_overlay_toggled(on: bool, icon: OverlayIcon) -> void:
 
 ## Hover text of the gold plaque: gold and every faction resource by name.
 static func _describe_treasury(t: Treasury) -> String:
-	var parts: PackedStringArray = ["Gold %d" % t.gold]
+	var parts: PackedStringArray = ["Gold %d" % t.gold, "Blueprints %d (buy new towers and tiles)" % t.blueprints]
 	for biome in Treasury.STONE_BIOMES:
 		parts.append("%s %d (%s)" % [Biome.resource_name(biome), t.resources.get(biome, 0), Biome.name_of(biome)])
-	return " · ".join(parts) + "\nFaction resources drop from enemies and pay for tier upgrades."
+	return " · ".join(parts) + "\nFaction resources drop from enemies and pay for biome stones and tier upgrades."
 
 
 ## What a click with the held inventory item would do here.

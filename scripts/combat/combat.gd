@@ -237,8 +237,7 @@ func _on_enemy_died(enemy: Enemy) -> void:
 	kills += 1
 	EnergyGrid.notify_enemy_died(_view.island, _view.world_to_hex(enemy.global_position))
 	var treasury := _view.island.treasury
-	var loot := Economy.roll_loot(enemy, _loot_rng, _view.island.missing_blueprint_kinds(),
-		treasury.pity, treasury.least_found_blueprint())
+	var loot := Economy.roll_loot(enemy, _loot_rng, treasury.pity)
 	var at := enemy.global_position
 	treasury.add_gold(loot.gold)
 	popup(at, "+%d gold" % loot.gold, Color("ffd23f"))
@@ -250,17 +249,13 @@ func _on_enemy_died(enemy: Enemy) -> void:
 	if loot.resource >= 0:
 		treasury.add_resource(loot.resource)
 		popup(at + Vector2(0, -48), "+1 " + Biome.resource_name(loot.resource), Biome.color_of(loot.resource).lightened(0.3))
-	if loot.blueprint == &"":
-		# Bad luck protection: the least found blueprint gets a little likelier.
+	if loot.blueprint:
+		_view.island.add_blueprint()
+		popup(at + Vector2(0, -32), "+1 Blueprint", Color("8fc8ff"))
+		item_found.emit("Blueprint found (%d)" % treasury.blueprints)
+	else:
+		# Bad luck protection: blueprints get a little likelier every kill without one.
 		treasury.pity += Economy.PITY_STEP
-	if loot.blueprint != &"":
-		var name := String(loot.blueprint).capitalize()
-		var built := _view.island.add_blueprint(loot.blueprint)
-		popup(at + Vector2(0, -32), "Blueprint: " + name, Color("f0d28a"))
-		if built:
-			item_found.emit("Blueprints complete: +1 %s" % (name if loot.blueprint == &"tile" else name + " tower"))
-		else:
-			item_found.emit("Blueprint found: %s (%d/%d)" % [name, treasury.blueprints[loot.blueprint], _view.island.blueprints_needed(loot.blueprint)])
 	if not mission_done and kills >= mission_kill_goal:
 		mission_done = true
 		# The fight is won: towers stop gaining experience.

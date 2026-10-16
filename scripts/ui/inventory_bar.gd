@@ -2,7 +2,8 @@ class_name InventoryBar
 extends VBoxContainer
 ## Inventory at the bottom of the combat screen: a tab for terrain (tiles and biome stones)
 ## and one tab per tower type (stacks by level). Click a slot to select it for
-## placing, or drag it onto the map. Locked tower types need a blueprint to be bought, but
+## placing, or drag it onto the map. New towers (level 0, tier 1) and tiles are bought with
+## blueprints by pressing their slot with none left; the price shows bottom left. Formerly:
 ## towers already in the inventory (e.g. the starting Repair) can always be placed.
 
 const TERRAIN_TAB := 0
@@ -78,7 +79,7 @@ func _rebuild() -> void:
 			_add_slot(STONE_KINDS[biome], Inventory.stone_item(biome))
 	else:
 		var type: StringName = TowerDefs.TYPES[_tabs.current_tab - 1]
-		# The fresh level 0 stack always shows (it carries the blueprint progress).
+		# The fresh level 0 stack always shows (it is the one bought with blueprints).
 		var stacks := inventory.tower_stacks(type)
 		if not stacks.has(Vector2i(0, 1)):
 			stacks.push_front(Vector2i(0, 1))
@@ -86,28 +87,26 @@ func _rebuild() -> void:
 			_add_slot(type, Inventory.tower_item(type, stack.x, stack.y), ("T%d " % stack.y if stack.y > 1 else "") + "Lv%d" % stack.x)
 
 
-## A slot selects its item (click) or starts a drag; empty stacks are greyed out.
+## A slot selects its item (click) or starts a drag. With none left, a buyable item is bought
+## first (towers and tiles with blueprints, biome stones with their faction resource); its
+## price shows bottom left, and while the player can't afford it a dark build wipe shows how
+## much of the price they already have.
 func _add_slot(kind: StringName, item: Dictionary, badge := "") -> void:
-	var amount := view.island.treasury.inventory.count(item)
+	var island := view.island
+	var amount := island.treasury.inventory.count(item)
 	var slot := ToolIcon.new(kind, "×%d" % amount, "")
 	slot.badge = badge
-	var fresh_tower: bool = item.kind == &"tower" and item.level == 0 and item.get("tier", 1) == 1
-	var blueprint_kind: StringName = &"tile" if item.kind == &"tile" else (item.type if fresh_tower else &"")
-	if blueprint_kind != &"":
-		# Blueprints toward the next one: "have/need" in the corner, plus the build wipe when empty.
-		var have: int = view.island.treasury.blueprints.get(blueprint_kind, 0)
-		var need := view.island.blueprints_needed(blueprint_kind)
-		slot.progress = float(have) / need
-		slot.corner_text = "%d/%d" % [have, need]
+	var price := island.price_of(item)
+	if not price.is_empty():
+		slot.cost = price.amount
+		slot.cost_currency = price.currency
+		slot.progress = clampf(float(island.funds(price.currency)) / price.amount, 0.0, 1.0)
 	slot.set_meta(&"item", item)
 	slot.button_group = _group
-	# Towers and tiles show their blueprint progress (a dark build wipe while none are in
-	# stock), so only other empty stacks are faded.
-	var has_progress: bool = blueprint_kind != &""
-	slot.modulate = Color.WHITE if amount > 0 or has_progress else Color(1, 1, 1, 0.4)
-	slot.disabled = amount <= 0
+	slot.modulate = Color.WHITE if amount > 0 or not price.is_empty() else Color(1, 1, 1, 0.4)
+	slot.disabled = not island.can_get(item)
 	slot.button_down.connect(func() -> void:
-		if view.island.treasury.inventory.count(item) > 0:
+		if view.island.ensure_item(item):
 			view.begin_drag(item))
 	_slots.add_child(slot)
 
@@ -117,15 +116,24 @@ static func describe(item: Dictionary, island: Island = null) -> String:
 	var text := Inventory.label_of(item)
 	match item.kind:
 		&"stone":
-			text += " · only found as loot\n" + Biome.description_of(item.biome)
+			text += "\n" + Biome.description_of(item.biome)
+			if island:
+				text += "\nCosts %d %s (you have %d) – each %s tile you own makes the next cost one more" % [
+					island.biome_cost(item.biome), Biome.resource_name(item.biome), island.funds(item.biome), Biome.name_of(item.biome)]
 		&"tile":
 			text += "\nNew neutral ground next to the island (towers on an empty hex take one along).\n" + Biome.description_of(Biome.Type.NEUTRAL)
+			if island:
+				text += "\nCosts %d blueprints (you have %d)" % [island.blueprint_cost(&"tile"), island.treasury.blueprints]
 		&"tower":
 			text += "\n" + TowerDefs.description_of(item.type)
 			var stored := Tower.new(item.type, 1.0)
 			stored.tier = item.get("tier", 1)
 			stored.xp = Tower.xp_for_level(item.level)
-			text += "\nKeeps its level and tier: stats +%d%%" % roundi((stored.stat_factor() - 1.0) * 100.0)
+			if item.level > 0 or item.get("tier", 1) > 1:
+				text += "\nKeeps its level and tier: stats +%d%%" % roundi((stored.stat_factor() - 1.0) * 100.0)
+			elif island:
+				text += "\nCosts %d blueprints (you have %d) – each one you own makes the next cost one more" % [
+					island.blueprint_cost(item.type), island.treasury.blueprints]
 	return text
 
 

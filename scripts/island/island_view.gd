@@ -140,8 +140,9 @@ func place_item(coord: Vector2i, item: Dictionary, world_position: Vector2) -> b
 				and island.cluster_with(coord, item.type) > Island.MAX_CLUSTER:
 			message.emit(world_position, "At most %d %s towers together" % [Island.MAX_CLUSTER, String(item.type).capitalize()])
 		return false
-	if inventory.count(item) <= 0:
-		message.emit(world_position, "No %s left" % Inventory.label_of(item))
+	if not island.ensure_item(item):
+		var kind := Island.purchase_kind(item)
+		message.emit(world_position, "No %s left" % Inventory.label_of(item) if kind == &"" else "Needs %d blueprints" % island.blueprint_cost(kind))
 		return false
 	var tile := island.get_tile(coord)
 	match item.kind:
@@ -150,7 +151,7 @@ func place_item(coord: Vector2i, item: Dictionary, world_position: Vector2) -> b
 				return false
 			if tile == null:
 				# Empty ground next to the island: a tile from the inventory goes down first.
-				if inventory.count(Inventory.tile_item()) <= 0:
+				if not island.ensure_item(Inventory.tile_item()):
 					message.emit(world_position, "Needs a tile too")
 					return false
 				inventory.take(Inventory.tile_item())
@@ -243,13 +244,13 @@ func _input(event: InputEvent) -> void:
 
 ## The held item stays selected while there are more in the inventory.
 func _keep_or_release() -> void:
-	if not held.is_empty() and island.treasury.inventory.count(held) <= 0:
+	if not held.is_empty() and not island.can_get(held):
 		release_hold()
 
 
 ## U upgrades the hovered tower one tier (at level 100, if affordable).
 ## Debug keys: D damages, +/- change the tier, G gives gold, R biome stones and tiles,
-## B a full blueprint set (one tower) of each type.
+## B +10 blueprints.
 func _unhandled_key_input(event: InputEvent) -> void:
 	var key := event as InputEventKey
 	if key == null or not key.pressed or key.echo:
@@ -277,9 +278,7 @@ func _unhandled_key_input(event: InputEvent) -> void:
 				island.treasury.inventory.add(Inventory.stone_item(biome), 5)
 			island.treasury.inventory.add(Inventory.tile_item(), 5)
 		KEY_B:
-			for type in TowerDefs.TYPES:
-				while not island.add_blueprint(type):
-					pass
+			island.treasury.add_blueprint(10)
 
 
 func _shift_tier(step: int) -> void:

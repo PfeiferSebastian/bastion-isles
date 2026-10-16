@@ -10,9 +10,6 @@ signal tower_destroyed(coord: Vector2i)
 signal tile_destroyed(coord: Vector2i)
 ## A building (group) reached a level worth announcing; `tier_up` if its ground rose a tier.
 signal tower_levelled(coord: Vector2i, level: int)
-## A blueprint set was completed outside a kill (the set got smaller, e.g. after a tower was
-## lost or the rules changed): one `kind` went into the inventory.
-signal blueprint_set_completed(kind: StringName)
 ## Towers merged into one tower covering `hexes`.
 signal towers_merged(hexes: Array[Vector2i])
 
@@ -28,9 +25,11 @@ const TILE_HP_PER_TIER := 100.0
 ## Every tower in a combined building (2+ neighbouring towers of one type) works this much
 ## better: two towers count as 2.6, three as 3.9 and so on.
 const MERGE_BONUS := 0.3
-## Blueprints for a tower: this many, plus one for every tower of that type already owned
-## (for tiles: one for every unused tile in the inventory).
+## Blueprint price of a new tower: this many, plus one for every tower of that type already
+## owned (tiles: plus one for every unused tile in the inventory).
 const BLUEPRINTS_BASE := 1
+## Currency id of blueprints in price_of() (faction resources use their Biome.Type).
+const CURRENCY_BLUEPRINTS := -2
 ## Tier upgrade cost per tower: gold × the new tier, and faction resource × the new tier
 ## (the resource of the tile's biome; neutral ground takes whichever the player has most of).
 const TIER_UP_GOLD := 100
@@ -58,7 +57,7 @@ var _group_cache: Dictionary = {}
 var gains_xp := true
 ## Save found blueprints right away (IslandSave); only the player's island in the game does.
 var persist_blueprints := false
-## Tower types completed from blueprints since the island was last saved.
+## Towers and tiles bought with blueprints since the island was last saved.
 var unsaved_towers: Array[String] = []
 
 
@@ -730,46 +729,85 @@ func owned_of(kind: StringName) -> int:
 	return treasury.inventory.tiles if kind == &"tile" else towers_owned(kind)
 
 
-## Blueprints of `kind` needed for the next one: more the more of them the player owns.
-func blueprints_needed(kind: StringName) -> int:
+## Blueprints a new `kind` (tower type or &"tile") costs: more the more of them the player owns.
+func blueprint_cost(kind: StringName) -> int:
 	return BLUEPRINTS_BASE + owned_of(kind)
 
 
-## Blueprint kinds the player has none of (their blueprints drop a little more often).
-func missing_blueprint_kinds() -> Array[StringName]:
-	var result: Array[StringName] = []
-	for kind in Economy.blueprint_kinds():
-		if owned_of(kind) == 0:
-			result.append(kind)
-	return result
+## The blueprint kind an inventory item is bought as, or &"" if blueprints can't buy it
+## (biome stones, and towers above level 0 / tier 1).
+static func purchase_kind(item: Dictionary) -> StringName:
+	match item.get("kind", &""):
+		&"tile":
+			return &"tile"
+		&"tower":
+			if item.level == 0 and item.get("tier", 1) == 1:
+				return item.type
+	return &""
 
 
-## Adds a found blueprint; true when it completed a set and a tower went into the inventory.
-func add_blueprint(type: StringName) -> bool:
-	var built := treasury.add_blueprint(type, blueprints_needed(type))
-	if built:
-		unsaved_towers.append(String(type))
-	if persist_blueprints:
-		IslandSave.save_blueprints(self)
-	return built
+## Price of buying one `item`: {currency, amount}, where currency is CURRENCY_BLUEPRINTS for
+## towers and tiles or a Biome.Type for biome stones (paid in that faction's resource), or {}
+## if it can't be bought.
+func price_of(item: Dictionary) -> Dictionary:
+	if item.get("kind", &"") == &"stone":
+		return {currency = int(item.biome), amount = biome_cost(item.biome)}
+	var kind := purchase_kind(item)
+	if kind == &"":
+		return {}
+	return {currency = CURRENCY_BLUEPRINTS, amount = blueprint_cost(kind)}
 
 
-## Turns every blueprint stock that already covers its set into items. Sets get smaller when
-## towers are lost (or picked up into nothing), so stocks can reach their set without a new
-## find; checked every tick and after loading.
-func complete_blueprint_sets() -> void:
-	var built := false
-	for kind in Economy.blueprint_kinds():
-		while treasury.blueprints.get(kind, 0) >= blueprints_needed(kind):
-			treasury.blueprints[kind] -= blueprints_needed(kind)
-			treasury.inventory.add(Treasury.blueprint_item(kind))
-			unsaved_towers.append(String(kind))
-			blueprint_set_completed.emit(kind)
-			built = true
-	if built:
-		treasury.changed.emit()
+## How much of a price's currency the player has.
+func funds(currency: int) -> int:
+	return treasury.blueprints if currency == CURRENCY_BLUEPRINTS else treasury.resources.get(currency, 0)
+
+
+## Faction resource a biome stone costs: 1 for the first tile of that biome, 2 for the second
+## and so on (biome tiles on the island plus stones of it in the inventory).
+func biome_cost(biome: int) -> int:
+	var owned := treasury.inventory.count(Inventory.stone_item(biome))
+	for coord in _tiles:
+		if _tiles[coord].biome == biome:
+			owned += 1
+	return 1 + owned
+
+
+## True if the player has `item` or can pay for one.
+func can_get(item: Dictionary) -> bool:
+	if treasury.inventory.count(item) > 0:
+		return true
+	var price := price_of(item)
+	return not price.is_empty() and funds(price.currency) >= price.amount
+
+
+## Makes sure one `item` is in the inventory, buying it if none is left.
+func ensure_item(item: Dictionary) -> bool:
+	if treasury.inventory.count(item) > 0:
+		return true
+	var price := price_of(item)
+	if price.is_empty():
+		return false
+	if price.currency == CURRENCY_BLUEPRINTS:
+		if not treasury.spend_blueprints(price.amount):
+			return false
+		treasury.inventory.add(Treasury.blueprint_item(purchase_kind(item)))
+		# Kept even if the mission ends without a save (see IslandSave).
+		unsaved_towers.append(String(purchase_kind(item)))
 		if persist_blueprints:
 			IslandSave.save_blueprints(self)
+		return true
+	if not treasury.spend(0, price.currency, price.amount):
+		return false
+	treasury.inventory.add(item)
+	return true
+
+
+## Adds a found blueprint (saved right away).
+func add_blueprint() -> void:
+	treasury.add_blueprint()
+	if persist_blueprints:
+		IslandSave.save_blueprints(self)
 
 
 ## Every building group on the island (single towers are groups of one).
@@ -889,7 +927,6 @@ func tick(delta: float) -> void:
 		add_xp(coord, xp_rate * delta)
 	_even_out_groups()
 	_check_levels()
-	complete_blueprint_sets()
 
 
 ## Aura towers pay their energy every frame; their power scales the buff (0 = off).

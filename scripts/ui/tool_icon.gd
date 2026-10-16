@@ -12,11 +12,13 @@ var kind: StringName
 var caption := ""
 ## Small text in the top-left corner (e.g. a tower's level).
 var badge := ""
-## Progress toward the next one (blueprints), 0–1, or -1 for none. With none in stock the
-## icon is covered by a dark clock wipe that clears as progress grows, like a build timer.
+## Progress toward affording the next one (blueprints), 0–1, or -1 for none. With none in
+## stock the icon is covered by a dark clock wipe that clears as progress grows.
 var progress := -1.0
-## Small text in the bottom-left corner (e.g. blueprints "1/3").
-var corner_text := ""
+## Price shown bottom left, or -1 for none; `cost_currency` is Island.CURRENCY_BLUEPRINTS
+## (blueprint icon) or a Biome.Type (that faction's resource gem).
+var cost := -1
+var cost_currency := -2
 
 
 func _init(icon_kind: StringName, caption_text: String, tooltip: String) -> void:
@@ -52,13 +54,18 @@ func _draw() -> void:
 		_:
 			_tower_symbol(c, r)
 	draw_polyline(hex + PackedVector2Array([hex[0]]), Color(0, 0, 0, 0.55), 1.5, true)
-	if progress >= 0.0 and caption == "×0":
+	if progress >= 0.0 and progress < 1.0 and caption == "×0":
 		_draw_build_wipe(hex, c, r)
-	if corner_text != "":
+	if cost >= 0:
+		if cost_currency == Island.CURRENCY_BLUEPRINTS:
+			draw_blueprint_icon(self, Vector2(8, size.y - 10), 6.0)
+		else:
+			draw_resource_icon(self, Vector2(8, size.y - 10), 6.0, cost_currency, true)
 		var cfont := get_theme_default_font()
-		var cpos := Vector2(3, size.y - 4)
-		draw_string_outline(cfont, cpos, corner_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, 4, Color(0, 0, 0, 0.85))
-		draw_string(cfont, cpos, corner_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, MenuTheme.BRASS_LIGHT)
+		var cpos := Vector2(16, size.y - 4)
+		var tint := MenuTheme.CREAM if progress >= 1.0 else Color("e08070")
+		draw_string_outline(cfont, cpos, str(cost), HORIZONTAL_ALIGNMENT_LEFT, -1, 12, 4, Color(0, 0, 0, 0.85))
+		draw_string(cfont, cpos, str(cost), HORIZONTAL_ALIGNMENT_LEFT, -1, 12, tint)
 	if badge != "":
 		var bfont := get_theme_default_font()
 		draw_string_outline(bfont, Vector2(3, 13), badge, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, 4, Color(0, 0, 0, 0.85))
@@ -168,6 +175,28 @@ func _tower_symbol(c: Vector2, r: float) -> void:
 		TowerArt.draw(self, kind, Biome.Type.NEUTRAL, c + Vector2(0, -r * 0.05), r * 0.6)
 	else:
 		_tower(c, r)
+
+
+## A faction resource gem: a small hex in the biome's colour (dark while `owned` is false).
+static func draw_resource_icon(ci: CanvasItem, at: Vector2, radius: float, biome: int, owned: bool) -> void:
+	var gem := PackedVector2Array()
+	for p in HexMath.corners(radius):
+		gem.append(at + p)
+	var color := Biome.color_of(biome)
+	ci.draw_colored_polygon(gem, color if owned else color.darkened(0.6))
+	ci.draw_polyline(gem + PackedVector2Array([gem[0]]), Color(0, 0, 0, 0.6), 1.0, true)
+
+
+## A small rolled-out blueprint: blue sheet with a white grid and a curled edge.
+static func draw_blueprint_icon(ci: CanvasItem, at: Vector2, half: float) -> void:
+	var sheet := Rect2(at - Vector2(half, half * 0.8), Vector2(half * 2.0, half * 1.6))
+	ci.draw_rect(Rect2(sheet.position + Vector2(0.5, 1), sheet.size), Color(0, 0, 0, 0.5))
+	ci.draw_rect(sheet, Color("2f6db5"))
+	for k in 2:
+		var x := sheet.position.x + sheet.size.x * (k + 1) / 3.0
+		ci.draw_line(Vector2(x, sheet.position.y + 1), Vector2(x, sheet.end.y - 1), Color(1, 1, 1, 0.6), 1.0)
+	ci.draw_line(Vector2(sheet.position.x + 1, at.y), Vector2(sheet.end.x - 1, at.y), Color(1, 1, 1, 0.6), 1.0)
+	ci.draw_rect(Rect2(sheet.end.x - 2.5, sheet.position.y, 2.5, sheet.size.y), Color("9cc4ef"))
 
 
 ## Dark wipe over the part still missing, sweeping clockwise from the top, with a bright
