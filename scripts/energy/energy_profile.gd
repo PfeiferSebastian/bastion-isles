@@ -1,14 +1,8 @@
 class_name EnergyProfile
 extends RefCounted
-## What a generator (Energy tower or HQ) does: output and how much arrives per hex distance.
+## What a generator does: its output and how many pipes it feeds at once.
 
 ## Energy per second.
 var output := 6.0
-## Share that arrives at distance 0, 1, 2… The last entry sets the reach.
-var falloff := PackedFloat32Array([1.0, 1.0, 0.5])
-## Biome trait: &"conduit" (Plains), &"decay" (Swamp) or &"".
-var special: StringName = &""
-
-
-func reach() -> int:
-	return falloff.size() - 1
+## Pipes fed at once (one per tier).
+var pipes := 1

@@ -11,6 +11,10 @@ var is_hq := false
 var tower: Tower = null
 ## Stored energy; capacity comes from EnergyGrid.capacity().
 var energy := 0.0
+## Seconds its building has sat without energy (raises its urgency, see EnergyGrid).
+var starved := 0.0
+## Part of `energy` a building holds for the buildings behind it (it passes only that on).
+var transit := 0.0
 ## Structure of the ground itself; max comes from Island.tile_max_hp().
 var hp := 0.0
 ## Wasteland: destroyed in battle, until the fight is over (GDD §4.6).

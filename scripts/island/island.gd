@@ -78,6 +78,12 @@ var construction: Dictionary[Vector2i, float] = {}
 ## Analysis: totals of the current wave per building type (&"hq" for the HQ), e.g.
 ## {&"attack": {&"damage": 120.0, &"lost": 1}}; the battle log reads and resets them.
 var wave_totals: Dictionary = {}
+## Energy grid: time not yet spent in whole ticks, and last tick's pipe flows
+## {Vector4i(from.x, from.y, to.x, to.y): energy per second} for the overlay.
+var energy_clock := 0.0
+var energy_flows: Dictionary = {}
+## Turn credits of pipes that take turns ({Vector4i(from, to): credit}, see EnergyGrid).
+var energy_credits: Dictionary = {}
 ## Seconds the uptime averages span (roughly the last minute).
 const UPTIME_SPAN := 60.0
 ## Save found blueprints right away (IslandSave); only the player's island in the game does.
@@ -668,7 +674,7 @@ func _update_analysis(delta: float) -> void:
 		var tower := get_tower(coord)
 		if tower == null or tower.is_part:
 			continue
-		var powered := EnergyGrid.capacity(get_tile(coord)) <= 0.0 or group_pool(coord, &"energy").x > 0.01
+		var powered := EnergyGrid.is_producer(get_tile(coord)) or group_pool(coord, &"energy").x > 0.01
 		if tower.type == &"aura" or tower.type == &"scout":
 			powered = tower.aura_power > 0.0
 			tower.saw_target = true

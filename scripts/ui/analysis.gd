@@ -76,7 +76,7 @@ static func island_lines(island: Island, combat: Combat) -> PackedStringArray:
 	var lines: PackedStringArray = ["— Island analysis —"]
 	var dps := HqWeapons.dps(island.hq_biome())
 	var demand := 0.0
-	var income := EnergyProfiles.hq().output
+	var income := 0.0
 	for coord in island.coords():
 		var tower := island.get_tower(coord)
 		if tower == null or tower.is_part:
@@ -85,7 +85,7 @@ static func island_lines(island: Island, combat: Combat) -> PackedStringArray:
 			dps += dps_of(island, coord)
 		demand += energy_use(island, coord)
 		var generator := EnergyGrid.generator_at(island, coord)
-		if generator and coord != Island.HQ_COORD:
+		if generator:
 			income += generator.output
 	lines.append("Total DPS %.1f (HQ %s included)" % [dps, HqWeapons.name_of(island.hq_biome()).to_lower()])
 	if combat:
@@ -97,7 +97,7 @@ static func island_lines(island: Island, combat: Combat) -> PackedStringArray:
 		for kind in EnemyDefs.wave_plan(combat.wave + 1, combat.count_factor()):
 			next_hp += EnemyDefs.TYPES[kind].hp * combat.strength_factor()
 		lines.append("Next wave: %d HP · %s to kill" % [roundi(next_hp), _time(next_hp / maxf(dps, 0.01))])
-	lines.append("Energy made %.1f/s · buildings can use up to %.1f/s" % [income, demand])
+	lines.append("Energy made %.1f/s · buildings can use up to %.1f/s (upkeep included)" % [income, demand])
 	var dealt := 0.0
 	var taken := 0.0
 	var lost := 0.0
@@ -115,11 +115,15 @@ static func dps_of(island: Island, coord: Vector2i) -> float:
 	return AttackProfiles.for_tile(island, coord).sustained_dps()
 
 
-## Most energy per second the building on `coord` uses while working.
+## Most energy per second the building on `coord` uses while working (upkeep included).
 static func energy_use(island: Island, coord: Vector2i) -> float:
 	var tower := island.get_tower(coord)
 	if tower == null:
 		return 0.0
+	return EnergyGrid.upkeep(tower.type) + _work_energy(island, coord, tower)
+
+
+static func _work_energy(island: Island, coord: Vector2i, tower: Tower) -> float:
 	match tower.type:
 		&"attack":
 			var p := AttackProfiles.for_tile(island, coord)
@@ -136,15 +140,27 @@ static func energy_use(island: Island, coord: Vector2i) -> float:
 	return 0.0
 
 
-## Most energy per second generators can bring to `coord` (as if nothing else took any).
+## Most energy per second that can flow into `coord`: its entry pipes from the neighbours
+## closer to a generator (as if nothing else took any).
 static func energy_income(island: Island, coord: Vector2i) -> float:
-	var income := 0.0
-	for source in island.coords():
-		var generator := EnergyGrid.generator_at(island, source)
-		if generator == null:
+	var dist := EnergyGrid.distances(island)
+	if not dist.has(coord):
+		return 0.0
+	var tile := island.get_tile(coord)
+	var rates: Array[float] = []
+	for n in HexMath.neighbors(coord):
+		if dist.get(n, -1) != dist[coord] - 1:
 			continue
-		var shares := EnergyGrid.delivery_map(island, source, generator)
-		income += generator.output * shares.get(coord, 0.0)
+		var source := island.get_tile(n)
+		var rate := EnergyGrid.pipe_rate(tile, island)
+		if not EnergyGrid.is_producer(source):
+			rate = minf(rate, EnergyGrid.pipe_rate(source, island))
+		rates.append(rate)
+	rates.sort()
+	rates.reverse()
+	var income := 0.0
+	for i in mini(rates.size(), EnergyGrid.entry_pipes(island, coord)):
+		income += rates[i]
 	return income
 
 

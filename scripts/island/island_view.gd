@@ -535,6 +535,8 @@ func _draw_overlay() -> void:
 				_overlay_tier(tile, hex, center)
 			&"merge":
 				_overlay_merge(coord, tile, hex)
+	if overlay == &"energy":
+		_overlay_energy_flows()
 
 
 ## Merge mode: towers that can merge glow gold together with the towers they would merge
@@ -576,24 +578,35 @@ func _draw_tier_arrows() -> void:
 
 
 ## Generators bright, storages saturated by their reserve (grey = empty, full yellow = full,
-## red outline when empty), empty tiles by how much they let through.
+## red outline when a building is empty); empty ground and the HQ fainter.
 func _overlay_energy(coord: Vector2i, tile: IslandTile, hex: PackedVector2Array, center: Vector2) -> void:
-	if EnergyGrid.generator_at(island, coord):
+	if EnergyGrid.is_producer(tile):
 		_canvas.draw_colored_polygon(hex, Color(ENERGY_COLOR, 0.8))
 		return
 	var cap := EnergyGrid.capacity(tile)
-	if cap > 0.0:
-		var ratio := clampf(tile.energy / cap, 0.0, 1.0)
-		var reserve := Color.from_hsv(ENERGY_COLOR.h, ENERGY_COLOR.s * ratio, 0.95, 0.75)
-		_canvas.draw_colored_polygon(hex, reserve)
-		if ratio < 0.05:
-			_canvas.draw_polyline(_closed(hex), ENERGY_EMPTY_COLOR, 3.0, true)
-		_draw_label(center + Vector2(0, hex_size * 0.5), "%d%%" % roundi(ratio * 100.0), Color(0.15, 0.1, 0.05))
+	if cap <= 0.0:
+		_canvas.draw_colored_polygon(hex, Color(0.1, 0.1, 0.15, 0.65))
 		return
-	var through := EnergyGrid.pass_through(tile, island)
-	_canvas.draw_colored_polygon(hex, Color(0.1, 0.1, 0.15, 0.55 * (1.0 - through) + 0.1))
-	if not tile.is_hq:
-		_draw_label(center, "%d%%" % roundi(through * 100.0), Color(1, 1, 1, 0.85))
+	var ratio := clampf(tile.energy / cap, 0.0, 1.0)
+	var alpha := 0.75 if tile.tower else 0.4
+	_canvas.draw_colored_polygon(hex, Color.from_hsv(ENERGY_COLOR.h, ENERGY_COLOR.s * ratio, 0.95, alpha))
+	if tile.tower and ratio < EnergyGrid.EMPTY_SHARE:
+		_canvas.draw_polyline(_closed(hex), ENERGY_EMPTY_COLOR, 3.0, true)
+	_draw_label(center + Vector2(0, hex_size * 0.5), "%d%%" % roundi(ratio * 100.0), Color(0.15, 0.1, 0.05) if tile.tower else Color(1, 1, 1, 0.85))
+
+
+## Energy moving through pipes in the last tick: a line from tile to tile, thicker the more
+## flows, with a dot near the receiving end for the direction.
+func _overlay_energy_flows() -> void:
+	for key: Vector4i in island.energy_flows:
+		var rate: float = island.energy_flows[key]
+		if rate <= 0.01:
+			continue
+		var from := HexMath.to_pixel(Vector2i(key.x, key.y), hex_size)
+		var to := HexMath.to_pixel(Vector2i(key.z, key.w), hex_size)
+		var width := clampf(1.5 + rate * 0.8, 1.5, 8.0)
+		_canvas.draw_line(from.lerp(to, 0.2), from.lerp(to, 0.8), Color(ENERGY_COLOR, 0.9), width, true)
+		_canvas.draw_circle(from.lerp(to, 0.8), width * 0.8, ENERGY_COLOR)
 
 
 ## Tiles covered by Repair towers in green (stronger where more heal arrives);
@@ -695,7 +708,8 @@ func _draw_group_status(group: Array[Vector2i]) -> void:
 	var coord := group[0]
 	var hp := island.group_pool(coord, &"hp")
 	var shield := island.group_pool(coord, &"shield")
-	var energy := island.group_pool(coord, &"energy")
+	# Generators pass their store straight on, so it shows no bar.
+	var energy := Vector2.ZERO if EnergyGrid.is_producer(island.get_tile(coord)) else island.group_pool(coord, &"energy")
 	var hp_start := 4 if energy.y > 0.0 else 2
 	var hp_edges := 6 - (2 if shield.y > 0.0 else 0) - (2 if energy.y > 0.0 else 0)
 	var hp_ratio := clampf(hp.x / maxf(hp.y, 0.001), 0.0, 1.0)
@@ -716,8 +730,9 @@ func _draw_group_status(group: Array[Vector2i]) -> void:
 
 func _draw_ring_bar(ring: PackedVector2Array, sixth: float, start: int, edges: int, ratio: float, color: Color, track: Color, from_end := false) -> void:
 	_canvas.draw_polyline(_ring_piece(ring, sixth, start, edges, 1.0), track, HP_RING_WIDTH + 2.0, true)
-	if ratio > 0.0:
-		_canvas.draw_polyline(_ring_piece(ring, sixth, start, edges, ratio, from_end), color, HP_RING_WIDTH, true)
+	var piece := _ring_piece(ring, sixth, start, edges, ratio, from_end) if ratio > 0.0 else PackedVector2Array()
+	if piece.size() >= 2:
+		_canvas.draw_polyline(piece, color, HP_RING_WIDTH, true)
 
 
 ## Like _arc, but along a group's ring: `edges` sixths from sixth `start`, covering `ratio`.
@@ -760,16 +775,15 @@ static func _perimeter_point(corners: PackedVector2Array, start: int, distance: 
 
 
 ## While hovering a tower (or the HQ), tint the tiles it affects:
-## generators by how much energy arrives, walls their buffed neighbours, attack towers their range.
+## generators the tiles their energy reaches (fainter further on), walls their buffed neighbours, attack towers their range.
 func _draw_tower_reach() -> void:
 	var tile := island.get_tile(hovered_coord)
 	if tile == null:
 		return
 	var shares := {}
 	var color := ENERGY_COLOR
-	var profile := EnergyGrid.generator_at(island, hovered_coord)
-	if profile:
-		shares = EnergyGrid.delivery_map(island, hovered_coord, profile)
+	if EnergyGrid.is_producer(tile):
+		shares = EnergyGrid.fed_by(island, hovered_coord)
 	elif tile.tower and tile.tower.type == &"aura":
 		var aura := AuraProfiles.for_tile(island, hovered_coord)
 		color = aura.color

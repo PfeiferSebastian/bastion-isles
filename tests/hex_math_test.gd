@@ -352,46 +352,89 @@ func _test_enemy_statuses() -> void:
 func _test_energy() -> void:
 	var island := Island.create_starter(3)
 	var c := Vector2i(1, 0)
-	_check(EnergyGrid.capacity(island.get_tile(c)) == 0.0, "empty tile stores no energy")
+	_check(is_equal_approx(EnergyGrid.capacity(island.get_tile(c)), 9.0), "every tile stores pipe rate × 3")
+	_check(is_equal_approx(EnergyGrid.pipe_rate(island.get_tile(c)), 6.0), "empty ground is a power line (twice the rate)")
 	island.place_tower(c, &"attack")
-	_check(EnergyGrid.capacity(island.get_tile(c)) == 20.0, "consumer tile gets a storage")
+	_check(is_equal_approx(EnergyGrid.pipe_rate(island.get_tile(c)), 3.0), "built tiles pass 3/s per pipe")
 	island.set_biome(c, Biome.Type.MOUNTAIN)
-	_check(EnergyGrid.capacity(island.get_tile(c)) == 30.0, "tier 1 storage is larger")
-	island.change_tower_type(c, &"energy")
-	_check(EnergyGrid.capacity(island.get_tile(c)) == 0.0, "generators store nothing")
+	island.get_tile(c).tier = 3
+	_check(is_equal_approx(EnergyGrid.capacity(island.get_tile(c)), 12.0), "higher tiers store and pass more")
+	_check(EnergyGrid.entry_pipes(island, c) == 3, "buildings take energy in through one pipe per tier")
+	_check(EnergyGrid.upkeep(&"attack") == EnergyGrid.UPKEEP and EnergyGrid.upkeep(&"energy") == 0.0, "every building but generators pays upkeep")
 
-	# Paths: an empty tile is a lossy conduit, a built tile passes energy on fully.
-	var grid := Island.create_starter(3)
+	# A generator feeds a turret through an empty tile: nothing lost, one pipe at Tier 0–1.
+	var line := Island.create_starter(3)
 	var gen := Vector2i(1, 0)
 	var mid := Vector2i(2, 0)
 	var target := Vector2i(3, 0)
-	grid.place_tower(gen, &"energy")
-	grid.place_tower(target, &"attack")
-	var profile := EnergyProfiles.for_tile(grid, gen)
-	var shares := EnergyGrid.delivery_map(grid, gen, profile)
-	_check(is_equal_approx(shares[target], 0.30 * 0.5), "neutral conduit passes only 30% on top of falloff")
-	grid.set_biome(mid, Biome.Type.LAKE)
-	_check(is_equal_approx(EnergyGrid.delivery_map(grid, gen, profile)[target], 0.70 * 0.5), "water conducts best")
-	grid.damage_tile(mid, grid.tile_max_hp(mid) * 0.5)
-	_check(is_equal_approx(EnergyGrid.delivery_map(grid, gen, profile)[target], 0.35 * 0.5), "damaged ground passes less")
-	grid.restore_tiles()
-	# Storehouses are batteries: 5 × 10 s of a basic generator, filled from leftovers,
-	# handed on to buildings that run low.
+	line.place_tower(gen, &"energy")
+	line.place_tower(target, &"attack")
+	_check(is_equal_approx(EnergyGrid.generator_at(line, gen).output, 6.0), "neutral generator makes 6/s")
+	_check(EnergyGrid.generator_at(line, Island.HQ_COORD) == null, "the HQ is a hub and makes nothing")
+	for i in 30:
+		EnergyGrid.step(line, EnergyGrid.TICK)
+	_check(line.get_tile(target).energy > 0.0, "energy reaches the turret along the road")
+	_check(line.get_tile(mid).energy <= EnergyGrid.capacity(line.get_tile(mid)), "road tile stays within its store")
+	# Fixed ticks: one long frame and many short ones move the same energy.
+	var a := Island.create_starter(2)
+	var b := Island.create_starter(2)
+	for isl in [a, b]:
+		isl.place_tower(Vector2i(1, 0), &"energy")
+		isl.place_tower(Vector2i(2, 0), &"attack")
+	EnergyGrid.tick(a, 0.5)
+	for i in 50:
+		EnergyGrid.tick(b, 0.01)
+	_check(is_equal_approx(a.get_tile(Vector2i(2, 0)).energy, b.get_tile(Vector2i(2, 0)).energy), "grid runs in fixed ticks")
+	# Urgency: the emptier, hungrier building is served first.
+	var fork := Island.create_starter(2)
+	fork.place_tower(Vector2i(0, 1), &"energy")
+	fork.place_tower(Vector2i(1, 1), &"attack")
+	fork.place_tower(Vector2i(-1, 2), &"scout")
+	fork.get_tile(Vector2i(1, 1)).energy = 0.0
+	fork.get_tile(Vector2i(-1, 2)).energy = 0.0
+	# The generator's single pipe takes turns by demand: the turret (weight 2) gets more turns.
+	for i in 9:
+		EnergyGrid.step(fork, EnergyGrid.TICK)
+	_check(fork.get_tile(Vector2i(1, 1)).energy > fork.get_tile(Vector2i(-1, 2)).energy * 1.5, "turret outranks scout")
+	_check(fork.get_tile(Vector2i(-1, 2)).energy > 0.0, "scout still gets its turns")
+	# A full building on the road passes energy through to the one behind it without giving
+	# up its own store.
+	var chain := Island.create_starter(3)
+	chain.place_tower(Vector2i(1, 0), &"energy")
+	chain.place_tower(Vector2i(2, 0), &"wall")
+	chain.place_tower(Vector2i(3, 0), &"attack")
+	var wall := chain.get_tile(Vector2i(2, 0))
+	wall.energy = EnergyGrid.capacity(wall)
+	chain.get_tile(Vector2i(3, 0)).energy = 0.0
+	for i in 10:
+		EnergyGrid.step(chain, EnergyGrid.TICK)
+	_check(chain.get_tile(Vector2i(3, 0)).energy > 0.0, "energy passes through a full building")
+	_check(wall.energy >= EnergyGrid.capacity(wall) - EnergyGrid.UPKEEP * 1.0 - 0.01, "the building keeps its own store")
+	# Overflow: a generator with no one to feed fills its store, spills to side tiles, then wastes.
+	var full := Island.create_starter(1)
+	full.place_tower(Vector2i(1, 0), &"energy")
+	for i in 200:
+		EnergyGrid.step(full, EnergyGrid.TICK)
+	var side := full.get_tile(Vector2i(1, -1))
+	_check(side.energy > 0.0, "spill fills side tiles")
+	_check(full.get_tower(Vector2i(1, 0)).wave_stats.get(&"wasted", 0.0) > 0.0, "spill past full stores is wasted")
+	# Storehouses hand their energy to buildings next to them.
 	var store_island := Island.create_starter(2)
 	var store := Vector2i(1, 0)
 	var user := Vector2i(2, 0)
 	store_island.place_tower(store, &"warehouse")
-	_check(is_equal_approx(EnergyGrid.capacity(store_island.get_tile(store)), 300.0), "storehouse holds 300 energy")
-	store_island.get_tile(store).energy = 300.0
+	_check(is_equal_approx(EnergyGrid.capacity(store_island.get_tile(store)), EnergyGrid.STORAGE_CAPACITY), "storehouse is a capacitor")
+	store_island.get_tile(store).energy = EnergyGrid.STORAGE_CAPACITY
 	store_island.place_tower(user, &"attack")
 	store_island.get_tile(user).energy = 0.0
-	EnergyGrid.tick(store_island, 1.0)
-	_check(store_island.get_tile(user).energy > 0.0 and store_island.get_tile(store).energy < 300.0, "storehouse hands energy to buildings that run low")
-	grid.place_tower(mid, &"warehouse")
-	_check(is_equal_approx(EnergyGrid.delivery_map(grid, gen, profile)[target], 0.5), "built tiles pass energy without loss")
-	EnergyGrid.distribute(grid, gen, profile, 10.0)
-	_check(is_equal_approx(grid.get_tile(target).energy, 5.0), "distribute delivers the arriving share")
-	_check(EnergyProfiles.base(Biome.Type.MOUNTAIN).reach() == 3, "mountain reach 3")
+	EnergyGrid.step(store_island, EnergyGrid.TICK)
+	_check(store_island.get_tile(user).energy > 0.0, "storehouse hands energy to buildings that need it")
+	# Upkeep drains an unconnected building.
+	var lonely := Island.create_starter(2)
+	lonely.place_tower(c, &"wall")
+	lonely.get_tile(c).energy = 5.0
+	EnergyGrid.tick(lonely, 1.0)
+	_check(is_equal_approx(lonely.get_tile(c).energy, 5.0 - EnergyGrid.UPKEEP), "upkeep is paid every second")
 
 	# Drawing energy.
 	var draw := Island.create_starter(3)
@@ -423,16 +466,6 @@ func _test_energy() -> void:
 	grove.damage_tower(c, 50.0)
 	_check(is_equal_approx(grove.heal(c, true, 20.0), 21.0), "forest gives +5% healing received")
 	_check(is_equal_approx(AttackProfiles.base(Biome.Type.NEUTRAL).range_hexes, AttackProfiles.BASE_RANGE + 1.0), "neutral attack reaches 1 hex further")
-
-	# Plains conduit evens out storages in reach.
-	var plains := Island.create_starter(2)
-	plains.set_biome(c, Biome.Type.PLAINS)
-	plains.place_tower(c, &"energy")
-	plains.place_tower(Vector2i(2, 0), &"attack")
-	plains.place_tower(Vector2i(1, 1), &"attack")
-	plains.get_tile(Vector2i(2, 0)).energy = 20.0
-	EnergyGrid._balance(plains, c, EnergyProfiles.for_tile(plains, c), 100.0)
-	_check(plains.get_tile(Vector2i(2, 0)).energy < 20.0 and plains.get_tile(Vector2i(1, 1)).energy > 0.0, "conduit balances storage")
 
 	# Walls buff the max HP of adjacent buildings, more on Mountain.
 	var walls := Island.create_starter(2)

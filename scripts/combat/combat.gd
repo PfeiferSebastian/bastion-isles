@@ -341,7 +341,6 @@ func _reveal_shooter(enemy: Enemy) -> void:
 
 func _on_enemy_died(enemy: Enemy) -> void:
 	kills += 1
-	EnergyGrid.notify_enemy_died(_view.island, _view.world_to_hex(enemy.global_position))
 	var treasury := _view.island.treasury
 	var loot := Economy.roll_loot(enemy, _loot_rng, treasury.pity)
 	var at := enemy.global_position

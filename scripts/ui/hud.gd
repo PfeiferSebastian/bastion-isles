@@ -492,11 +492,10 @@ func _describe_tile(coord: Vector2i) -> String:
 	lines.append("Ground HP %d / %d" % [ceili(tile.hp), roundi(view.island.tile_max_hp(coord))])
 	if view.island.construction.has(coord):
 		lines.append("Under construction: %d s of fighting left · takes %d%% damage" % [ceili(view.island.construction_left(coord)), roundi(Island.CONSTRUCTION_DAMAGE * 100.0)])
-	if tile.tower == null and not tile.is_hq:
-		lines.append("Conducts %d%% of passing energy" % roundi(EnergyGrid.pass_through(tile, view.island) * 100.0))
+	if tile.tower == null:
+		lines.append("Power line: pipes carry %.1f energy/s · stores %d" % [EnergyGrid.pipe_rate(tile, view.island), roundi(EnergyGrid.capacity(tile))])
 	if tile.is_hq:
 		lines.append_array(HqWeapons.describe(view.island.hq_biome()))
-		lines.append_array(_describe_generator(EnergyGrid.generator_at(view.island, coord)))
 	if _analysis and tile.tower:
 		lines.append("")
 		lines.append_array(Analysis.building_lines(view.island, coord))
@@ -600,19 +599,8 @@ static func _describe_generator(p: EnergyProfile) -> PackedStringArray:
 	var lines: PackedStringArray = []
 	if p == null:
 		return lines
-	lines.append("Generates %.1f energy/s" % p.output)
-	lines.append("Reach %d hexes (%s)" % [p.reach(), _describe_falloff(p)])
+	lines.append("Generates %.1f energy/s · feeds %d pipe%s at once" % [p.output, p.pipes, "" if p.pipes == 1 else "s"])
 	return lines
-
-
-static func _describe_falloff(p: EnergyProfile) -> String:
-	var parts: PackedStringArray = []
-	for share in p.falloff:
-		parts.append("%d%%" % roundi(share * 100.0))
-	var text := "/".join(parts)
-	if p.special != &"":
-		text += " · " + String(p.special)
-	return text
 
 
 static func _describe_repair(p: RepairProfile) -> PackedStringArray:
