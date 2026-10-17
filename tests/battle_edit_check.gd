@@ -106,7 +106,6 @@ func _initialize() -> void:
 	var laser := _free_tile(island, &"attack")
 	island.set_biome(laser, Biome.Type.PLAINS)
 	var laser_tower := island.place_tower(laser, &"attack")
-	island.construction.erase(laser)
 	var target := combat.spawn_enemy(&"rammer", 1.0, view.hex_center_world(laser) + Vector2(70, 0))
 	_check(laser_tower != null and target != null, "laser and target set up")
 	if laser_tower and target:
@@ -121,6 +120,28 @@ func _initialize() -> void:
 		combat._towers_attack(1.6)
 		_check(laser_tower.overheat == 0.0 and island.get_tile(laser).energy < 50.0, "beam fires again after the lockout")
 		target.queue_free()
+
+	# Under construction a tower only takes damage: no work, energy, repairs, auras or clusters.
+	var site := _free_tile(island, &"attack")
+	island.treasury.inventory.add(Inventory.tower_item(&"attack"), 1)
+	_check(view.place_item(site, Inventory.tower_item(&"attack"), view.hex_center_world(site)), "turret placed in edit mode")
+	var site_tower := island.get_tower(site)
+	var bait := combat.spawn_enemy(&"rammer", 1.0, view.hex_center_world(site) + Vector2(70, 0))
+	if site_tower and bait:
+		island.get_tile(site).energy = 30.0
+		island.tick(0.2)
+		_check(island.get_tile(site).energy == 0.0 and EnergyGrid.capacity(island.get_tile(site)) == 0.0, "no energy stored under construction")
+		_check(EnergyGrid.pipe_rate(island.get_tile(site)) == 0.0, "no energy passes through it")
+		_check(island.aura_at(site).is_empty(), "no auras under construction")
+		site_tower.aim = 0.0
+		combat._towers_attack(0.5)
+		_check(not site_tower.saw_target and site_tower.attack_cooldown == 0.0, "turret under construction doesn't act")
+		island.damage_tower(site, 20.0)
+		_check(island.heal(site, true, 10.0) == 0.0, "no repairs under construction")
+		_check(island.damaged_in_reach(site, 0).is_empty(), "repair towers pass it over")
+		island.finish_construction(site)
+		_check(island.heal(site, true, 10.0) > 0.0, "repairs work once built")
+		bait.queue_free()
 
 	# Retreating: the battle pauses and the report window opens (Return isn't pressed, so
 	# nothing is saved).

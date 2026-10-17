@@ -31,11 +31,12 @@ const LABELS := {
 
 
 ## Summed effects acting on the tile at `coord`: its own tile aura (boosted near Aura
-## towers), wall HP buffs from neighbouring walls and Aura tower buffs.
+## towers), wall HP buffs from neighbouring walls and Aura tower buffs. Hexes under
+## construction get none and give none.
 static func collect(island: Island, coord: Vector2i) -> Dictionary:
 	var result := {}
 	var center := island.get_tile(coord)
-	if center == null:
+	if center == null or center.constructing:
 		return result
 	var auras := active_aura_towers(island, coord, TowerDefs.AURA_RADIUS_MAX + 1)
 	_add(result, PER_TIER, center, _tile_boost(auras, coord))
@@ -44,7 +45,7 @@ static func collect(island: Island, coord: Vector2i) -> Dictionary:
 		var tile := island.get_tile(n)
 		if tile:
 			# Wall towers buff the HP of adjacent buildings (not their own tile).
-			if tile.tower and tile.tower.type == &"wall":
+			if tile.tower and tile.tower.type == &"wall" and not tile.constructing:
 				result[&"max_hp"] = result.get(&"max_hp", 0.0) + TowerDefs.WALL_NEIGHBOUR_HP.get(tile.biome, 0.1) * island.effect_bonus(n, false)
 	# Aura towers buff everything in their radius. No chaining: an Aura tower only
 	# receives its own buff, never another Aura tower's.
@@ -67,7 +68,7 @@ static func collect(island: Island, coord: Vector2i) -> Dictionary:
 static func sources(island: Island, coord: Vector2i) -> Array:
 	var list: Array = []
 	var center := island.get_tile(coord)
-	if center == null:
+	if center == null or center.constructing:
 		return list
 	var auras := active_aura_towers(island, coord, TowerDefs.AURA_RADIUS_MAX + 1)
 	var own := {}
@@ -77,7 +78,7 @@ static func sources(island: Island, coord: Vector2i) -> Array:
 		list.append({icon = IconCache.biome_kind(center.biome), name = "%s tile (Tier %d)" % [Biome.name_of(center.biome), center.tier], effects = own})
 	for n in HexMath.neighbors(coord):
 		var tile := island.get_tile(n)
-		if tile and tile.tower and tile.tower.type == &"wall":
+		if tile and tile.tower and tile.tower.type == &"wall" and not tile.constructing:
 			list.append({icon = &"wall", name = "Wall next to it",
 				effects = {&"max_hp": TowerDefs.WALL_NEIGHBOUR_HP.get(tile.biome, 0.1) * island.effect_bonus(n, false)}})
 	var own_aura := center.tower != null and center.tower.type == &"aura"
@@ -99,7 +100,8 @@ static func active_aura_towers(island: Island, coord: Vector2i, reach: int) -> D
 	var result := {}
 	for c in HexMath.area(coord, reach):
 		var tile := island.get_tile(c)
-		if tile and not tile.destroyed and tile.tower and tile.tower.type == &"aura" and not tile.tower.is_part and tile.tower.aura_power > 0.0:
+		if tile and not tile.destroyed and not tile.constructing and tile.tower and tile.tower.type == &"aura" \
+				and not tile.tower.is_part and tile.tower.aura_power > 0.0:
 			result[c] = AuraProfiles.for_tile(island, c)
 	return result
 

@@ -94,6 +94,9 @@ func tick(delta: float) -> void:
 		var tower := island.get_tower(coord)
 		if tower == null or tower.type != &"scout" or tower.is_part:
 			continue
+		if island.under_construction(coord):
+			tower.aura_power = 0.0
+			continue
 		var profile := ScoutProfiles.for_tile(island, coord)
 		var area := scout_area(coord, profile)
 		_scouts[coord] = area

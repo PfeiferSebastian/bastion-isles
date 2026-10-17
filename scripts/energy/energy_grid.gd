@@ -119,7 +119,7 @@ static func upkeep(type: StringName) -> float:
 ## The generator profile for `coord` (the root of a generator), or null.
 static func generator_at(island: Island, coord: Vector2i) -> EnergyProfile:
 	var tile := island.get_tile(coord)
-	if tile == null or not is_producer(tile) or tile.tower.is_part:
+	if tile == null or not is_producer(tile) or tile.tower.is_part or tile.constructing:
 		return null
 	return EnergyProfiles.for_tile(island, coord)
 
@@ -450,10 +450,11 @@ static func _pay_upkeep(island: Island, dt: float) -> void:
 
 
 ## Takes `amount` from the tile's storage. Returns the efficiency the tower may work at:
-## 1 = paid; Swamp drains neighbours when empty; Forest keeps going slower for free; 0 = stopped.
+## 1 = paid; Swamp drains neighbours when empty; Forest keeps going slower for free; 0 = stopped
+## (always while under construction).
 static func draw_energy(island: Island, coord: Vector2i, amount: float) -> float:
 	var tile := island.get_tile(coord)
-	if tile == null:
+	if tile == null or tile.constructing:
 		return 0.0
 	if amount <= 0.0:
 		return 1.0

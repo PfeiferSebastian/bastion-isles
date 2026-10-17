@@ -491,7 +491,7 @@ func _describe_tile(coord: Vector2i) -> String:
 	lines.append("{icon:%s}%s" % [IconCache.biome_kind(shown_biome), what])
 	lines.append("Ground HP %d / %d" % [ceili(tile.hp), roundi(view.island.tile_max_hp(coord))])
 	if view.island.construction.has(coord):
-		lines.append("Under construction: %d s of fighting left · takes %d%% damage" % [ceili(view.island.construction_left(coord)), roundi(Island.CONSTRUCTION_DAMAGE * 100.0)])
+		lines.append("Under construction: %d s of fighting left · takes %d%% damage · no work, energy, repairs or auras yet" % [ceili(view.island.construction_left(coord)), roundi(Island.CONSTRUCTION_DAMAGE * 100.0)])
 	if tile.tower == null:
 		lines.append("Power line: pipes carry %.1f energy/s · stores %d" % [EnergyGrid.pipe_rate(tile, view.island), roundi(EnergyGrid.capacity(tile))])
 	if tile.is_hq:

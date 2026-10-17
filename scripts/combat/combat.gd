@@ -781,7 +781,7 @@ func _towers_attack(delta: float) -> void:
 	var island := _view.island
 	for coord in island.coords():
 		var tower := island.get_tower(coord)
-		if tower == null or tower.type != &"attack" or tower.is_part:
+		if tower == null or tower.type != &"attack" or tower.is_part or island.under_construction(coord):
 			continue
 		var profile := AttackProfiles.for_tile(island, coord)
 		var origin := _view.hex_center_world(coord)
@@ -1028,7 +1028,7 @@ func _towers_repair(delta: float) -> void:
 	var island := _view.island
 	for coord in island.coords():
 		var tower := island.get_tower(coord)
-		if tower == null or tower.type != &"repair" or tower.is_part:
+		if tower == null or tower.type != &"repair" or tower.is_part or island.under_construction(coord):
 			continue
 		tower.attack_cooldown = maxf(tower.attack_cooldown - delta, 0.0)
 		tower.did_work = tower.did_work or tower.attack_cooldown > 0.0
@@ -1098,7 +1098,7 @@ func _donor_for(coord: Vector2i, profile: RepairProfile, target: Dictionary) -> 
 	var best_ratio := maxf(0.5, target.ratio + 0.2)
 	for c in HexMath.area(coord, profile.reach()):
 		var tile := island.get_tile(c)
-		if tile == null:
+		if tile == null or island.under_construction(c):
 			continue
 		for is_tower in [true, false]:
 			if is_tower and tile.tower == null:

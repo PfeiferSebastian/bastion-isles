@@ -347,7 +347,7 @@ func damaged_in_reach(center: Vector2i, reach: int) -> Array[Dictionary]:
 	var result: Array[Dictionary] = []
 	for coord in HexMath.area(center, reach):
 		var tile := get_tile(coord)
-		if tile == null:
+		if tile == null or construction.has(coord):
 			continue
 		if tile.tower and health_ratio(coord, true) < 0.999:
 			result.append({coord = coord, tower = true, ratio = health_ratio(coord, true)})
@@ -357,11 +357,11 @@ func damaged_in_reach(center: Vector2i, reach: int) -> Array[Dictionary]:
 	return result
 
 
-## Heals a tower or the ground; returns the HP actually restored.
-## Repaired Wasteland turns back into ground at WASTELAND_RESTORE_SHARE.
+## Heals a tower or the ground; returns the HP actually restored (nothing while under
+## construction). Repaired Wasteland turns back into ground at WASTELAND_RESTORE_SHARE.
 func heal(coord: Vector2i, tower: bool, amount: float) -> float:
 	var tile := get_tile(coord)
-	if tile == null or amount <= 0.0:
+	if tile == null or amount <= 0.0 or construction.has(coord):
 		return 0.0
 	# Forest tiles make repairs on them stronger.
 	amount *= 1.0 + aura_at(coord).get(&"heal_received", 0.0)
@@ -382,10 +382,11 @@ func heal(coord: Vector2i, tower: bool, amount: float) -> float:
 	return tile.hp - before
 
 
-## Takes HP from a tower or the ground (no destruction below 1 HP); returns the HP taken.
+## Takes HP from a tower or the ground (no destruction below 1 HP, nothing while under
+## construction); returns the HP taken.
 func drain(coord: Vector2i, tower: bool, amount: float) -> float:
 	var tile := get_tile(coord)
-	if tile == null:
+	if tile == null or construction.has(coord):
 		return 0.0
 	if tower:
 		if tile.tower == null:
@@ -578,7 +579,7 @@ func group_of(coord: Vector2i) -> Array[Vector2i]:
 	var tower := get_tower(coord)
 	if tower == null:
 		return group
-	if tower.solo:
+	if tower.solo or construction.has(coord):
 		group.append(coord)
 		_group_cache[coord] = group
 		return group
@@ -588,7 +589,8 @@ func group_of(coord: Vector2i) -> Array[Vector2i]:
 		var current: Vector2i = open.pop_back()
 		group.append(current)
 		for n in HexMath.neighbors(current):
-			if not seen.has(n) and get_tower(n) != null and get_tower(n).type == tower.type and not get_tower(n).solo:
+			if not seen.has(n) and get_tower(n) != null and get_tower(n).type == tower.type and not get_tower(n).solo \
+					and not construction.has(n):
 				seen[n] = true
 				open.append(n)
 	group.sort()
@@ -752,7 +754,7 @@ func merge_set(coord: Vector2i) -> Array[Vector2i]:
 	var root := merge_root_of(coord)
 	var tower := get_tower(root)
 	var none: Array[Vector2i] = []
-	if tower == null or tower.tier < 2 or tower.solo:
+	if tower == null or tower.tier < 2 or tower.solo or construction.has(root):
 		return none
 	var chosen: Array[Vector2i] = [root]
 	var hexes := tower.size()
@@ -773,7 +775,8 @@ func _merge_candidate(chosen: Array[Vector2i], like: Tower, room: int) -> Vector
 		for hex in merge_hexes_of(member):
 			for n in HexMath.neighbors(hex):
 				var other := get_tower(n)
-				if other == null or other.type != like.type or other.tier != like.tier or other.solo:
+				if other == null or other.type != like.type or other.tier != like.tier or other.solo \
+						or construction.has(n):
 					continue
 				var other_root := merge_root_of(n)
 				if chosen.has(other_root) or get_tower(other_root).size() > room:
@@ -846,15 +849,20 @@ func cluster_towers(coord: Vector2i) -> int:
 
 
 ## Towers in the cluster a new tower of `type` on `coord` would join (itself included; solo
-## neighbours don't count).
+## neighbours don't count, neighbours under construction do since they join once built).
 func cluster_with(coord: Vector2i, type: StringName) -> int:
 	var roots := {}
-	for n in HexMath.neighbors(coord):
-		var tower := get_tower(n)
-		if tower == null or tower.type != type or tower.solo:
-			continue
-		for member in group_of(n):
-			roots[merge_root_of(member)] = true
+	var seen := {coord: true}
+	var open: Array[Vector2i] = [coord]
+	while not open.is_empty():
+		var current: Vector2i = open.pop_back()
+		for n in HexMath.neighbors(current):
+			var tower := get_tower(n)
+			if seen.has(n) or tower == null or tower.type != type or tower.solo:
+				continue
+			seen[n] = true
+			roots[merge_root_of(n)] = true
+			open.append(n)
 	return roots.size() + 1
 
 
@@ -1157,6 +1165,10 @@ func tick(delta: float) -> void:
 	_aura_cache.clear()
 	for coord in _tiles:
 		var tower := get_tower(coord)
+		if construction.has(coord):
+			if tower:
+				tower.time_since_damage += delta
+			continue
 		if tower == null:
 			_regen_ground(coord, delta)
 			continue
@@ -1192,6 +1204,9 @@ func _power_auras(delta: float) -> void:
 	for coord in _tiles:
 		var tower := get_tower(coord)
 		if tower and tower.type == &"aura" and not tower.is_part:
+			if construction.has(coord):
+				tower.aura_power = 0.0
+				continue
 			var energy := AuraProfiles.for_tile(self, coord).energy_per_second * delta
 			tower.aura_power = EnergyGrid.draw_energy(self, coord, energy)
 
@@ -1209,10 +1224,45 @@ func _regen_ground(coord: Vector2i, delta: float) -> void:
 
 # --- Building during missions ----------------------------------------------
 
-## Puts `coord` under construction for CONSTRUCTION_TIME (only during missions).
+## Puts `coord` under construction for CONSTRUCTION_TIME (only during missions). Until it is
+## done the hex only takes damage: its building doesn't work, gain XP, combine with its
+## neighbours or count as storage, and it gets and gives no energy, repairs or auras.
 func start_construction(coord: Vector2i) -> void:
-	if builds_take_time and has_tile(coord):
-		construction[coord] = CONSTRUCTION_TIME
+	if not builds_take_time or not has_tile(coord):
+		return
+	construction[coord] = CONSTRUCTION_TIME
+	var tile := get_tile(coord)
+	tile.energy = 0.0
+	tile.transit = 0.0
+	if tile.tower:
+		tile.tower.shield = 0.0
+	_set_constructing(coord, true)
+
+
+## Whether `coord` is under construction (see start_construction).
+func under_construction(coord: Vector2i) -> bool:
+	return construction.has(coord)
+
+
+## Ends the construction on `coord` at once: the building joins in from now on.
+func finish_construction(coord: Vector2i) -> void:
+	construction.erase(coord)
+	if has_tile(coord):
+		_set_constructing(coord, false)
+
+
+## Switches the construction state of a tile. Its tower keeps its HP share while its auras
+## (and with them its max HP) go away or come back.
+func _set_constructing(coord: Vector2i, on: bool) -> void:
+	var tile := get_tile(coord)
+	var tower := tile.tower
+	var ratio := tower.hp / maxf(tower_max_hp(coord), 0.001) if tower else 1.0
+	tile.constructing = on
+	_aura_cache.clear()
+	_group_cache.clear()
+	if tower:
+		tower.hp = ratio * tower_max_hp(coord)
+	tile_changed.emit(coord)
 
 
 ## Seconds `coord` stays under construction (0 when it isn't).
@@ -1229,4 +1279,7 @@ func _tick_construction(delta: float) -> void:
 	for coord in construction.keys():
 		construction[coord] -= delta
 		if construction[coord] <= 0.0 or not has_tile(coord):
-			construction.erase(coord)
+			finish_construction(coord)
+	for coord in _tiles:
+		if _tiles[coord].constructing != construction.has(coord):
+			_set_constructing(coord, construction.has(coord))

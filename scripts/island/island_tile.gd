@@ -19,6 +19,9 @@ var transit := 0.0
 var hp := 0.0
 ## Wasteland: destroyed in battle, until the fight is over (GDD §4.6).
 var destroyed := false
+## Under construction during a mission (mirrors Island.construction): no energy in, out or
+## stored.
+var constructing := false
 
 
 func _init(at: Vector2i, type: Biome.Type = Biome.Type.NEUTRAL) -> void:
@@ -31,9 +34,9 @@ func set_biome(type: Biome.Type) -> void:
 	tier = 0 if type == Biome.Type.NEUTRAL else 1
 
 
-## Wasteland blocks the energy layer.
+## Wasteland and hexes under construction block the energy layer.
 func blocks_energy() -> bool:
-	return destroyed
+	return destroyed or constructing
 
 
 func is_free() -> bool:
