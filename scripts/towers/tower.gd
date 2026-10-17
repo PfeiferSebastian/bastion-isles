@@ -42,6 +42,9 @@ var level_seen := 0
 var merge_hexes: Array[Vector2i] = []
 var is_part := false
 var merge_root := Vector2i.ZERO
+## Placed next to a full cluster of its type (Island.MAX_CLUSTER): stays a single unit that
+## doesn't combine with its neighbours (and can't merge) until there is room again.
+var solo := false
 
 # --- Analysis (see Island.track and the HUD's analysis view) ---
 ## Counters for the current wave and the whole mission: &"damage", &"kills", &"taken",

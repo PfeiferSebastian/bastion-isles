@@ -528,7 +528,9 @@ func _describe_building(coord: Vector2i, tile: IslandTile) -> PackedStringArray:
 		lines.append("Merged: %d hexes, ×%d effect" % [root_tower.size(), root_tower.size()])
 	if size >= 2:
 		lines.append("Cluster of %d: shared HP, shield, energy, XP and perks, +%d%% effect" % [size, roundi(Island.MERGE_BONUS * 100.0)])
-	var hp := island.group_pool(coord, &"hp")
+	if tower.solo:
+		lines.append("Single unit: the neighbouring cluster is full (at most %d)" % Island.MAX_CLUSTER)
+	var hp :=island.group_pool(coord, &"hp")
 	lines.append("HP %d / %d%s" % [ceili(hp.x), roundi(hp.y), _modifier(island.tower_max_hp(coord) / TowerDefs.base_hp(tower.type))])
 	var shield := island.group_pool(coord, &"shield")
 	if shield.y > 0.0:

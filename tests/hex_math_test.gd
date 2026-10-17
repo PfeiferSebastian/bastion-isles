@@ -132,12 +132,13 @@ func _test_health() -> void:
 	var alone := AttackProfiles.for_tile(group_island, Vector2i(1, 0)).damage
 	group_island.place_tower(Vector2i(2, 0), &"attack")
 	_check(is_equal_approx(AttackProfiles.for_tile(group_island, Vector2i(1, 0)).damage, alone * 1.3), "combined buildings deal 30% more")
-	# Walls: at most 3 in one section.
+	# Walls: at most 3 in one section; one more next to it stays on its own.
 	var walls := Island.create_starter(3)
 	for x in [1, 2, 3]:
 		walls.place_tower(Vector2i(x, 0), &"wall")
 	_check(walls.get_tower(Vector2i(3, 0)) != null, "three walls in a row")
-	_check(walls.place_tower(Vector2i(3, -1), &"wall") == null, "no fourth wall in a section")
+	var extra_wall := walls.place_tower(Vector2i(3, -1), &"wall")
+	_check(extra_wall != null and extra_wall.solo and walls.cluster_towers(Vector2i(1, 0)) == 3, "a fourth wall next to a section stays a single wall")
 	_check(walls.place_tower(Vector2i(-2, 0), &"wall") != null, "a separate wall section is fine")
 	# No XP once the mission is won (combat switches it off), nor while editing.
 	walls.gains_xp = false
@@ -203,7 +204,13 @@ func _test_health() -> void:
 	var c_island := Island.create_starter(3)
 	for x in [1, 2, 3]:
 		c_island.place_tower(Vector2i(x, 0), &"energy")
-	_check(c_island.place_tower(Vector2i(3, -1), &"energy") == null, "no fourth tower in a cluster")
+	var fourth := c_island.place_tower(Vector2i(3, -1), &"energy")
+	_check(fourth != null and fourth.solo, "a fourth tower next to a full cluster stays a single unit")
+	_check(c_island.cluster_towers(Vector2i(1, 0)) == 3 and c_island.group_of(Vector2i(3, -1)).size() == 1, "the full cluster doesn't grow")
+	var c_loaded := Island.from_dict(JSON.parse_string(JSON.stringify(c_island.to_dict())))
+	_check(c_loaded.get_tower(Vector2i(3, -1)).solo and c_loaded.cluster_towers(Vector2i(1, 0)) == 3, "solo towers survive saving")
+	c_island.remove_tower(Vector2i(1, 0))
+	_check(not fourth.solo and c_island.cluster_towers(Vector2i(3, 0)) == 3, "a solo tower joins once the cluster has room")
 	# Range: +0.1% per level.
 	var ranger := Tower.new(&"attack", 100.0)
 	ranger.xp = Tower.xp_for_level(100)

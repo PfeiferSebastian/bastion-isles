@@ -159,9 +159,6 @@ func handle_secondary_tap(world_position: Vector2) -> void:
 func place_item(coord: Vector2i, item: Dictionary, world_position: Vector2) -> bool:
 	var inventory := island.treasury.inventory
 	if not _can_place(coord, item):
-		if item.kind == &"tower" and (island.can_place(coord) or island.get_tile(coord) == null) \
-				and island.cluster_with(coord, item.type) > Island.MAX_CLUSTER:
-			message.emit(world_position, "At most %d %s towers together" % [Island.MAX_CLUSTER, String(item.type).capitalize()])
 		return false
 	if not island.ensure_item(item):
 		var kind := Island.purchase_kind(item)
@@ -183,6 +180,8 @@ func place_item(coord: Vector2i, item: Dictionary, world_position: Vector2) -> b
 				return false
 			inventory.take(item)
 			_spawn_tower_node(coord, item.type)
+			if island.get_tower(coord).solo:
+				message.emit(world_position, "Stays a single %s: at most %d combine" % [String(item.type).capitalize(), Island.MAX_CLUSTER])
 		&"tile":
 			if not island.can_add_tile(coord):
 				return false
@@ -682,8 +681,7 @@ func _can_place(coord: Vector2i, item: Dictionary) -> bool:
 	match item.kind:
 		&"tower":
 			if tile == null:
-				return island.can_add_tile(coord) and island.treasury.inventory.count(Inventory.tile_item()) > 0 \
-					and island.cluster_with(coord, item.type) <= Island.MAX_CLUSTER
+				return island.can_add_tile(coord) and island.treasury.inventory.count(Inventory.tile_item()) > 0
 			return island.can_place_tower(coord, item.type)
 		&"tile":
 			return island.can_add_tile(coord)
