@@ -7,7 +7,7 @@ extends CanvasLayer
 ## that shows every hover text.
 
 ## Shown in the info window while nothing with a description is hovered.
-const HELP := "Click a slot, then the island · or drag a slot onto it\nRight click: pick up / cancel\nDrag: pan · Wheel: zoom · Esc: menu\nP: waves on/off · W: spawn a wave · U: tier upgrade (level 100) · I: analysis view\n\nDebug: D damage · +/- tier · F1–F4 enemies · V fog\nG +500 gold · R +5 stones and tiles · B +10 blueprints"
+const HELP := "Click a slot, then the island · or drag a slot onto it\nRight click: pick up / cancel\nClick an enemy: focus fire · again: all towers in reach · right click an enemy: stop\nDrag: pan · Wheel: zoom · Esc: menu\nP: waves on/off · W: spawn a wave · U: tier upgrade (level 100) · I: analysis view\n\nDebug: D damage · +/- tier · F1–F4 enemies · V fog\nG +500 gold · R +5 stones and tiles · B +10 blueprints"
 
 const OVERLAYS := [
 	[&"energy", "Energy: generators bright, storages by fill (red = empty), empty tiles show how much they let through"],

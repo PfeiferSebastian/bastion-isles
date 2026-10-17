@@ -3,6 +3,7 @@ extends Node2D
 ## Combat: sends waves of enemies (EnemyDefs.wave_plan) at the island in formations, moves
 ## them by their behaviour, and lets the towers aim, fire and repair based on their tile.
 ## Keys: P toggles waves, W spawns the next wave right away, F1-F4 spawn one enemy of each type.
+## Focus fire: clicking an enemy marks it with a scope (see focus_click).
 
 @export var island_view_path: NodePath
 ## Seconds between waves; once the sky is clear the next wave comes after wave_gap_when_clear.
@@ -82,11 +83,25 @@ const HEAL_FLASH_TIME := 0.35
 const BURST_TIME := 0.4
 const POPUP_TIME := 1.2
 
+## Focus fire on `focus`: at FOCUS_CORE towers that have it inside their core range shoot it
+## first, at FOCUS_FULL every tower that reaches it at all. FOCUS_NONE = normal targeting.
+enum { FOCUS_NONE, FOCUS_CORE, FOCUS_FULL }
+## A click this close (px) to an enemy counts as clicking it.
+const FOCUS_PICK_RADIUS := 22.0
+const SCOPE_COLOR := Color("ff5a3c")
+const SCOPE_FULL_COLOR := Color("ffd23f")
+var focus: Enemy = null
+var focus_level := FOCUS_NONE
+## Draws the scope above the enemies.
+var _scope_layer := Node2D.new()
+
 
 func _ready() -> void:
 	_view = get_node(island_view_path)
 	add_child(_enemy_layer)
 	add_child(_projectile_layer)
+	_scope_layer.draw.connect(_draw_scope)
+	add_child(_scope_layer)
 	mission_countdown = mission_start_delay
 	_apply_session()
 	_base_kill_goal = mission_kill_goal
@@ -102,6 +117,7 @@ func _process(delta: float) -> void:
 		if _wave_timer <= 0.0:
 			spawn_wave()
 	_check_defeat()
+	_drop_dead_focus()
 	_beams.clear()
 	_beam_colors.clear()
 	for enemy in enemies():
@@ -114,6 +130,7 @@ func _process(delta: float) -> void:
 	_aura_debuffs()
 	_check_battle_end(delta)
 	queue_redraw()
+	_scope_layer.queue_redraw()
 
 
 func _check_battle_end(delta: float) -> void:
@@ -589,6 +606,111 @@ func _nearest(from: Vector2, towers: bool, max_distance: float) -> Variant:
 	return best
 
 
+# --- Focus fire ----------------------------------------------------------
+
+## Visible enemy under `world_position` (the closest within FOCUS_PICK_RADIUS), or null.
+func enemy_at(world_position: Vector2) -> Enemy:
+	var best: Enemy = null
+	var best_distance := FOCUS_PICK_RADIUS
+	for enemy in enemies():
+		var d := enemy.global_position.distance_to(world_position)
+		if d <= best_distance and is_enemy_visible(enemy):
+			best_distance = d
+			best = enemy
+	return best
+
+
+## Left click: an enemy gets the scope (towers with it in their core range focus it); clicking
+## the scoped enemy again widens the focus to every tower that reaches it. Returns true if
+## the click hit an enemy (and is used up).
+func focus_click(world_position: Vector2) -> bool:
+	var enemy := enemy_at(world_position)
+	if enemy == null:
+		return false
+	if enemy == focus:
+		focus_level = FOCUS_FULL
+	else:
+		focus = enemy
+		focus_level = FOCUS_CORE
+	return true
+
+
+## Right click on an enemy (the scoped one or any other) removes the scope. Returns true if
+## the click was used up, i.e. there was a scope and the click hit an enemy.
+func focus_secondary_click(world_position: Vector2) -> bool:
+	if focus == null or enemy_at(world_position) == null:
+		return false
+	clear_focus()
+	return true
+
+
+func clear_focus() -> void:
+	focus = null
+	focus_level = FOCUS_NONE
+
+
+## The scope goes when its enemy dies (or vanishes when the sky is cleared).
+func _drop_dead_focus() -> void:
+	if focus != null and (not is_instance_valid(focus) or focus.is_dead):
+		clear_focus()
+
+
+## Moves the focused enemy to the front of `targets` (sorted by the tower's own priority) if
+## the focus applies to this tower: at FOCUS_CORE only within `core_px` of `origin`.
+func _focus_first(targets: Array[Enemy], origin: Vector2, core_px: float) -> void:
+	_drop_dead_focus()
+	if focus == null:
+		return
+	var index := targets.find(focus)
+	if index <= 0:
+		return
+	if focus_level == FOCUS_CORE and origin.distance_to(focus.global_position) > core_px:
+		return
+	targets.remove_at(index)
+	targets.push_front(focus)
+
+
+## Scope over the focused enemy: a ring with four gaps and inward ticks; the widened focus
+## adds corner brackets and turns gold.
+func _draw_scope() -> void:
+	if focus == null or not is_instance_valid(focus):
+		return
+	var at := _scope_layer.to_local(focus.global_position)
+	var full := focus_level == FOCUS_FULL
+	var color := SCOPE_FULL_COLOR if full else SCOPE_COLOR
+	var outline := Color(0, 0, 0, 0.7)
+	var radius := 24.0
+	var gap := 0.32
+	for i in 4:
+		var mid := i * TAU / 4.0 + PI / 4.0
+		_scope_arc(at, radius, mid - PI / 4.0 + gap, mid + PI / 4.0 - gap, color, outline)
+		var dir := Vector2.from_angle(i * TAU / 4.0)
+		_scope_line(at + dir * (radius + 5.0), at + dir * (radius - 8.0), color, outline)
+	_scope_dot(at, color, outline)
+	if full:
+		var r := radius + 9.0
+		var arm := 7.0
+		for corner in [Vector2(1, 1), Vector2(-1, 1), Vector2(-1, -1), Vector2(1, -1)]:
+			var tip: Vector2 = at + corner * r * 0.75
+			_scope_line(tip, tip - Vector2(corner.x * arm, 0), color, outline)
+			_scope_line(tip, tip - Vector2(0, corner.y * arm), color, outline)
+
+
+func _scope_dot(at: Vector2, color: Color, outline: Color) -> void:
+	_scope_layer.draw_circle(at, 2.6, outline)
+	_scope_layer.draw_circle(at, 1.6, color)
+
+
+func _scope_arc(at: Vector2, radius: float, from: float, to: float, color: Color, outline: Color) -> void:
+	_scope_layer.draw_arc(at, radius, from, to, 12, outline, 4.5, true)
+	_scope_layer.draw_arc(at, radius, from, to, 12, color, 2.0, true)
+
+
+func _scope_line(a: Vector2, b: Vector2, color: Color, outline: Color) -> void:
+	_scope_layer.draw_line(a, b, outline, 4.5, true)
+	_scope_layer.draw_line(a, b, color, 2.0, true)
+
+
 # --- Towers --------------------------------------------------------------
 
 func _towers_attack(delta: float) -> void:
@@ -601,6 +723,7 @@ func _towers_attack(delta: float) -> void:
 		var origin := _view.hex_center_world(coord)
 		var range_px := profile.range_hexes * HexMath.SQRT3 * _view.hex_size
 		var targets := _targets_in_range(origin, range_px)
+		_focus_first(targets, origin, profile.range_hexes * HexMath.SQRT3 * _view.hex_size)
 		tower.attack_cooldown = maxf(tower.attack_cooldown - delta, 0.0)
 		# Reloading after a shot counts as working.
 		tower.did_work = tower.did_work or tower.attack_cooldown > 0.0
@@ -635,6 +758,8 @@ func _hq_attack(delta: float) -> void:
 	var profile := AttackProfiles.hq()
 	var origin := _view.hex_center_world(Island.HQ_COORD)
 	var targets := _targets_in_range(origin, profile.range_hexes * HexMath.SQRT3 * _view.hex_size)
+	# The HQ cannon has no reach past its core range, so any focus in range counts.
+	_focus_first(targets, origin, INF)
 	if targets.is_empty():
 		return
 	_hq_cooldown = profile.cooldown

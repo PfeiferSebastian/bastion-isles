@@ -13,8 +13,8 @@ const MENU_SCENE := "res://scenes/ui/main_menu.tscn"
 
 
 func _ready() -> void:
-	_camera.tapped.connect(_island_view.handle_tap)
-	_camera.secondary_tapped.connect(_island_view.handle_secondary_tap)
+	_camera.tapped.connect(_on_tapped)
+	_camera.secondary_tapped.connect(_on_secondary_tapped)
 	_hud.view = _island_view
 	_hud.combat = _combat
 	_hud.leave_requested.connect(_leave)
@@ -26,6 +26,20 @@ func _ready() -> void:
 		_hud.show_edit_mode()
 	_hud.get_node("%Inventory").set(&"view", _island_view)
 	_island_view.message.connect(func(at: Vector2, text: String) -> void: _combat.popup(at, text, Color("ffb070")))
+
+
+## Clicks on enemies set the focus fire scope (Combat.focus_click); with an inventory item
+## held, or off the enemies, they go to the island as usual.
+func _on_tapped(world_position: Vector2) -> void:
+	if _island_view.held.is_empty() and _combat.focus_click(world_position):
+		return
+	_island_view.handle_tap(world_position)
+
+
+func _on_secondary_tapped(world_position: Vector2) -> void:
+	if _island_view.held.is_empty() and _combat.focus_secondary_click(world_position):
+		return
+	_island_view.handle_secondary_tap(world_position)
 
 
 func _unhandled_key_input(event: InputEvent) -> void:
