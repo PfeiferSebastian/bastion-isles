@@ -287,7 +287,7 @@ func show_edit_mode() -> void:
 	_edit.visible = false
 	_mission_tube.visible = false
 	_mission_panel.visible = true
-	_mission_text.text = "Editing island"
+	_mission_text.text = "Editing island – everything stays repaired and full of energy"
 	_leave.text = "Done"
 	_leave.visible = true
 	_leave.set_meta(&"info", "Save the island and return to the main menu")
@@ -404,7 +404,7 @@ func show_battle_edit(on: bool) -> void:
 	_edit_frame.visible = on
 	_waves.disabled = on
 	_spawn.disabled = on
-	notify("Edit mode – the battle is paused (E or Esc to resume)" if on else "Battle resumed")
+	notify("Edit mode – the battle is paused, everything is repaired and full of energy (E or Esc to resume)" if on else "Battle resumed")
 
 
 ## The HQ fell: says what was lost.

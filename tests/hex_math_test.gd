@@ -548,6 +548,20 @@ func _test_healing() -> void:
 	_check(island.get_tile(w).destroyed, "partly repaired wasteland stays wasteland")
 	island.heal(w, false, Island.TILE_BASE_HP * 0.2)
 	_check(not island.get_tile(w).destroyed, "repaired wasteland becomes ground again")
+	# Edit mode: everything full, heals over time dropped.
+	var edit := Island.create_starter(2)
+	var t := Vector2i(1, 0)
+	edit.place_tower(t, &"attack")
+	edit.damage_tower(t, 40.0)
+	edit.damage_tile(Vector2i(-1, 0), 10000.0)
+	edit.damage_tile(Island.HQ_COORD, 500.0)
+	edit.get_tile(t).energy = 0.0
+	edit.add_heal_over_time(t, true, 10.0, 2.0)
+	edit.fill_up()
+	_check(is_equal_approx(edit.health_ratio(t, true), 1.0) and is_equal_approx(edit.health_ratio(Island.HQ_COORD, false), 1.0), "edit mode repairs towers and the HQ")
+	_check(not edit.get_tile(Vector2i(-1, 0)).destroyed and is_equal_approx(edit.health_ratio(Vector2i(-1, 0), false), 1.0), "edit mode restores wasteland")
+	_check(is_equal_approx(edit.get_tile(t).energy, EnergyGrid.capacity(edit.get_tile(t))), "edit mode fills every storage")
+	_check(not edit.has_heal_over_time(t, true), "edit mode drops heals over time")
 	# Profiles.
 	_check(RepairProfiles.base(Biome.Type.NEUTRAL).reach() == 6 and is_equal_approx(RepairProfiles.base(Biome.Type.NEUTRAL).falloff[6], 0.5), "repair reach 6, half the heal at the edge")
 	_check(RepairProfiles.base(Biome.Type.FOREST).mode == &"over_time", "forest heals over time")

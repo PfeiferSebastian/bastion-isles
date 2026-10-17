@@ -1143,6 +1143,13 @@ func _nearest_enemy(origin: Vector2, reach_hexes: int) -> Enemy:
 	return best
 
 
+## Battle edit mode: no heal flashes or siphon streams stay on screen while it is paused.
+func clear_heal_effects() -> void:
+	_heal_flashes.clear()
+	_siphons.clear()
+	queue_redraw()
+
+
 func _flash(from: Vector2i, to: Vector2i, color: Color) -> void:
 	_heal_flashes.append({from = _view.hex_center_world(from), to = _view.hex_center_world(to), color = color, time = HEAL_FLASH_TIME})
 

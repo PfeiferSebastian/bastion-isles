@@ -100,8 +100,11 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
-	# The view keeps running while the battle is paused (edit mode), the island doesn't.
-	if not get_tree().paused:
+	# The view keeps running while the battle is paused (edit mode), the island doesn't; in
+	# the edit mode it just stays full.
+	if island.editing:
+		island.fill_up()
+	elif not get_tree().paused:
 		island.tick(delta)
 	hovered_coord = world_to_hex(get_global_mouse_position())
 	queue_redraw()

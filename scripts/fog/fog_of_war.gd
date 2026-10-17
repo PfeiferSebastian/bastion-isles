@@ -100,7 +100,9 @@ func tick(delta: float) -> void:
 		var profile := ScoutProfiles.for_tile(island, coord)
 		var area := scout_area(coord, profile)
 		_scouts[coord] = area
-		tower.aura_power = EnergyGrid.draw_energy(island, coord, profile.energy_per_second * delta)
+		# In the edit mode scouts run at full power without drawing energy (Island.fill_up).
+		if not island.editing:
+			tower.aura_power = EnergyGrid.draw_energy(island, coord, profile.energy_per_second * delta)
 		if tower.aura_power > 0.0:
 			for cell in area:
 				reveal(cell, Level.OPEN, OPEN_HOLD * profile.hold_factor)

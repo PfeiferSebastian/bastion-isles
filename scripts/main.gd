@@ -9,6 +9,8 @@ extends Node2D
 ## it the island can't be changed at all, so map clicks only aim focus fire; picking an
 ## inventory slot switches into the edit mode. What is built stays under construction for a
 ## while once the fight resumes (Island.start_construction).
+## In both edit modes nothing heals and no energy moves: every building, the ground and the
+## HQ stay full (Island.editing), and the fight resumes from full.
 
 const MENU_SCENE := "res://scenes/ui/main_menu.tscn"
 
@@ -43,6 +45,7 @@ func _ready() -> void:
 	_hud.return_requested.connect(_leave)
 	if GameSession.edit_mode:
 		_island_view.island.gains_xp = false
+		_island_view.island.editing = true
 		_combat.set_process(false)
 		_combat.set_process_unhandled_key_input(false)
 		_hud.show_edit_mode()
@@ -119,7 +122,10 @@ func set_editing(on: bool) -> void:
 	editing = on
 	get_tree().paused = on
 	_island_view.editable = on
-	if not on:
+	_island_view.island.editing = on
+	if on:
+		_combat.clear_heal_effects()
+	else:
 		# An item still held goes back (an unplaced purchase is refunded).
 		_island_view.release_hold()
 	_hud.show_battle_edit(on)

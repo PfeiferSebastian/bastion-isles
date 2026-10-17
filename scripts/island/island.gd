@@ -55,6 +55,10 @@ var _aura_cache: Dictionary = {}
 var _group_cache: Dictionary = {}
 ## Towers only gain experience while this is on (off when editing the island).
 var gains_xp := true
+## Edit mode (Edit Island or the battle edit mode): no repairs, regeneration or energy run,
+## every building, the ground and the HQ just stay full (see fill_up, called every frame
+## instead of tick).
+var editing := false
 ## The HQ's biome (see hq_biome), recounted after any tile change.
 var _hq_biome := Biome.Type.NEUTRAL
 var _hq_biome_dirty := true
@@ -1197,6 +1201,32 @@ func tick(delta: float) -> void:
 	_even_out_groups()
 	_check_levels()
 	_update_analysis(delta)
+
+
+## Edit mode: everything is full – towers' HP and shields, the ground (Wasteland turns back)
+## and every storage, so Aura towers and Scouts run at full power – and heals over time and
+## pipe flows are dropped. It stays full when the edit mode ends.
+func fill_up() -> void:
+	_heals_over_time.clear()
+	energy_flows.clear()
+	for coord in _tiles:
+		var tile := _tiles[coord]
+		if tile.tower and tile.tower.type in [&"aura", &"scout"] and not tile.tower.is_part:
+			var power := 0.0 if construction.has(coord) else 1.0
+			if tile.tower.aura_power != power:
+				tile.tower.aura_power = power
+				_aura_cache.clear()
+		tile.hp = tile_max_hp(coord)
+		if tile.destroyed:
+			tile.destroyed = false
+			tile_changed.emit(coord)
+	for coord in _tiles:
+		var tile := _tiles[coord]
+		tile.energy = EnergyGrid.capacity(tile)
+		tile.starved = 0.0
+		if tile.tower:
+			tile.tower.hp = tower_max_hp(coord)
+			tile.tower.shield = tower_max_shield(coord)
 
 
 ## Aura towers pay their energy every frame; their power scales the buff (0 = off).
