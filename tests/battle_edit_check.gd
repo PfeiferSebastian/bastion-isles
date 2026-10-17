@@ -92,6 +92,11 @@ func _initialize() -> void:
 	_check(combat.mission_loot.gold == 40 and island.treasury.gold >= 0, "loot found stays listed")
 	await _frames(2)
 
+	# The HQ castle is dressed in the island's dominant biome.
+	var castle := TerrainArt.for_tile(island.get_tile(Island.HQ_COORD), island.hq_biome())
+	_check(castle != null and castle == TerrainArt.hq(island.hq_biome()), "HQ castle art follows its biome")
+	_check(TerrainArt.hq(Biome.Type.LAKE) != TerrainArt.hq(Biome.Type.NEUTRAL), "biome castles differ")
+
 	# Bad luck protection: smaller with more blueprints owned and found this mission.
 	_check(Economy.pity_step(0, 0) == Economy.PITY_STEP, "full pity step with no blueprints")
 	_check(Economy.pity_step(10, 0) < Economy.PITY_STEP and Economy.pity_step(10, 4) < Economy.pity_step(10, 0), "pity step shrinks with owned and found")

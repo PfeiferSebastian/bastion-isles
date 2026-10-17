@@ -588,10 +588,48 @@ local ASH = palette { "3a2a1e", "4c3727", "604630", "74563a", "8a6846", "a07c55"
 local BANNER = palette { "6a2a0c", "a4441a", "d86a26", "f59440" }
 local GLOW = palette { "5e4410", "b88a1c", "ffd23c", "fff4b0" }
 
+-- The HQ takes the island's dominant biome; its castle shows it in the ground around the
+-- walls, the roof tiles and the banners (in the biome's colour, as in Biome.COLORS), Lake adds
+-- a moat. Neutral is the plain look (hexCastle00); the others are hexCastle<Biome>00.
+local CASTLE_THEMES = {
+	{ "hexCastle00", { ground = ASH, roof = ROOF, banner = BANNER } },
+	{ "hexCastleForest00", {
+		ground = palette { "1d2e12", "2b4218", "3c5a1f", "507227", "678a30", "82a23c" },
+		roof = palette { "14260e", "1f3a14", "2d521b", "3f6c24", "56882e", "74a63c" },
+		banner = palette { "143a1a", "22602a", "3f9a4a", "74c47a" },
+		tufts = TREE,
+	} },
+	{ "hexCastleMountain00", {
+		ground = palette { "252831", "31343c", "3e4148", "4c4f55", "5c5e62", "6d6e6f" },
+		roof = palette { "1c2230", "2a3346", "3b4760", "4f5e7c", "687a98", "8a9cb6" },
+		banner = palette { "4a1612", "7a2620", "b8433a", "e07a6a" },
+	} },
+	{ "hexCastlePlains00", {
+		ground = palette { "7a6a52", "9a8a6e", "b8a98a", "d0c3a6", "e2d8c0", "efe8d6" },
+		roof = palette { "6a5a3a", "8c7a50", "b09a68", "cbb884", "e2d2a2", "f4e8c4" },
+		banner = palette { "8a8a82", "b8b8b0", "e2e2da", "f2f2ec" },
+	} },
+	{ "hexCastleSwamp00", {
+		ground = palette { "0d0a11", "16101d", "201729", "2b1e37", "372646", "443055" },
+		roof = palette { "1a1222", "2a1d38", "3c2a52", "50386c", "664a88", "8062a6" },
+		banner = palette { "2a1840", "4a2a70", "7b4bb0", "a98cc8" },
+		tufts = BOG_REED,
+	} },
+	{ "hexCastleLake00", {
+		ground = palette { "1d2e12", "2b4218", "3c5a1f", "507227", "678a30", "82a23c" },
+		roof = palette { "0a1a36", "102b54", "173f72", "1f5590", "2c6dab", "4a8bc4" },
+		banner = palette { "0e2a54", "1a4a8a", "2f6db5", "6aa0dc" },
+		moat = WATER,
+	} },
+}
+
 -- A small height model: every ground pixel may carry a column, stone up to `wall` and roof
 -- above that up to `h`. Columns are drawn back to front, so nearer ones cover farther ones;
 -- `nx` is the horizontal normal (-1 faces left into the light, +1 faces right into shadow).
-local function castle(s, g, d)
+local function castle(s, g, d, theme)
+	-- The theme's palettes stand in for the plain look's below.
+	theme = theme or CASTLE_THEMES[1][2]
+	local ASH, ROOF, BANNER = theme.ground, theme.roof, theme.banner
 	local cols = {}
 	local function set(x, y, h, wall, nx)
 		if x < 0 or x >= W or y < 0 or y >= H then return end
@@ -673,9 +711,21 @@ local function castle(s, g, d)
 			return d2 - d1 < 0.8 and DARK_STONE[6] or dither(DARK_STONE, 0.66 + (vnoise(x * 0.6, y * 0.6, s) - 0.5) * 0.25, x, y)
 		end
 		local v = 0.42 + (fbm(x * 0.1, y * 0.14, s) - 0.5) * 0.7 + light(px, py)
-		if math.abs(dx + math.sin(y * 0.4) * 0.8) < 2.2 and dy > RY then v = v + 0.25 end
+		local path = math.abs(dx + math.sin(y * 0.4) * 0.8) < 2.2 and dy > RY
+		if path then v = v + 0.25 end
+		-- Lake: a moat just outside the walls, bridged by the path to the gate.
+		local e = math.sqrt((dx / RX) ^ 2 + (dy / RY) ^ 2)
+		if theme.moat and e > 1.02 and e < 1.3 and not path then
+			return dither(theme.moat, 0.45 + (vnoise(x * 0.5, y * 0.5, s) - 0.5) * 0.4 + light(px, py), x, y)
+		end
 		return dither(ASH, v, x, y)
 	end)
+	if theme.tufts then
+		for _, p in ipairs(scatter(14, s + 5, 3)) do
+			local dx, dy = p[1] + 0.5 - CX0, p[2] + 0.5 - CY0
+			if (dx / RX) ^ 2 + (dy / RY) ^ 2 > 1.35 then tuft(g, p[1], p[2], theme.tufts) end
+		end
+	end
 	for _, p in ipairs(scatter(6, s + 1, 3)) do
 		local dx, dy = p[1] + 0.5 - CX0, p[2] + 0.5 - CY0
 		if (dx / RX) ^ 2 + (dy / RY) ^ 2 > 1.3 then pebble(g, p[1], p[2], ASH) end
@@ -849,11 +899,11 @@ for v = 0, VARIANTS - 1 do
 	unders[v] = underside(900 + v * 13)
 	save(string.format("underDirt%02d", v), { { "ground", unders[v] } })
 end
-do
+for _, theme in ipairs(CASTLE_THEMES) do
 	local g, d = buffer(W, H), buffer(W, H)
-	castle(77, g, d)
-	save("hexCastle00", { { "ground", g }, { "decor", d } })
-	tiles.hexCastle = { [0] = flatten({ g, d }) }
+	castle(77, g, d, theme[2])
+	save(theme[1], { { "ground", g }, { "decor", d } })
+	tiles[theme[1]:sub(1, -3)] = { [0] = flatten({ g, d }) }
 end
 
 -- --- preview: a small island with every biome, scaled up ----------------------------

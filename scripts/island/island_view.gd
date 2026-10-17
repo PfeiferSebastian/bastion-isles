@@ -422,7 +422,7 @@ func _draw() -> void:
 		var center := HexMath.to_pixel(coord, hex_size)
 		var shade := WASTELAND_TINT if tile.destroyed else tile_shade(tile)
 		if art:
-			_canvas.draw_texture_rect(TerrainArt.for_tile(tile), TerrainArt.tile_rect(center, hex_size), false, shade)
+			_canvas.draw_texture_rect(TerrainArt.for_tile(tile, island.hq_biome()), TerrainArt.tile_rect(center, hex_size), false, shade)
 		else:
 			_draw_plain_tile(tile, center, shade)
 		if tile.destroyed:

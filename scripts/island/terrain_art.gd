@@ -24,8 +24,14 @@ const TILE_NAMES := {
 const BIG_MOUNTAIN_TIER := 4
 ## Rocky underside drawn below the island's edge tiles (variants 00–03).
 const UNDERSIDE := "underDirt"
-## The HQ: a dark walled castle on scorched ground.
+## The HQ: a walled castle; its ground, roofs and banners show the HQ's biome
+## (Island.hq_biome), the plain one stands on scorched ground.
 const HQ := "hexCastle00.png"
+const HQ_BY_BIOME := {
+	Biome.Type.FOREST: "hexCastleForest00.png", Biome.Type.MOUNTAIN: "hexCastleMountain00.png",
+	Biome.Type.PLAINS: "hexCastlePlains00.png", Biome.Type.SWAMP: "hexCastleSwamp00.png",
+	Biome.Type.LAKE: "hexCastleLake00.png",
+}
 
 ## Plain coloured hexes instead of the tiles (for testing the prototype look).
 static var force_colours := false
@@ -43,15 +49,20 @@ static func available() -> bool:
 	return _available
 
 
-## The art for `tile`: the castle for the HQ, otherwise one of its biome's variants, picked
-## stably from the tile's coordinate.
-static func for_tile(tile: IslandTile) -> Texture2D:
+## The art for `tile`: the castle for the HQ (in `hq_biome`), otherwise one of its biome's
+## variants, picked stably from the tile's coordinate.
+static func for_tile(tile: IslandTile, hq_biome := Biome.Type.NEUTRAL) -> Texture2D:
 	if tile.is_hq:
-		return _load(HQ)
+		return hq(hq_biome)
 	var name: String = TILE_NAMES[tile.biome]
 	if tile.biome == Biome.Type.MOUNTAIN and tile.tier < BIG_MOUNTAIN_TIER:
 		name = "hexHighlands"
 	return variant(name, tile.coord)
+
+
+## The HQ castle dressed in `biome`.
+static func hq(biome: Biome.Type) -> Texture2D:
+	return _load(HQ_BY_BIOME.get(biome, HQ))
 
 
 ## Art for a biome stone preview at `coord` (Tier 1).

@@ -84,7 +84,7 @@ func _draw() -> void:
 	for tile in _tiles:
 		var c := HexMath.to_pixel(tile.coord, hex_size)
 		if art:
-			draw_texture_rect(TerrainArt.for_tile(tile), TerrainArt.tile_rect(c, hex_size), false)
+			draw_texture_rect(TerrainArt.for_tile(tile, _hq_biome), TerrainArt.tile_rect(c, hex_size), false)
 		else:
 			draw_colored_polygon(_hex(c, 0.96), Biome.color_of(tile.biome))
 	for tile in _tiles:
