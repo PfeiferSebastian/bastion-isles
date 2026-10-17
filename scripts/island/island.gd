@@ -78,6 +78,8 @@ const CONSTRUCTION_DAMAGE := 2.0
 ## On during missions: what is placed goes under construction first (see start_construction),
 ## and nothing can be picked up (removing is for the main menu's Edit Island only).
 var builds_take_time := false
+## Next unused Tower.cluster id.
+var _next_cluster := 1
 ## Hexes under construction -> seconds left.
 var construction: Dictionary[Vector2i, float] = {}
 
@@ -138,7 +140,7 @@ func to_dict() -> Dictionary:
 			xp = tile.tower.xp if tile.tower else 0.0,
 			tower_tier = tile.tower.tier if tile.tower else 1,
 			part_of = [tile.tower.merge_root.x, tile.tower.merge_root.y] if tile.tower and tile.tower.is_part else [],
-			solo = tile.tower != null and tile.tower.solo})
+			cluster = tile.tower.cluster if tile.tower else 0})
 	return {tiles = tiles, treasury = treasury.to_dict()}
 
 
@@ -165,9 +167,20 @@ static func from_dict(data: Dictionary) -> Island:
 					tower.merge_root = Vector2i(int(part_of[0]), int(part_of[1]))
 				tower.xp = float(entry.get("xp", 0.0))
 				tower.level_seen = tower.level()
-				# The saved flag, not the one place_tower guessed from the loading order.
-				tower.solo = bool(entry.get("solo", false))
-				island._group_cache.clear()
+	# The saved clusters, not the ones place_tower guessed from the loading order (older saves
+	# keep the guess; their towers marked solo get a cluster of their own).
+	var placed: Array = []
+	for entry: Dictionary in data.get("tiles", []):
+		if String(entry.tower) != "" and island.get_tower(Vector2i(int(entry.q), int(entry.r))):
+			placed.append(entry)
+			island._next_cluster = maxi(island._next_cluster, int(entry.get("cluster", 0)) + 1)
+	for entry: Dictionary in placed:
+		var tower := island.get_tower(Vector2i(int(entry.q), int(entry.r)))
+		if entry.has("cluster"):
+			tower.cluster = int(entry.cluster)
+		elif bool(entry.get("solo", false)):
+			tower.cluster = island._new_cluster()
+	island._group_cache.clear()
 	# Rebuild the hex lists of merged towers from their parts.
 	for coord in island._tiles:
 		var part := island.get_tower(coord)
@@ -177,6 +190,11 @@ static func from_dict(data: Dictionary) -> Island:
 				root_tower.merge_hexes.append(part.merge_root)
 			root_tower.merge_hexes.append(coord)
 			root_tower.merge_hexes.sort()
+	# A merged tower is one tower: all its hexes in its root's cluster (older saves).
+	for coord in island._tiles:
+		var root := island.get_tower(coord)
+		if root and root.size() > 1 and not root.is_part:
+			island._set_cluster(root.merge_hexes, root.cluster)
 	for coord in island._tiles:
 		island._tiles[coord].hp = island.tile_max_hp(coord)
 	island.treasury.load_dict(data.get("treasury", {}))
@@ -463,10 +481,10 @@ func can_place(coord: Vector2i) -> bool:
 func place_tower(coord: Vector2i, type: StringName, level := 0, tier := 1) -> Tower:
 	if not can_place_tower(coord, type):
 		return null
-	var solo := cluster_with(coord, type) > MAX_CLUSTER
+	var cluster := _join_cluster(coord, type)
 	var tile := get_tile(coord)
 	tile.tower = Tower.new(type, 1.0)
-	tile.tower.solo = solo
+	tile.tower.cluster = cluster
 	tile.tower.tier = tier
 	tile.tower.xp = Tower.xp_for_level(level)
 	tile.tower.level_seen = level
@@ -495,10 +513,11 @@ func remove_tower(coord: Vector2i) -> StringName:
 	var tower := get_tower(coord)
 	if tower == null:
 		return &""
-	for hex in merge_hexes_of(coord):
+	var hexes := merge_hexes_of(coord)
+	for hex in hexes:
 		get_tile(hex).tower = null
 		tile_changed.emit(hex)
-	_rejoin_solo_towers()
+	_regroup(hexes)
 	return tower.type
 
 
@@ -564,13 +583,13 @@ func _apply_damage(coord: Vector2i, amount: float) -> void:
 		wave_totals[lost_type][&"lost"] = wave_totals[lost_type].get(&"lost", 0.0) + cluster_towers(coord)
 		for member in group:
 			var lost := get_tower(member)
-			lost_towers.append({coord = member, type = lost.type, tier = lost.tier, is_part = lost.is_part, solo = lost.solo,
+			lost_towers.append({coord = member, type = lost.type, tier = lost.tier, is_part = lost.is_part, cluster = lost.cluster,
 				merge_root = lost.merge_root, merge_hexes = lost.merge_hexes.duplicate()})
 			get_tile(member).tower = null
 		for member in group:
 			tower_destroyed.emit(member)
 			tile_changed.emit(member)
-		_rejoin_solo_towers()
+		_regroup(group)
 		return
 	_set_group_pool(group, &"shield", shield - absorbed)
 	_set_group_pool(group, &"hp", hp)
@@ -578,32 +597,40 @@ func _apply_damage(coord: Vector2i, amount: float) -> void:
 
 # --- Building groups -------------------------------------------------------
 
-## Towers of the same type on neighbouring tiles form one combined building: they share
-## one pool each of HP, shield and stored energy (spread by each member's maximum).
+## Towers of the same type on neighbouring tiles of one cluster (Tower.cluster) form one
+## combined building: they share one pool each of HP, shield and stored energy (spread by
+## each member's maximum). A tower under construction stands apart until it is done.
 func group_of(coord: Vector2i) -> Array[Vector2i]:
 	if _group_cache.has(coord):
 		return _group_cache[coord]
+	var group := _connected(coord, true)
+	for member in group:
+		_group_cache[member] = group
+	return group
+
+
+## Hexes of `coord`'s tower and the touching towers of its type and cluster, sorted. With
+## `split_construction`, towers under construction stay out (and alone).
+func _connected(coord: Vector2i, split_construction: bool) -> Array[Vector2i]:
 	var group: Array[Vector2i] = []
 	var tower := get_tower(coord)
 	if tower == null:
-		return group
-	if tower.solo or construction.has(coord):
-		group.append(coord)
-		_group_cache[coord] = group
 		return group
 	var open: Array[Vector2i] = [coord]
 	var seen := {coord: true}
 	while not open.is_empty():
 		var current: Vector2i = open.pop_back()
 		group.append(current)
+		if split_construction and construction.has(current):
+			break
 		for n in HexMath.neighbors(current):
-			if not seen.has(n) and get_tower(n) != null and get_tower(n).type == tower.type and not get_tower(n).solo \
-					and not construction.has(n):
-				seen[n] = true
-				open.append(n)
+			var other := get_tower(n)
+			if seen.has(n) or other == null or other.type != tower.type or other.cluster != tower.cluster \
+					or (split_construction and construction.has(n)):
+				continue
+			seen[n] = true
+			open.append(n)
 	group.sort()
-	for member in group:
-		_group_cache[member] = group
 	return group
 
 
@@ -763,7 +790,7 @@ func merge_set(coord: Vector2i) -> Array[Vector2i]:
 	var root := merge_root_of(coord)
 	var tower := get_tower(root)
 	var none: Array[Vector2i] = []
-	if tower == null or tower.tier < 2 or tower.solo or construction.has(root):
+	if tower == null or tower.tier < 2 or construction.has(root):
 		return none
 	var chosen: Array[Vector2i] = [root]
 	var hexes := tower.size()
@@ -784,8 +811,7 @@ func _merge_candidate(chosen: Array[Vector2i], like: Tower, room: int) -> Vector
 		for hex in merge_hexes_of(member):
 			for n in HexMath.neighbors(hex):
 				var other := get_tower(n)
-				if other == null or other.type != like.type or other.tier != like.tier or other.solo \
-						or construction.has(n):
+				if other == null or other.type != like.type or other.tier != like.tier or construction.has(n):
 					continue
 				var other_root := merge_root_of(n)
 				if chosen.has(other_root) or get_tower(other_root).size() > room:
@@ -817,6 +843,9 @@ func merge(coord: Vector2i) -> bool:
 		tower.merge_hexes.clear()
 		if hex == hexes[0]:
 			tower.merge_hexes.assign(hexes)
+	# The merged tower stays in the root's cluster; the cluster a merged-in tower left re-forms.
+	_set_cluster(hexes, get_tower(set[0]).cluster)
+	_regroup(hexes)
 	_group_cache.clear()
 	_aura_cache.clear()
 	_set_group_pool(group, &"hp", ratio * group_pool(coord, &"hp").y)
@@ -857,39 +886,125 @@ func cluster_towers(coord: Vector2i) -> int:
 	return roots.size()
 
 
-## Towers in the cluster a new tower of `type` on `coord` would join (itself included; solo
-## neighbours don't count, neighbours under construction do since they join once built).
-func cluster_with(coord: Vector2i, type: StringName) -> int:
-	var roots := {}
-	var seen := {coord: true}
-	var open: Array[Vector2i] = [coord]
-	while not open.is_empty():
-		var current: Vector2i = open.pop_back()
-		for n in HexMath.neighbors(current):
-			var tower := get_tower(n)
-			if seen.has(n) or tower == null or tower.type != type or tower.solo:
-				continue
-			seen[n] = true
-			roots[merge_root_of(n)] = true
-			open.append(n)
-	return roots.size() + 1
-
-
 ## Whether a tower of `type` may go on `coord`: any free tile. Next to a full cluster of its
-## type (more than MAX_CLUSTER together) it goes down as a solo tower (see Tower.solo).
+## type it stays out of that cluster (see _join_cluster).
 func can_place_tower(coord: Vector2i, type: StringName) -> bool:
 	return can_place(coord)
 
 
-## Solo towers join their neighbours again once a tower left and the cluster has room.
-func _rejoin_solo_towers() -> void:
-	for coord in _tiles:
-		var tower := get_tower(coord)
-		if tower and tower.solo and cluster_with(coord, tower.type) <= MAX_CLUSTER:
-			tower.solo = false
-			_group_cache.clear()
-			_aura_cache.clear()
-			tile_changed.emit(coord)
+## True if a tower of the same type touches the tower on `coord` without being in its cluster.
+func has_separate_neighbour(coord: Vector2i) -> bool:
+	var tower := get_tower(coord)
+	if tower == null:
+		return false
+	for hex in merge_hexes_of(coord):
+		for n in HexMath.neighbors(hex):
+			var other := get_tower(n)
+			if other and other.type == tower.type and other.cluster != tower.cluster:
+				return true
+	return false
+
+
+func _new_cluster() -> int:
+	_next_cluster += 1
+	return _next_cluster - 1
+
+
+## Towers among `hexes` (a merged tower counts once).
+func _roots(hexes: Array[Vector2i]) -> int:
+	var roots := {}
+	for hex in hexes:
+		roots[merge_root_of(hex)] = true
+	return roots.size()
+
+
+func _set_cluster(hexes: Array[Vector2i], id: int) -> void:
+	for hex in hexes:
+		get_tower(hex).cluster = id
+	_group_cache.clear()
+	_aura_cache.clear()
+
+
+## The cluster id for a new tower of `type` on `coord`: it joins the neighbouring clusters
+## of its type that still fit together with it (largest first, at most MAX_CLUSTER towers in
+## all) and so links them; with none that fits it starts a cluster of its own. Full clusters
+## next to it stay as they are.
+func _join_cluster(coord: Vector2i, type: StringName) -> int:
+	var groups: Array = []
+	var seen := {}
+	for n in HexMath.neighbors(coord):
+		var other := get_tower(n)
+		if other == null or other.type != type or seen.has(n):
+			continue
+		var members := _connected(n, false)
+		for member in members:
+			seen[member] = true
+		groups.append(members)
+	groups.sort_custom(func(a: Array[Vector2i], b: Array[Vector2i]) -> bool: return _roots(a) > _roots(b))
+	var id := 0
+	var total := 1
+	var left_out: Array = []
+	for members: Array[Vector2i] in groups:
+		var size := _roots(members)
+		if total + size > MAX_CLUSTER:
+			left_out.append(members)
+			continue
+		total += size
+		if id == 0:
+			id = get_tower(members[0]).cluster
+		else:
+			_set_cluster(members, id)
+	if id == 0:
+		id = _new_cluster()
+	# A cluster left out must not share the id, or it would connect through the new tower.
+	for members: Array[Vector2i] in left_out:
+		if get_tower(members[0]).cluster == id:
+			_set_cluster(members, _new_cluster())
+	return id
+
+
+## After towers left `hexes`: the clusters around them that fell apart get an id per piece,
+## then each piece takes in neighbouring clusters of its type that now fit (at most
+## MAX_CLUSTER towers). Clusters that stay whole are never split.
+func _regroup(hexes: Array[Vector2i]) -> void:
+	var starts: Array[Vector2i] = []
+	var seen := {}
+	for hex in hexes:
+		for n in HexMath.neighbors(hex):
+			if seen.has(n) or get_tower(n) == null:
+				continue
+			var members := _connected(n, false)
+			for member in members:
+				seen[member] = true
+			_set_cluster(members, _new_cluster())
+			starts.append(n)
+	for start in starts:
+		_absorb_neighbours(start)
+	for start in starts:
+		tile_changed.emit(start)
+
+
+## The cluster on `start` takes in touching clusters of its type, largest first, while the
+## total stays within MAX_CLUSTER.
+func _absorb_neighbours(start: Vector2i) -> void:
+	var tower := get_tower(start)
+	if tower == null:
+		return
+	while true:
+		var members := _connected(start, false)
+		var size := _roots(members)
+		var best: Array[Vector2i] = []
+		for member in members:
+			for n in HexMath.neighbors(member):
+				var other := get_tower(n)
+				if other == null or other.type != tower.type or other.cluster == tower.cluster:
+					continue
+				var group := _connected(n, false)
+				if size + _roots(group) <= MAX_CLUSTER and _roots(group) > _roots(best):
+					best = group
+		if best.is_empty():
+			return
+		_set_cluster(best, tower.cluster)
 
 
 ## Towers of `type` the player owns: standing on the island plus in the inventory.
@@ -1053,7 +1168,7 @@ func rebuild_losses() -> int:
 		var tower := Tower.new(lost.type, 1.0)
 		tower.tier = lost.tier
 		tower.is_part = lost.is_part
-		tower.solo = lost.get("solo", false)
+		tower.cluster = lost.get("cluster", 0)
 		tower.merge_root = lost.merge_root
 		tower.merge_hexes.assign(lost.merge_hexes)
 		tile.tower = tower

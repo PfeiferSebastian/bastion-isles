@@ -138,7 +138,9 @@ func _test_health() -> void:
 		walls.place_tower(Vector2i(x, 0), &"wall")
 	_check(walls.get_tower(Vector2i(3, 0)) != null, "three walls in a row")
 	var extra_wall := walls.place_tower(Vector2i(3, -1), &"wall")
-	_check(extra_wall != null and extra_wall.solo and walls.cluster_towers(Vector2i(1, 0)) == 3, "a fourth wall next to a section stays a single wall")
+	_check(extra_wall != null and walls.group_of(Vector2i(3, -1)).size() == 1 and walls.cluster_towers(Vector2i(1, 0)) == 3, "a fourth wall next to a section stays out of it")
+	walls.place_tower(Vector2i(2, -1), &"wall")
+	_check(walls.group_of(Vector2i(2, -1)).size() == 2 and walls.cluster_towers(Vector2i(1, 0)) == 3, "two new walls next to a full section form their own")
 	_check(walls.place_tower(Vector2i(-2, 0), &"wall") != null, "a separate wall section is fine")
 	# No XP once the mission is won (combat switches it off), nor while editing.
 	walls.gains_xp = false
@@ -205,12 +207,23 @@ func _test_health() -> void:
 	for x in [1, 2, 3]:
 		c_island.place_tower(Vector2i(x, 0), &"energy")
 	var fourth := c_island.place_tower(Vector2i(3, -1), &"energy")
-	_check(fourth != null and fourth.solo, "a fourth tower next to a full cluster stays a single unit")
-	_check(c_island.cluster_towers(Vector2i(1, 0)) == 3 and c_island.group_of(Vector2i(3, -1)).size() == 1, "the full cluster doesn't grow")
+	_check(fourth != null and c_island.group_of(Vector2i(3, -1)).size() == 1, "a fourth tower next to a full cluster stays out of it")
+	_check(c_island.cluster_towers(Vector2i(1, 0)) == 3 and c_island.has_separate_neighbour(Vector2i(3, -1)), "the full cluster doesn't grow")
+	c_island.place_tower(Vector2i(2, -1), &"energy")
+	c_island.place_tower(Vector2i(1, -1), &"energy")
+	_check(c_island.cluster_towers(Vector2i(3, -1)) == 3 and c_island.cluster_towers(Vector2i(1, 0)) == 3, "the towers left over form a second cluster of 3")
+	c_island.place_tower(Vector2i(2, -2), &"energy")
+	_check(c_island.cluster_towers(Vector2i(2, -2)) == 1, "next to two full clusters a tower starts a third")
 	var c_loaded := Island.from_dict(JSON.parse_string(JSON.stringify(c_island.to_dict())))
-	_check(c_loaded.get_tower(Vector2i(3, -1)).solo and c_loaded.cluster_towers(Vector2i(1, 0)) == 3, "solo towers survive saving")
+	_check(c_loaded.cluster_towers(Vector2i(1, 0)) == 3 and c_loaded.cluster_towers(Vector2i(3, -1)) == 3 \
+		and c_loaded.cluster_towers(Vector2i(2, -2)) == 1, "clusters survive saving")
 	c_island.remove_tower(Vector2i(1, 0))
-	_check(not fourth.solo and c_island.cluster_towers(Vector2i(3, 0)) == 3, "a solo tower joins once the cluster has room")
+	_check(c_island.cluster_towers(Vector2i(3, 0)) == 2 and c_island.cluster_towers(Vector2i(3, -1)) == 3, "removing a tower doesn't break up the cluster next to it")
+	c_island.remove_tower(Vector2i(2, -1))
+	_check(c_island.group_of(Vector2i(3, 0)).has(Vector2i(3, -1)) and c_island.cluster_towers(Vector2i(3, 0)) == 3, "a cluster with room takes in its neighbour")
+	_check(c_island.group_of(Vector2i(1, -1)).has(Vector2i(2, -2)), "the other piece joins the single tower")
+	c_island.place_tower(Vector2i(1, 0), &"energy")
+	_check(c_island.cluster_towers(Vector2i(1, 0)) == 3, "a new tower joins the cluster with room")
 	# Range: +0.1% per level.
 	var ranger := Tower.new(&"attack", 100.0)
 	ranger.xp = Tower.xp_for_level(100)

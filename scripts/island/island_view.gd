@@ -200,8 +200,8 @@ func place_item(coord: Vector2i, item: Dictionary, world_position: Vector2) -> b
 				return false
 			inventory.take(item)
 			_spawn_tower_node(coord, item.type)
-			if island.get_tower(coord).solo:
-				message.emit(world_position, "Stays a single %s: at most %d combine" % [String(item.type).capitalize(), Island.MAX_CLUSTER])
+			if island.has_separate_neighbour(coord):
+				message.emit(world_position, "Kept out of a full %s cluster: at most %d combine" % [String(item.type).capitalize(), Island.MAX_CLUSTER])
 		&"tile":
 			if not island.can_add_tile(coord):
 				return false

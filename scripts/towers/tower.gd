@@ -50,9 +50,10 @@ var level_seen := 0
 var merge_hexes: Array[Vector2i] = []
 var is_part := false
 var merge_root := Vector2i.ZERO
-## Placed next to a full cluster of its type (Island.MAX_CLUSTER): stays a single unit that
-## doesn't combine with its neighbours (and can't merge) until there is room again.
-var solo := false
+## Neighbouring towers of one type combine only when they share this id (Island hands it
+## out, at most Island.MAX_CLUSTER towers per cluster), so a tower next to a full cluster
+## stays out of it but can still form a cluster of its own with others.
+var cluster := 0
 
 # --- Analysis (see Island.track and the HUD's analysis view) ---
 ## Counters for the current wave and the whole mission: &"damage", &"kills", &"taken",
