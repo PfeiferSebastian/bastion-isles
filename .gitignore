@@ -4,3 +4,6 @@
 
 # Purchased art (Unity Asset Store license): not for redistribution, each collaborator adds their own copy
 assets/third_party/
+
+# Local MCP servers (machine-specific paths, e.g. the Aseprite pixel-mcp server)
+.mcp.json
