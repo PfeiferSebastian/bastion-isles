@@ -32,6 +32,8 @@ var aura_power := 0.0
 ## Attack towers: where the turret points (radians, world space); it turns at the profile's
 ## turn speed and fires only once it points at its target.
 var aim := -PI / 2.0
+## Beam towers: seconds left before the beam may fire again after it ran out of energy.
+var overheat := 0.0
 var xp := 0.0
 ## Tower tier (1–MAX_TIER), raised at level 100.
 var tier := 1

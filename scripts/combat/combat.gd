@@ -796,6 +796,7 @@ func _towers_attack(delta: float) -> void:
 			return origin.distance_squared_to(a.global_position) < origin.distance_squared_to(b.global_position))
 		_focus_first(targets, origin, profile.range_hexes * HexMath.SQRT3 * _view.hex_size)
 		tower.attack_cooldown = maxf(tower.attack_cooldown - delta, 0.0)
+		tower.overheat = maxf(tower.overheat - delta, 0.0)
 		# Reloading after a shot counts as working.
 		tower.did_work = tower.did_work or tower.attack_cooldown > 0.0
 		if targets.is_empty():
@@ -808,8 +809,11 @@ func _towers_attack(delta: float) -> void:
 		if absf(angle_difference(tower.aim, wanted)) > AIM_TOLERANCE:
 			continue
 		var beams := mini(profile.beam_count, targets.size())
-		if beams > 0:
+		if beams > 0 and tower.overheat <= 0.0:
 			var beam_power := EnergyGrid.draw_energy(island, coord, profile.beam_energy * beams * delta)
+			# Out of energy: the beam overheats and stays locked for a while.
+			if beam_power <= 0.0:
+				tower.overheat = AttackProfile.OVERHEAT_TIME
 			for i in beams:
 				var distance := origin.distance_to(targets[i].global_position) / hex_px
 				_fire_beam(origin, targets[i], profile, beam_power, delta, coord, profile.performance(distance), distance <= profile.range_hexes)
@@ -1164,6 +1168,20 @@ func _draw() -> void:
 		_draw_beam(to_local(_beams[i][0]), to_local(_beams[i][1]), _beam_colors[i], _beam_styles[i])
 	for effect in _shot_effects:
 		_draw_shot_effect(effect)
+	_draw_overheat()
+
+
+## Overheated beam towers: a red glow on the turret tip that fades as the lockout runs out.
+func _draw_overheat() -> void:
+	var island := _view.island
+	for coord in island.coords():
+		var tower := island.get_tower(coord)
+		if tower == null or tower.overheat <= 0.0:
+			continue
+		var t := tower.overheat / AttackProfile.OVERHEAT_TIME
+		var tip := to_local(_view.hex_center_world(coord) + Vector2.from_angle(tower.aim) * _view.hex_size * MUZZLE_REACH)
+		draw_circle(tip, 7.0, Color(1.0, 0.25, 0.1, 0.35 * t))
+		draw_circle(tip, 3.5, Color(1.0, 0.45, 0.25, 0.9 * t))
 
 
 ## HQ siphon: a purple stream with motes flowing from the enemy into the HQ, and a green

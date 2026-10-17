@@ -100,6 +100,28 @@ func _initialize() -> void:
 	_check(fresh.get_tower(spot) == null, "scout destroyed")
 	_check(outer.all(func(cell: Vector2i) -> bool: return fog.level_at(cell) == FogOfWar.Level.THICK), "its sky is thick clouds again")
 
+	# Lasers overheat: a beam that gets no energy stays locked for OVERHEAT_TIME (towers are
+	# driven by hand here, with the battle paused).
+	main.set_editing(true)
+	var laser := _free_tile(island, &"attack")
+	island.set_biome(laser, Biome.Type.PLAINS)
+	var laser_tower := island.place_tower(laser, &"attack")
+	island.construction.erase(laser)
+	var target := combat.spawn_enemy(&"rammer", 1.0, view.hex_center_world(laser) + Vector2(70, 0))
+	_check(laser_tower != null and target != null, "laser and target set up")
+	if laser_tower and target:
+		for member in island.group_of(laser):
+			island.get_tile(member).energy = 0.0
+		laser_tower.aim = 0.0
+		combat._towers_attack(0.05)
+		_check(is_equal_approx(laser_tower.overheat, AttackProfile.OVERHEAT_TIME), "beam without energy overheats")
+		island.get_tile(laser).energy = 50.0
+		combat._towers_attack(0.5)
+		_check(is_equal_approx(island.get_tile(laser).energy, 50.0), "overheated beam doesn't fire even with energy back")
+		combat._towers_attack(1.6)
+		_check(laser_tower.overheat == 0.0 and island.get_tile(laser).energy < 50.0, "beam fires again after the lockout")
+		target.queue_free()
+
 	# Retreating: the battle pauses and the report window opens (Return isn't pressed, so
 	# nothing is saved).
 	combat.mission_loot.gold = 40
@@ -123,6 +145,14 @@ func _initialize() -> void:
 func _frames(n: int) -> void:
 	for i in n:
 		await process_frame
+
+
+## A free tile where a tower of `type` may go (not the HQ).
+func _free_tile(island: Island, type: StringName) -> Vector2i:
+	for coord in island.coords():
+		if island.can_place_tower(coord, type) and not island.get_tile(coord).is_hq:
+			return coord
+	return Vector2i(999, 999)
 
 
 func _total_energy(island: Island) -> float:

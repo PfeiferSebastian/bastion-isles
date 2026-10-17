@@ -13,6 +13,8 @@ extends RefCounted
 const FALLOFF_PER_HEX := 0.25
 const MIN_EFFECT := 0.05
 const MAX_EXTRA_HEXES := 4.0
+## Beam towers: seconds the beam stays locked after it ran out of energy (overheat).
+const OVERHEAT_TIME := 2.0
 
 # Projectile part
 var damage := 0.0

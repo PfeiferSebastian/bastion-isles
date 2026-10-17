@@ -583,7 +583,7 @@ static func _describe_attack(p: AttackProfile, range_factor: float) -> PackedStr
 		lines.append("Energy %.2f per shot (%.2f/s)" % [p.energy_per_shot, p.energy_per_shot / maxf(p.cooldown, 0.001)])
 	if p.beam_dps > 0.0:
 		lines.append("Beam %.1f damage/s" % (p.beam_dps * p.beam_count))
-		lines.append("Energy %.2f/s" % (p.beam_energy * p.beam_count))
+		lines.append("Energy %.2f/s · out of energy the beam overheats and pauses %d s" % [p.beam_energy * p.beam_count, AttackProfile.OVERHEAT_TIME])
 	if p.dot_dps > 0.0:
 		lines.append("Thorns: +%.2f damage/s per hit for %.1f s, stacking (%.1f dps when stacked)" % [p.dot_dps, p.dot_duration, p.dot_dps * p.dot_duration / maxf(p.cooldown, 0.001)])
 	if p.weaken_per_hit > 0.0:
