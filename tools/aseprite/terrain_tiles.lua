@@ -605,7 +605,7 @@ local CASTLE_THEMES = {
 		banner = palette { "4a1612", "7a2620", "b8433a", "e07a6a" },
 	} },
 	{ "hexCastlePlains00", {
-		ground = palette { "7a6a52", "9a8a6e", "b8a98a", "d0c3a6", "e2d8c0", "efe8d6" },
+		ground = palette { "5e4a30", "76603e", "8e764e", "a68c60", "bca272", "ceb684" },
 		roof = palette { "6a5a3a", "8c7a50", "b09a68", "cbb884", "e2d2a2", "f4e8c4" },
 		banner = palette { "8a8a82", "b8b8b0", "e2e2da", "f2f2ec" },
 	} },
@@ -619,7 +619,6 @@ local CASTLE_THEMES = {
 		ground = palette { "1d2e12", "2b4218", "3c5a1f", "507227", "678a30", "82a23c" },
 		roof = palette { "0a1a36", "102b54", "173f72", "1f5590", "2c6dab", "4a8bc4" },
 		banner = palette { "0e2a54", "1a4a8a", "2f6db5", "6aa0dc" },
-		moat = WATER,
 	} },
 }
 
@@ -830,6 +829,404 @@ local function castle(s, g, d, theme)
 	for _, e in ipairs(edge) do put(d, e[1], e[2], e[3]) end
 end
 
+-- --- HQ keeps per biome ----------------------------------------------------------
+-- Faction biomes get their own HQ instead of the plain castle: a keep grown from trees, the
+-- castle hugged by mountains, a palace with onion domes, a necropolis pyramid, stacked water
+-- globes. Same canvas and courtyard as the castle (ground centre 28,67).
+
+local BARK = palette { "1e140c", "2e1f12", "41301c", "574129", "715537", "8c6c46" }
+local SANDSTONE = palette { "6a5a42", "8a7656", "a8946c", "c4b086", "dccaa0", "eee0bc", "faf2dc" }
+local GOLD = palette { "4a3008", "7a5410", "a87a18", "d0a428", "ecc84a", "fae68a", "fffbe0" }
+local NECRO = palette { "050408", "0b0910", "121019", "1a1724", "241f30", "2f283e", "3b3350" }
+local GHOST = palette { "08200f", "0f3d1c", "1d6a30", "36a04c", "6be08a", "c0ffd0" }
+local GLASS = palette { "0a2a52", "15457a", "2466a0", "3b88c0", "62a8d8", "98cbea", "d4ecf8" }
+
+-- Themed ground: the biome's ground around the keep, a trodden path to the front, the Lake
+-- moat and the theme's tufts.
+local function keep_ground(s, g, theme)
+	fill_hex(g, function(x, y, px, py)
+		local dx, dy = x + 0.5 - 28, y + 0.5 - 67
+		local v = 0.42 + (fbm(x * 0.1, y * 0.14, s) - 0.5) * 0.7 + light(px, py)
+		local path = math.abs(dx + math.sin(y * 0.4) * 0.8) < 2.2 and dy > 13
+		if path then v = v + 0.25 end
+		local e = math.sqrt((dx / 20) ^ 2 + (dy / 13) ^ 2)
+		if theme.moat and e > 1.02 and e < 1.3 and not path then
+			return dither(theme.moat, 0.45 + (vnoise(x * 0.5, y * 0.5, s) - 0.5) * 0.4 + light(px, py), x, y)
+		end
+		return dither(theme.ground, v, x, y)
+	end)
+	if theme.tufts then
+		for _, p in ipairs(scatter(14, s + 5, 3)) do
+			local dx, dy = p[1] + 0.5 - 28, p[2] + 0.5 - 67
+			if (dx / 20) ^ 2 + (dy / 13) ^ 2 > 1.35 then tuft(g, p[1], p[2], theme.tufts) end
+		end
+	end
+	hex_rim(g, theme.ground[1])
+end
+
+-- Height columns like the castle's, each with its own wall and roof palette.
+local function massing()
+	local m = { cols = {} }
+	function m.set(x, y, h, wall, nx, wpal, rpal)
+		x, y = math.floor(x), math.floor(y)
+		if x < 0 or x >= W or y < 0 or y >= H then return end
+		local c = m.cols[y * W + x]
+		if not c or h > c.h then m.cols[y * W + x] = { h = h, wall = wall, nx = nx, wpal = wpal, rpal = rpal or wpal } end
+	end
+	function m.height_at(x, y)
+		local c = m.cols[y * W + x]
+		return c and c.h or 0
+	end
+	-- Round tower; `roof` > 0 adds a pointed cone, `crenel` battlements on a flat top.
+	function m.cylinder(cx, cy, r, height, roof, wpal, rpal, crenel)
+		for y = math.floor(cy - r - 1), math.ceil(cy + r + 1) do
+			for x = math.floor(cx - r - 1), math.ceil(cx + r + 1) do
+				local dx, dy = x + 0.5 - cx, (y + 0.5 - cy) * 1.25
+				local dist = math.sqrt(dx * dx + dy * dy)
+				if dist <= r then
+					if roof > 0 then
+						m.set(x, y, height + roof * (1 - dist / r), height, dx / r, wpal, rpal)
+					else
+						local h = height + ((crenel and dist > r - 1 and (x + y) % 2 == 0) and 2 or 0)
+						m.set(x, y, h, h, dx / r, wpal, rpal)
+					end
+				end
+			end
+		end
+	end
+	function m.ring(cx, cy, rx, ry, height, thick, wpal)
+		for y = cy - ry - 1, cy + ry + 1 do
+			for x = cx - rx - 1, cx + rx + 1 do
+				local dx, dy = x + 0.5 - cx, y + 0.5 - cy
+				local e = math.sqrt((dx / rx) ^ 2 + (dy / ry) ^ 2)
+				if e <= 1 and e > 1 - thick / ry then
+					local h = height + ((e > 1 - 1 / ry and (x + y) % 2 == 0) and 2 or 0)
+					m.set(x, y, h, h, dx / rx, wpal)
+				end
+			end
+		end
+	end
+	function m.block(x0, y0, x1, y1, height, wpal)
+		for y = y0, y1 do
+			for x = x0, x1 do
+				local rim = x == x0 or x == x1 or y == y0 or y == y1
+				local h = height + ((rim and (x + y) % 2 == 0) and 2 or 0)
+				m.set(x, y, h, h, (x - (x0 + x1) / 2) / (x1 - x0) * 1.6, wpal)
+			end
+		end
+	end
+	-- Ground shadows down and to the right, then the columns back to front.
+	function m.render(g, d)
+		for y = 0, H - 1 do
+			for x = 0, W - 1 do
+				if get(g, x, y) then
+					for t = 1, 16 do
+						local sx, sy = x - t, math.floor(y - t * 0.5)
+						if sx >= 0 and sy >= 0 and m.height_at(sx, sy) > t * 0.9 then
+							shade(g, x, y, 0.68)
+							break
+						end
+					end
+				end
+			end
+		end
+		for y = 0, H - 1 do
+			for x = 0, W - 1 do
+				local c = m.cols[y * W + x]
+				if c then
+					local top = math.floor(c.h + 0.5)
+					local slope = (m.height_at(x + 1, y) - m.height_at(x - 1, y)) + (m.height_at(x, y + 1) - m.height_at(x, y - 1))
+					for k = 0, top do
+						local sy = y - k
+						local col
+						if k > c.wall then
+							col = dither(c.rpal, 0.6 - c.nx * 0.4 - slope * 0.06, x, sy)
+						elseif k == top then
+							col = dither(c.wpal, 0.82 - c.nx * 0.1, x, sy)
+						else
+							local v = 0.36 - c.nx * 0.26 + k / math.max(c.wall, 1) * 0.1
+							if sy % 4 == 0 or (x + (sy // 4) % 2 * 3) % 6 == 0 then v = v - 0.07 end
+							col = dither(c.wpal, v, x, sy)
+						end
+						put(d, x, sy, col)
+					end
+				end
+			end
+		end
+	end
+	return m
+end
+
+-- Soft dark outline on the lower and right edges of everything in `d`.
+local function keep_outline(d, dark)
+	local edge = {}
+	for i, c in pairs(d.px) do
+		local x, y = i % W, i // W
+		if not get(d, x + 1, y) or not get(d, x, y + 1) then edge[#edge + 1] = { x, y, mix(c, dark, 0.5) } end
+	end
+	for _, e in ipairs(edge) do put(d, e[1], e[2], e[3]) end
+end
+
+-- Dithered light falling on what is already in `b` around (cx, cy).
+local function glow(b, cx, cy, r, col, strength)
+	for y = math.floor(cy - r), math.ceil(cy + r) do
+		for x = math.floor(cx - r), math.ceil(cx + r) do
+			local c = get(b, x, y)
+			local f = 1 - math.sqrt((x + 0.5 - cx) ^ 2 + ((y + 0.5 - cy) * 1.3) ^ 2) / r
+			if c and f > 0 and f * strength > (BAYER[(y % 4) * 4 + (x % 4) + 1] + 0.5) / 16 then
+				put(b, x, y, mix(c, col, 0.35 + f * 0.4))
+			end
+		end
+	end
+end
+
+-- Forest: a ring of trees for a wall and one great tree as the keep, its trunk holding the
+-- door and lit windows.
+local function keep_forest(s, g, d, theme)
+	keep_ground(s, g, theme)
+	local ring = {}
+	for k = 0, 15 do
+		if k ~= 4 then -- the gap at the front is the gate
+			local a = k / 16 * 2 * math.pi
+			ring[#ring + 1] = { math.floor(28 + math.cos(a) * 19 + 0.5), math.floor(67 + math.sin(a) * 12 + 0.5), 4 + hash(k, 1, s) * 1.6 }
+		end
+	end
+	table.sort(ring, function(a, b) return a[2] < b[2] end)
+	for i, t in ipairs(ring) do
+		if t[2] < 64 then crown(g, d, t[1], t[2], t[3], s + i) end
+	end
+	-- Trunk, flaring into roots at the foot.
+	shadow_ellipse(g, 31, 67, 8, 3, 0.55)
+	for y = 44, 67 do
+		local half = 2.6 + (y - 44) / 23 * 1.6 + (y > 61 and (y - 61) * 0.7 or 0)
+		for x = math.floor(28 - half), math.ceil(28 + half) - 1 do
+			local u = (x + 0.5 - 28) / half
+			local v = 0.6 - u * 0.35 + (vnoise(x * 1.3, y * 0.25, s + 3) - 0.5) * 0.35
+			put(d, x, y, dither(BARK, v, x, y))
+		end
+	end
+	-- Door and glowing windows.
+	for y = 62, 66 do
+		for x = 27, 29 do
+			if not (y == 62 and x ~= 28) then put(d, x, y, y == 66 and GLOW[1] or BARK[1]) end
+		end
+	end
+	put(d, 26, 56, GLOW[3]); put(d, 26, 57, GLOW[2])
+	put(d, 30, 52, GLOW[3]); put(d, 30, 53, GLOW[2])
+	-- The great crown: a big one with two side lobes, lanterns among the leaves.
+	crown(g, d, 19, 50, 7, s + 40)
+	crown(g, d, 37, 50, 7, s + 41)
+	crown(g, d, 28, 49, 11.5, s + 42)
+	put(d, 23, 40, GLOW[4]); put(d, 33, 37, GLOW[3]); put(d, 29, 32, GLOW[4]); put(d, 20, 46, GLOW[3])
+	for i, t in ipairs(ring) do
+		if t[2] >= 64 then crown(g, d, t[1], t[2], t[3], s + 20 + i) end
+	end
+	-- Wooden gate posts in the gap.
+	for k = 0, 5 do
+		put(d, 25, 79 - k, BARK[k == 5 and 5 or 3])
+		put(d, 31, 79 - k, BARK[k == 5 and 5 or 2])
+	end
+	for x = 25, 31 do put(d, x, 74, BARK[4]) end
+	put(d, 28, 75, GLOW[3])
+end
+
+-- Mountain: the castle with rock peaks rising behind it and leaning on its side walls.
+local function keep_mountain(s, g, d, theme, castle_fn)
+	castle_fn(s, g, d, theme)
+	local back = buffer(W, H)
+	peak(g, back, 28, 55, 31, s + 3)
+	peak(g, back, 13, 60, 23, s + 1)
+	peak(g, back, 43, 59, 22, s + 2)
+	for i, c in pairs(back.px) do
+		if not d.px[i] then d.px[i] = c end
+	end
+	peak(g, d, 6, 79, 12, s + 4)
+	peak(g, d, 50, 80, 11, s + 5)
+end
+
+-- A horseshoe onion dome: narrow neck, wide bulb, drawn out into a point, lit from the left.
+local function onion(d, cx, base, r, h, pal)
+	for y = math.floor(base - h), math.floor(base) do
+		local t = (base - y) / h
+		local w
+		if t < 0.62 then
+			w = r * math.sqrt(math.max(0, 1 - ((t - 0.3) / 0.33) ^ 2))
+		else
+			w = r * 0.4 * ((1 - t) / 0.38) ^ 1.6
+		end
+		local x0, x1 = math.floor(cx - w + 0.5), math.floor(cx + w - 0.5)
+		for x = x0, x1 do
+			local u = w > 0 and (x + 0.5 - cx) / w or 0
+			local c = dither(pal, 0.62 - u * 0.42 + t * 0.12, x, y)
+			if x == x0 or x == x1 then c = mix(c, pal[1], 0.55) end
+			put(d, x, y, c)
+		end
+		if t > 0.3 and t < 0.5 and w > 2 then put(d, math.floor(cx - w * 0.45), y, pal[#pal]) end
+	end
+	put(d, cx, base - h - 1, pal[#pal - 1])
+	put(d, cx, base - h - 2, pal[#pal - 2])
+end
+
+-- Plains: a sandstone palace with a golden horseshoe dome and slender minarets.
+local function keep_plains(s, g, d, theme)
+	keep_ground(s, g, theme)
+	local m = massing()
+	m.ring(28, 67, 19, 12, 4, 2, SANDSTONE)
+	m.block(19, 60, 37, 68, 9, SANDSTONE)
+	m.cylinder(28, 62, 5, 14, 0, SANDSTONE)
+	-- Minarets: { x, y, height }.
+	local minarets = { { 17, 58, 21 }, { 39, 58, 21 }, { 9, 67, 25 }, { 47, 67, 25 } }
+	for _, t in ipairs(minarets) do m.cylinder(t[1], t[2], 2.2, t[3], 0, SANDSTONE) end
+	m.render(g, d)
+	-- Horseshoe gate in the front wall.
+	local gy = 79
+	for k = 0, 4 do
+		for x = 26, 30 do
+			local corner = k == 4 and (x == 26 or x == 30)
+			if not corner then put(d, x, gy - k, k == 0 and GLOW[1] or NECRO[3]) end
+		end
+	end
+	put(d, 26, gy - 3, SANDSTONE[3]); put(d, 30, gy - 3, SANDSTONE[3])
+	-- Pointed windows in the hall.
+	for _, wx in ipairs({ 21, 24, 32, 35 }) do
+		put(d, wx, 62, GLOW[2]); put(d, wx, 63, GLOW[3]); put(d, wx, 61, SANDSTONE[2])
+	end
+	-- Balconies and small domes on the minarets, the great dome on its drum.
+	table.sort(minarets, function(a, b) return a[2] < b[2] end)
+	for _, t in ipairs(minarets) do
+		local top = math.floor(t[2] + 2.2 / 1.25) - t[3]
+		for x = t[1] - 3, t[1] + 2 do
+			put(d, x, top + 8, SANDSTONE[7]); put(d, x, top + 9, SANDSTONE[2])
+		end
+		onion(d, t[1], top + 1, 3.2, 9, GOLD)
+	end
+	onion(d, 28, 52, 8, 22, GOLD)
+	keep_outline(d, NECRO[2])
+end
+
+-- Swamp: a black stepped necropolis with ghostly green light on its steps, in its doorway and
+-- above its apex, obelisks at the front.
+local function keep_swamp(s, g, d, theme)
+	keep_ground(s, g, theme)
+	glow(g, 28, 70, 24, GHOST[3], 0.5)
+	local m = massing()
+	for y = 50, 80 do
+		for x = 8, 48 do
+			local dx, dy = x + 0.5 - 28, y + 0.5 - 65
+			local mm = math.max(math.abs(dx) / 17, math.abs(dy) / 11)
+			if mm <= 1 then
+				local h = 3 + math.floor((1 - mm) * 4.6) * 5
+				m.set(x, y, h, h, dx / 17 * 1.2, NECRO)
+			end
+		end
+	end
+	m.cylinder(11, 76, 1.4, 9, 0, NECRO)
+	m.cylinder(45, 76, 1.4, 9, 0, NECRO)
+	m.render(g, d)
+	-- Glowing step edges: dotted green along every front edge of a step.
+	for y = 0, H - 2 do
+		for x = 0, W - 1 do
+			local c = m.cols[y * W + x]
+			if c and m.height_at(x, y + 1) < c.h - 1 and hash(x, y, s + 50) > 0.35 then
+				put(d, x, y - math.floor(c.h + 0.5), dither(GHOST, 0.5 + hash(x, y, s + 51) * 0.3, x, y))
+			end
+		end
+	end
+	keep_outline(d, NECRO[1])
+	-- Doorway at the front foot.
+	for k = 0, 6 do
+		for x = 26, 30 do
+			if not (k == 6 and (x == 26 or x == 30)) then put(d, x, 75 - k, dither(GHOST, 0.75 - k * 0.09, x, 75 - k)) end
+		end
+	end
+	glow(d, 28, 72, 8, GHOST[5], 0.9)
+	-- Ghost flame over the apex, light on the obelisk tips.
+	local apex = 42
+	for k = 1, 11 do
+		-- A flickering tongue of ghost fire, widest at its foot.
+		local half = math.max(0, 2.5 - k * 0.25)
+		local sway = math.floor(math.sin(k * 0.9) * 1.2 + 0.5)
+		for x = math.floor(28 - half + sway), math.floor(28 + half + sway) do
+			put(d, x, apex - k, GHOST[math.max(3, 6 - k // 3)])
+		end
+	end
+	glow(d, 28, apex - 4, 13, GHOST[5], 1.3)
+	for _, ox in ipairs({ 11, 45 }) do
+		put(d, ox, 66, GHOST[6]); put(d, ox, 65, GHOST[4])
+		glow(d, ox + 0.5, 66, 4, GHOST[5], 0.8)
+	end
+	-- Drifting wisps.
+	for _, p in ipairs(scatter(7, s + 60, 2)) do
+		if p[2] < 60 then put(d, p[1], p[2] - 6, GHOST[4 + math.floor(p[3] * 2)]) end
+	end
+end
+
+-- A glass water globe: dark rim, bright fresnel edge, light gathering low right, a highlight.
+local function globe(d, cx, cy, r)
+	for y = math.floor(cy - r), math.ceil(cy + r) do
+		for x = math.floor(cx - r), math.ceil(cx + r) do
+			local dx, dy = (x + 0.5 - cx) / r, (y + 0.5 - cy) / r
+			local dd = dx * dx + dy * dy
+			if dd <= 1 then
+				local nz = math.sqrt(1 - dd)
+				local v = 0.32 + (1 - nz) * 0.42 - (dx + dy) * 0.1 + ((dx > 0.1 and dy > 0.15) and 0.18 or 0)
+				local c = dither(GLASS, v, x, y)
+				if dd > 0.78 then c = (dx + dy > 0) and GLASS[2] or GLASS[5] end
+				if (dx + 0.4) ^ 2 + (dy + 0.42) ^ 2 < 0.05 then c = GLASS[7] end
+				put(d, x, y, c)
+			end
+		end
+	end
+end
+
+-- Partial golden filigree: an arc hugging the globe from a0 to a1 (degrees, 0 = right,
+-- clockwise on screen), a curved rib across its left face, beads at the ends.
+local function filigree(d, cx, cy, r, a0, a1, rib)
+	local steps = math.ceil(r * (a1 - a0) / 57 * 1.6)
+	for i = 0, steps * 2 do
+		local a = math.rad(a0 + (a1 - a0) * i / (steps * 2))
+		put(d, cx + math.cos(a) * (r + 0.5), cy + math.sin(a) * (r + 0.5), GOLD[5])
+		put(d, cx + math.cos(a) * (r - 0.6), cy + math.sin(a) * (r - 0.6), GOLD[3])
+		if i % 5 == 2 then put(d, cx + math.cos(a) * (r + 1.5), cy + math.sin(a) * (r + 1.5), GOLD[7]) end
+	end
+	for _, a in ipairs({ a0, a1 }) do
+		local ex, ey = cx + math.cos(math.rad(a)) * (r + 1.2), cy + math.sin(math.rad(a)) * (r + 1.2)
+		put(d, ex, ey, GOLD[7]); put(d, ex + 1, ey, GOLD[3])
+	end
+	if rib then
+		for i = 0, math.ceil(r * 2) do
+			local t = -1.35 + 2.1 * i / math.ceil(r * 2)
+			put(d, cx - math.cos(t) * r * 0.42, cy + math.sin(t) * r * 0.95, GOLD[i % 3 == 0 and 6 or 4])
+		end
+	end
+end
+
+-- Lake: water globes stacked on each other, held by partial golden frames, a moat around.
+local function keep_lake(s, g, d, theme)
+	keep_ground(s, g, theme)
+	-- { x, y, radius, arc from, arc to, rib }; drawn top first so lower globes sit in front.
+	local globes = {
+		{ 28, 38, 4.5, 190, 350, false },
+		{ 28, 50, 7.5, 160, 300, true },
+		{ 21, 62, 7, 150, 260, false },
+		{ 35, 62, 7, 270, 380, true },
+		{ 14, 71, 6, 140, 250, true },
+		{ 42, 71, 6, 280, 400, false },
+		{ 28, 72, 7.5, 200, 330, true },
+	}
+	for _, b in ipairs({ { 14, 71, 6 }, { 28, 72, 7.5 }, { 42, 71, 6 } }) do
+		shadow_ellipse(g, b[1] + 2, b[2] + b[3] - 1, b[3] * 1.1, 2.5, 0.6)
+	end
+	for _, b in ipairs(globes) do
+		globe(d, b[1], b[2], b[3])
+		filigree(d, b[1], b[2], b[3], b[4], b[5], b[6])
+	end
+	-- Golden spire on the top globe.
+	for k = 0, 4 do put(d, 28, 33 - k, GOLD[k == 4 and 7 or 5]) end
+	put(d, 27, 31, GOLD[4]); put(d, 29, 31, GOLD[4])
+	keep_outline(d, GLASS[1])
+end
+
 -- --- saving ------------------------------------------------------------------------
 
 local function to_image(b)
@@ -888,9 +1285,15 @@ for v = 0, VARIANTS - 1 do
 	unders[v] = underside(900 + v * 13)
 	save(string.format("underDirt%02d", v), { { "ground", unders[v] } })
 end
+-- Faction biomes build their own keep; neutral (and any theme without one) is the castle.
+local KEEPS = {
+	hexCastleForest00 = keep_forest, hexCastleMountain00 = keep_mountain, hexCastlePlains00 = keep_plains,
+	hexCastleSwamp00 = keep_swamp, hexCastleLake00 = keep_lake,
+}
 for _, theme in ipairs(CASTLE_THEMES) do
 	local g, d = buffer(W, H), buffer(W, H)
-	castle(77, g, d, theme[2])
+	local build = KEEPS[theme[1]]
+	if build then build(77, g, d, theme[2], castle) else castle(77, g, d, theme[2]) end
 	save(theme[1], { { "ground", g }, { "decor", d } })
 	tiles[theme[1]:sub(1, -3)] = { [0] = flatten({ g, d }) }
 end
