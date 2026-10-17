@@ -1,11 +1,14 @@
 extends Control
-## Main menu: title at the top, Start / Edit Island / Options / Exit at the bottom middle,
-## steampunk frame and a floating island over the cloud sky. Start opens the mission select:
+## Main menu: title and tagline at the top, Start / Edit Island / Options / Exit in a column
+## on the left, the island (in the game's own tile art) floating on the right while enemy
+## airship formations cross the cloud sky, all inside the steampunk frame. Start opens the mission select:
 ## numbered missions (1-1, 1-2 … 2-1 …), the endless mode below them and Back at the bottom.
 
 const GAME_SCENE := "res://main.tscn"
 
 @onready var _island: Node2D = $Island
+@onready var _airships: Node2D = $Airships
+@onready var _tagline: Label = %Tagline
 @onready var _buttons: Control = $Buttons
 @onready var _start: Button = %Start
 @onready var _edit_island: Button = %EditIsland
@@ -59,15 +62,25 @@ func _build_mission_select() -> void:
 	heading.add_theme_font_size_override("font_size", 34)
 	content.add_child(heading)
 	var grid := GridContainer.new()
-	grid.columns = GameSession.MISSIONS_PER_WORLD
+	# A "World n" label before each row of missions.
+	grid.columns = GameSession.MISSIONS_PER_WORLD + 1
 	grid.add_theme_constant_override("h_separation", 10)
 	grid.add_theme_constant_override("v_separation", 10)
 	content.add_child(grid)
 	for world in range(1, GameSession.WORLDS + 1):
+		var label := Label.new()
+		label.text = "World %d" % world
+		label.add_theme_color_override("font_color", MenuTheme.BRASS_LIGHT)
+		label.add_theme_font_size_override("font_size", 22)
+		label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		grid.add_child(label)
 		for number in range(1, GameSession.MISSIONS_PER_WORLD + 1):
 			var which := Vector2i(world, number)
-			var button := _menu_button(GameSession.mission_name(which), Vector2(96, 48))
 			var rules := GameSession.mission_rules(which)
+			# Mission number with its kill goal below.
+			var button := _menu_button("%s
+%d kills" % [GameSession.mission_name(which), rules.kill_goal], Vector2(96, 58))
+			button.add_theme_font_size_override("font_size", 18)
 			button.tooltip_text = "%d kills · enemies %d%% stronger, %d%% more of them" % [rules.kill_goal,
 				roundi((rules.strength - 1.0) * 100.0), roundi((rules.count - 1.0) * 100.0)]
 			button.pressed.connect(_start_mission.bind(which, false))
@@ -99,6 +112,8 @@ func _show_missions(open: bool) -> void:
 	_missions_panel.visible = open
 	_buttons.visible = not open
 	_island.visible = not open
+	_airships.visible = not open
+	_tagline.visible = not open
 	if open:
 		_missions_panel.reset_size()
 		_missions_panel.position = (size - _missions_panel.size) / 2.0 + Vector2(0, 40)
@@ -113,7 +128,8 @@ func _start_mission(which: Vector2i, endless: bool) -> void:
 
 
 func _layout() -> void:
-	_island.call(&"place", Vector2(size.x / 2.0, size.y * 0.38))
+	# Right of the button column, a little below the title.
+	_island.call(&"place", Vector2(size.x * 0.64, size.y * 0.5))
 
 
 ## Opens the island scene for a mission, or for editing without enemies.
@@ -125,6 +141,7 @@ func _open_island(edit: bool) -> void:
 func _show_options(open: bool) -> void:
 	_options_panel.visible = open
 	_buttons.visible = not open
+	_tagline.visible = not open
 	(_back if open else _start).grab_focus()
 
 

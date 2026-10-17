@@ -5,6 +5,7 @@
 [ext_resource type="Script" path="res://scripts/ui/floating_island_art.gd" id="3_island"]
 [ext_resource type="Script" path="res://scripts/ui/menu_frame.gd" id="4_frame"]
 [ext_resource type="Script" path="res://scripts/ui/brass_button.gd" id="5_button"]
+[ext_resource type="Script" path="res://scripts/ui/menu_airships.gd" id="6_airships"]
 
 [node name="MainMenu" type="Control"]
 layout_mode = 3
@@ -19,11 +20,12 @@ script = ExtResource("1_menu")
 script = ExtResource("2_sky")
 flight_velocity = Vector2(-25, -10)
 
+[node name="Airships" type="Node2D" parent="."]
+script = ExtResource("6_airships")
+
 [node name="Island" type="Node2D" parent="."]
-position = Vector2(576, 246)
+position = Vector2(760, 300)
 script = ExtResource("3_island")
-width = 300.0
-depth = 130.0
 
 [node name="Frame" type="Control" parent="."]
 layout_mode = 1
@@ -47,21 +49,31 @@ text = "Bastion Isles"
 horizontal_alignment = 1
 vertical_alignment = 1
 
+[node name="Tagline" type="Label" parent="."]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+offset_top = 118.0
+offset_bottom = 148.0
+grow_horizontal = 2
+theme_override_font_sizes/font_size = 20
+text = "Build your floating bastion · hold the sky"
+horizontal_alignment = 1
+vertical_alignment = 1
+
 [node name="Buttons" type="VBoxContainer" parent="."]
 layout_mode = 1
-anchors_preset = 7
-anchor_left = 0.5
-anchor_top = 1.0
-anchor_right = 0.5
-anchor_bottom = 1.0
-offset_left = -140.0
-offset_top = -296.0
-offset_right = 140.0
-offset_bottom = -74.0
-grow_horizontal = 2
-grow_vertical = 0
-theme_override_constants/separation = 10
-alignment = 2
+anchors_preset = 4
+anchor_top = 0.5
+anchor_bottom = 0.5
+offset_left = 110.0
+offset_top = -96.0
+offset_right = 390.0
+offset_bottom = 182.0
+grow_vertical = 2
+theme_override_constants/separation = 12
+alignment = 1
 
 [node name="Start" type="Button" parent="Buttons"]
 unique_name_in_owner = true
