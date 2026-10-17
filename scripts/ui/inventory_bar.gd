@@ -103,7 +103,7 @@ func _add_slot(kind: StringName, item: Dictionary, badge := "") -> void:
 	if not price.is_empty():
 		slot.cost = price.amount
 		slot.cost_currency = price.currency
-		slot.progress = clampf(float(island.funds(price.currency)) / price.amount, 0.0, 1.0)
+		slot.progress = 1.0 if price.amount == 0 else clampf(float(island.funds(price.currency)) / price.amount, 0.0, 1.0)
 	slot.set_meta(&"item", item)
 	slot.button_group = _group
 	slot.modulate = Color.WHITE if amount > 0 or not price.is_empty() else Color(1, 1, 1, 0.4)
@@ -140,6 +140,8 @@ static func describe(item: Dictionary, island: Island = null) -> String:
 			stored.xp = Tower.xp_for_level(item.level)
 			if item.level > 0 or item.get("tier", 1) > 1:
 				text += "\nKeeps its level and tier: stats +%d%%" % roundi((stored.stat_factor() - 1.0) * 100.0)
+			elif island and island.blueprint_cost(item.type) == 0:
+				text += "\nFree: the first tower of each type costs no blueprints"
 			elif island:
 				text += "\nCosts %d blueprints (you have %d) – each one you own makes the next cost one more" % [
 					island.blueprint_cost(item.type), island.treasury.blueprints]

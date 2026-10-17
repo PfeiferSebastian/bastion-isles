@@ -64,8 +64,9 @@ func _draw() -> void:
 		var cfont := get_theme_default_font()
 		var cpos := Vector2(16, size.y - 4)
 		var tint := MenuTheme.CREAM if progress >= 1.0 else Color("e08070")
-		draw_string_outline(cfont, cpos, str(cost), HORIZONTAL_ALIGNMENT_LEFT, -1, 12, 4, Color(0, 0, 0, 0.85))
-		draw_string(cfont, cpos, str(cost), HORIZONTAL_ALIGNMENT_LEFT, -1, 12, tint)
+		var label := "free" if cost == 0 else str(cost)
+		draw_string_outline(cfont, cpos, label, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, 4, Color(0, 0, 0, 0.85))
+		draw_string(cfont, cpos, label, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, tint)
 	if badge != "":
 		var bfont := get_theme_default_font()
 		draw_string_outline(bfont, Vector2(3, 13), badge, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, 4, Color(0, 0, 0, 0.85))

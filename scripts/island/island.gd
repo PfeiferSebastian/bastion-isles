@@ -26,7 +26,8 @@ const TILE_HP_PER_TIER := 100.0
 ## better: two towers count as 2.6, three as 3.9 and so on.
 const MERGE_BONUS := 0.3
 ## Blueprint price of a new tower: this many, plus one for every tower of that type already
-## owned (tiles: plus one for every unused tile in the inventory).
+## owned; the first tower of each type is free (tiles: plus one for every unused tile in the
+## inventory, never free).
 const BLUEPRINTS_BASE := 1
 ## Currency id of blueprints in price_of() (faction resources use their Biome.Type).
 const CURRENCY_BLUEPRINTS := -2
@@ -800,8 +801,12 @@ func owned_of(kind: StringName) -> int:
 
 
 ## Blueprints a new `kind` (tower type or &"tile") costs: more the more of them the player owns.
+## The first tower of each type costs nothing.
 func blueprint_cost(kind: StringName) -> int:
-	return BLUEPRINTS_BASE + owned_of(kind)
+	var owned := owned_of(kind)
+	if kind != &"tile" and owned == 0:
+		return 0
+	return BLUEPRINTS_BASE + owned
 
 
 ## The blueprint kind an inventory item is bought as, or &"" if blueprints can't buy it
