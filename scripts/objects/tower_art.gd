@@ -12,7 +12,7 @@ extends RefCounted
 const MATERIALS := {
 	Biome.Type.NEUTRAL: [Color("9a958c"), Color("cfc9bc"), Color("4f4b45"), Color("d8b25a")],
 	Biome.Type.FOREST: [Color("7a5230"), Color("a8794c"), Color("3d2814"), Color("7cc35a")],
-	Biome.Type.MOUNTAIN: [Color("9c5a45"), Color("c98a70"), Color("4a2418"), Color("ff9d4a")],
+	Biome.Type.MOUNTAIN: [Color("6f7178"), Color("a3a5ab"), Color("2f3137"), Color("ff9d4a")],
 	Biome.Type.PLAINS: [Color("e6e0cf"), Color("ffffff"), Color("8f8670"), Color("8fd3ff")],
 	Biome.Type.SWAMP: [Color("4d3a5c"), Color("7a6190"), Color("21162b"), Color("9be05a")],
 	Biome.Type.LAKE: [Color("4f7fa8"), Color("8db8d8"), Color("1f3a55"), Color("7fe8e0")],
@@ -59,7 +59,12 @@ static func draw_group(ci: CanvasItem, type: StringName, art: Dictionary, r: flo
 	var biome: Biome.Type = art.biome
 	var m: Array = MATERIALS.get(biome, MATERIALS[Biome.Type.NEUTRAL])
 	var platform: PackedVector2Array = art.platform
-	if platform.size() >= 3:
+	if platform.size() >= 3 and TerrainArt.available():
+		# With tile art the ground shows through: only the platform's rim and rivets.
+		ci.draw_polyline(platform + PackedVector2Array([platform[0]]), Color(m[2], 0.8), 2.0, true)
+		for p in platform:
+			SteamParts.rivet(ci, p + (art.center - p).normalized() * 5.0, 2.0)
+	elif platform.size() >= 3:
 		ci.draw_colored_polygon(_shifted(platform, Vector2(2, 3)), SHADOW)
 		ci.draw_colored_polygon(platform, m[2])
 		var floor_poly := GroupShape.inset(platform, 2.5)

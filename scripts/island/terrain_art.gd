@@ -1,50 +1,50 @@
 class_name TerrainArt
 extends RefCounted
-## Painted hex tiles for each biome (third-party art, see assets/third_party/hex_terrain_basic).
+## Pixel-art hex tiles for each biome (made in Aseprite by tools/aseprite/terrain_tiles.lua,
+## sources in assets/art/terrain/src).
 ##
-## The art is 256×384: a 256×256 hex sits in the lower part (top vertex at y 128, centre at
-## y 256), the space above lets mountains and trees overlap the row behind. It is drawn
-## stretched onto our regular hex, so it lines up with the grid and the overlays.
+## A tile is 56×96: the pointy-top hex sits in the lower part (top vertex at y 32, centre at
+## y 64), the space above lets trees and peaks overlap the row behind. Same layout as the
+## painted Baumgart set, so it is drawn stretched onto our regular hex and lines up with the
+## grid and the overlays. The island view draws it with nearest filtering to keep the pixels sharp.
 
-const DIR := "res://assets/third_party/hex_terrain_basic/"
+const DIR := "res://assets/art/terrain/"
 const VARIANTS := 4
 
 ## Tile name per biome; each has the variants 00–03.
 const TILE_NAMES := {
 	Biome.Type.NEUTRAL: "hexDirt",
-	Biome.Type.FOREST: "hexForestBroadleaf",
+	Biome.Type.FOREST: "hexForest",
 	Biome.Type.MOUNTAIN: "hexMountain",
-	Biome.Type.PLAINS: "hexDesertDunes",
-	Biome.Type.SWAMP: "hexMarsh",
-	Biome.Type.LAKE: "hexOcean",
+	Biome.Type.PLAINS: "hexDunes",
+	Biome.Type.SWAMP: "hexSwamp",
+	Biome.Type.LAKE: "hexLake",
 }
-## Mountains start as highlands and only become the big snowy mountains from this tier.
+## Mountains start as highlands and only get their peaks from this tier.
 const BIG_MOUNTAIN_TIER := 4
-## Rocky underside drawn below the island's edge tiles.
-const UNDERSIDE := "under/hexUnderDirt00.png"
-## The HQ: a castle on a mountain (sample tile from the same artist, free to use as-is).
-const HQ := "samples/medieval-fantasy_locations/hexMountainCastle00.png"
+## Rocky underside drawn below the island's edge tiles (variants 00–03).
+const UNDERSIDE := "underDirt"
+## The HQ: a dark walled castle on scorched ground.
+const HQ := "hexCastle00.png"
 
-## Plain coloured hexes are drawn even when the purchased art is installed (the art stays
-## available for later: set this to false to use it again).
-static var force_colours := true
+## Plain coloured hexes instead of the tiles (for testing the prototype look).
+static var force_colours := false
 
 static var _cache := {}
 static var _available: Variant = null
 
 
-## True when the purchased tile art is installed. It is not part of the repository; without
-## it the island is drawn as plain coloured hexes, so the project runs for everyone.
+## True when the tiles are there; without them the island is drawn as plain coloured hexes.
 static func available() -> bool:
 	if force_colours:
 		return false
 	if _available == null:
-		_available = ResourceLoader.exists(DIR + "tiles/hexDirt00.png")
+		_available = ResourceLoader.exists(DIR + "hexDirt00.png")
 	return _available
 
 
-## The art for `tile`: the castle for the HQ, otherwise one of its biome's variants,
-## picked stably from the tile's coordinate.
+## The art for `tile`: the castle for the HQ, otherwise one of its biome's variants, picked
+## stably from the tile's coordinate.
 static func for_tile(tile: IslandTile) -> Texture2D:
 	if tile.is_hq:
 		return _load(HQ)
@@ -60,11 +60,11 @@ static func preview(type: Biome.Type, coord: Vector2i) -> Texture2D:
 
 
 static func variant(name: String, coord: Vector2i) -> Texture2D:
-	return _load("tiles/%s%02d.png" % [name, absi(coord.x * 7 + coord.y * 13) % VARIANTS])
+	return _load("%s%02d.png" % [name, absi(coord.x * 7 + coord.y * 13) % VARIANTS])
 
 
-static func underside() -> Texture2D:
-	return _load(UNDERSIDE)
+static func underside(coord: Vector2i) -> Texture2D:
+	return variant(UNDERSIDE, coord)
 
 
 ## Where to draw a tile so its hex covers the hex of size `hex_size` centred on `center`.

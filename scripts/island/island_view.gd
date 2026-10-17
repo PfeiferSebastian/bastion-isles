@@ -21,10 +21,10 @@ const HOVER_BLOCKED_COLOR := Color(0.9, 0.2, 0.2, 0.9)
 const GHOST_ALPHA := 0.45
 ## Tint for the art of a tile destroyed in battle.
 const WASTELAND_TINT := Color(0.38, 0.28, 0.22)
-## Interim tier display: biome colours get darker with every tier (light = 0, dark = 7).
+## Interim tier display for the plain coloured hexes: darker with every tier (light = 0, dark = 7).
 const TIER_SHADE_PER_LEVEL := 0.06
-## Base tint for all tile art: slightly muted so towers, rings and overlays stand out.
-const ART_TINT := Color(0.86, 0.86, 0.86)
+## Tile art only darkens slightly with every tier above 1 (the tier label shows the rest).
+const ART_TIER_SHADE := 0.02
 const REPAIR_COLOR := Color("5fd068")
 const HP_RING_SCALE := 0.84
 const HP_RING_WIDTH := 3.0
@@ -404,7 +404,7 @@ func _draw() -> void:
 	for coord in ordered:
 		var c := HexMath.to_pixel(coord, hex_size)
 		if art:
-			_canvas.draw_texture_rect(TerrainArt.underside(), TerrainArt.underside_rect(c, hex_size), false)
+			_canvas.draw_texture_rect(TerrainArt.underside(coord), TerrainArt.underside_rect(c, hex_size), false)
 		else:
 			_draw_plain_underside(c)
 	for coord in ordered:
@@ -443,10 +443,10 @@ func _draw_top() -> void:
 	_canvas = self
 
 
-## Fallback without the purchased art: a flat coloured hex (and a drawn keep for the HQ).
+## Fallback without the tile art: a flat coloured hex (and a drawn keep for the HQ).
 func _draw_plain_tile(tile: IslandTile, center: Vector2, shade: Color) -> void:
 	var hex := _offset(_scaled(_hex_points, 0.96), center)
-	var color := Biome.color_of(tile.biome) * Color(shade.r / ART_TINT.r, shade.g / ART_TINT.g, shade.b / ART_TINT.b)
+	var color := Biome.color_of(tile.biome) * (shade if tile.destroyed else Color.WHITE.darkened(TIER_SHADE_PER_LEVEL * tile.tier))
 	_canvas.draw_colored_polygon(hex, color)
 	_canvas.draw_polyline(_closed(hex), Color(0.2, 0.16, 0.12, 0.7), 2.0, true)
 	if tile.is_hq:
@@ -469,9 +469,9 @@ func _draw_plain_underside(center: Vector2) -> void:
 	_canvas.draw_polyline(PackedVector2Array([p[3] + Vector2(0, h * 0.5), p[2] + Vector2(0, h * 0.5), p[1] + Vector2(0, h * 0.5)]), Color("3a2d22"), 2.0, true)
 
 
-## Tint for a tile's art: darker with every tier (interim tier display).
+## Tint for a tile's art: full brightness at Tier 1, a little darker with every tier above.
 static func tile_shade(tile: IslandTile) -> Color:
-	return ART_TINT.darkened(TIER_SHADE_PER_LEVEL * tile.tier)
+	return Color.WHITE.darkened(ART_TIER_SHADE * (tile.tier - 1))
 
 
 ## Tints every tile for the active overlay (chosen with the HUD's overlay icons).
