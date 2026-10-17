@@ -23,6 +23,9 @@ const HEAL_INTERVAL := 1.0
 ## with SIPHON_PHASE seconds healing the closest damaged building (the HQ counts, at distance
 ## 0), each phase at the full budget rate, so on average half damage and half healing.
 const SIPHON_PHASE := 1.0
+## The siphon drains and heals in ticks of this many seconds (like damage over time), one
+## pulse running along the stream per tick; five ticks make a phase.
+const SIPHON_TICK := Enemy.DOT_TICK
 ## Lake bubble: drifts to its target at BUBBLE_SPEED, encloses it and roots it in place
 ## (no movement; it still shoots) while dealing the interval's damage over BUBBLE_DURATION;
 ## a new bubble every BUBBLE_DURATION.
@@ -142,8 +145,8 @@ static func describe(biome: Biome.Type) -> PackedStringArray:
 		Biome.Type.FOREST:
 			lines.append("Heals the weakest building or ground in range: %.0f HP every %.1f s" % [p.damage, p.cooldown])
 		Biome.Type.SWAMP:
-			lines.append("Channelled stream, alternating every %.0f s: drains the nearest enemy at %.0f dps, then heals the closest damaged building (or the HQ) at %.0f HP/s (on average %.0f dps and %.0f HP/s)" % [
-				SIPHON_PHASE, p.beam_dps, siphon_heal_rate(), dps(biome), p.effect_dps])
+			lines.append("Channelled stream in pulses of %.1f s, alternating every %.0f s: drains the nearest enemy at %.0f dps, then heals the closest damaged building (or the HQ) at %.0f HP/s (on average %.0f dps and %.0f HP/s)" % [
+				SIPHON_TICK, SIPHON_PHASE, p.beam_dps, siphon_heal_rate(), dps(biome), p.effect_dps])
 		Biome.Type.LAKE:
 			lines.append("Slow bubble encloses its target and roots it in place for %.0f s, dealing %.1f damage meanwhile; a new bubble every %.0f s" % [p.dot_duration, p.dot_dps * p.dot_duration, p.cooldown])
 		_:

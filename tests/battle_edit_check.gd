@@ -151,6 +151,21 @@ func _initialize() -> void:
 		combat._towers_attack(0.05)
 		_check(combat._locks[laser].target == scoped, "a scope click switches at once")
 		combat.clear_focus()
+
+		# The HQ siphon drains in ticks of SIPHON_TICK, a pulse per tick (no damage in between).
+		combat._siphon_clock = 0.0
+		var drained := scoped.hp
+		var hits := 0
+		for i in 20:
+			var was := scoped.hp
+			combat._hq_siphon(Vector2.ZERO, scoped, HqWeapons.profile(Biome.Type.SWAMP), 0.05)
+			hits += 1 if scoped.hp < was else 0
+		# (Its armour takes a share of the 2 damage per tick.)
+		_check(hits == 5 and drained > scoped.hp, "siphon drains in 5 ticks per phase (%d hits, %.1f damage)" % [hits, drained - scoped.hp])
+		combat._siphon_clock = 0.0
+		combat._hq_siphon(Vector2(5, 5), scoped, HqWeapons.profile(Biome.Type.SWAMP), 0.05)
+		var stream: Dictionary = combat._siphons[-1]
+		_check(stream.from == scoped.global_position and stream.to == Vector2(5, 5) and stream.pulse > 0.0, "the drain pulse runs from the enemy towards the HQ")
 		for enemy: Enemy in [first, second, third, scoped]:
 			enemy.is_dead = true
 			enemy.queue_free()

@@ -945,29 +945,54 @@ func _hq_heal(profile: AttackProfile) -> void:
 
 
 ## Swamp: a channelled stream that takes turns: one phase it drains the target, the next it
-## heals the closest damaged building (the HQ itself counts, at distance 0). It drains only
-## with a kept `target` (none while it waits to pick one) but heals while enemies are in range.
+## heals the closest damaged building (the HQ itself counts, at distance 0). It works in ticks
+## of HqWeapons.SIPHON_TICK, each one pulse running along the stream that lands with the tick.
+## It drains only with a kept `target` (none while it waits to pick one) but heals while
+## enemies are in range.
 func _hq_siphon(origin: Vector2, target: Enemy, profile: AttackProfile, delta: float) -> void:
-	var island := _view.island
+	var tick := HqWeapons.SIPHON_TICK
+	var done := floori(_siphon_clock / tick)
 	_siphon_clock += delta
-	if HqWeapons.siphon_draining(_siphon_clock):
-		if target == null:
+	# Ticks completed this frame, each in the phase it ran in.
+	for i in range(done, floori(_siphon_clock / tick)):
+		_siphon_tick(target, profile, HqWeapons.siphon_draining((i + 0.5) * tick))
+	# The tick in flight: its pulse is this far along the stream.
+	var pulse := fmod(_siphon_clock, tick) / tick
+	if HqWeapons.siphon_draining((floori(_siphon_clock / tick) + 0.5) * tick):
+		if target and not target.is_dead:
+			_siphons.append({from = target.global_position, to = origin, color = HqWeapons.SIPHON_COLOR, pulse = pulse})
+		return
+	var closest := _siphon_heal_target(profile)
+	if not closest.is_empty():
+		_siphons.append({from = origin, to = _view.hex_center_world(closest.coord), color = HqWeapons.HEAL_COLOR, pulse = pulse})
+
+
+## One siphon tick: drains `target` or heals the closest damaged building by a tick's worth.
+func _siphon_tick(target: Enemy, profile: AttackProfile, draining: bool) -> void:
+	var tick := HqWeapons.SIPHON_TICK
+	if draining:
+		if target == null or target.is_dead:
 			return
 		var before := target.hp
-		target.take_damage(profile.beam_dps * delta)
+		target.take_damage(profile.beam_dps * tick)
 		_credit(target, before, Island.HQ_COORD)
-		_siphons.append({from = target.global_position, to = origin, color = HqWeapons.SIPHON_COLOR})
 		return
+	var closest := _siphon_heal_target(profile)
+	if not closest.is_empty():
+		var island := _view.island
+		island.track(Island.HQ_COORD, &"healed", island.heal(closest.coord, closest.tower, HqWeapons.siphon_heal_rate() * tick))
+
+
+## The building the siphon heals: the closest damaged one in range (the HQ counts, at
+## distance 0), as a damaged_in_reach entry, or {}.
+func _siphon_heal_target(profile: AttackProfile) -> Dictionary:
 	var closest := {}
-	for entry in island.damaged_in_reach(Island.HQ_COORD, int(profile.range_hexes)):
+	for entry in _view.island.damaged_in_reach(Island.HQ_COORD, int(profile.range_hexes)):
 		if not entry.tower and entry.coord != Island.HQ_COORD:
 			continue
 		if closest.is_empty() or HexMath.distance(Island.HQ_COORD, entry.coord) < HexMath.distance(Island.HQ_COORD, closest.coord):
 			closest = entry
-	if closest.is_empty():
-		return
-	island.track(Island.HQ_COORD, &"healed", island.heal(closest.coord, closest.tower, HqWeapons.siphon_heal_rate() * delta))
-	_siphons.append({from = origin, to = _view.hex_center_world(closest.coord), color = HqWeapons.HEAL_COLOR})
+	return closest
 
 
 ## Lake: enemies already enclosed in a bubble aren't worth another (unless scoped, or all are).
@@ -1269,19 +1294,21 @@ func _draw_overheat() -> void:
 		draw_circle(tip, 3.5, Color(1.0, 0.45, 0.25, 0.9 * t))
 
 
-## HQ siphon: a stream with motes flowing from `from` to `to` – purple from the enemy into
-## the HQ while draining, green from the HQ to the building while healing.
+## HQ siphon: a stream from `from` to `to` – purple from the enemy into the HQ while draining,
+## green from the HQ to the building while healing – with one pulse per tick running along it
+## (`pulse`, 0–1) and a flash where the last tick landed.
 func _draw_siphon(siphon: Dictionary) -> void:
 	var a := to_local(siphon.from)
 	var b := to_local(siphon.to)
 	var color: Color = siphon.color
+	var pulse: float = siphon.pulse
 	draw_line(a, b, Color(color, 0.25), 9.0, true)
 	draw_line(a, b, Color(color, 0.8), 2.0, true)
-	var phase := fmod(Time.get_ticks_msec() / 600.0, 1.0)
-	for i in 5:
-		var t := fmod(phase + i / 5.0, 1.0)
-		draw_circle(a.lerp(b, t), 3.0, Color(color.lightened(0.4), 0.9))
+	var at := a.lerp(b, pulse)
+	draw_circle(at, 7.0, Color(color, 0.35))
+	draw_circle(at, 4.0, Color(color.lightened(0.5), 0.95))
 	draw_circle(b, 4.0, Color(color, 0.7))
+	draw_circle(b, 4.0 + 6.0 * pulse, Color(color.lightened(0.3), 0.6 * (1.0 - pulse)))
 
 
 ## A beam from `a` to `b` (local) in its style: the laser shimmers with a white core and a
