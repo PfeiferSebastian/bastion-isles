@@ -69,10 +69,13 @@ var _canvas: CanvasItem = self
 var _hex_points: PackedVector2Array
 var _font: Font
 var _dragging := false
-## Calm HP bars (HpDrain): ground rings per tile, building rings per group (keyed by the
-## group's first coord). Advanced while drawing by the last frame's time, pruned once a second.
+## Calm HP and energy bars (HpDrain): ground rings per tile, building rings per group (keyed
+## by the group's first coord), the energy overlay per tile. Advanced while drawing by the last
+## frame's time, pruned once a second.
 var _tile_drains: Dictionary[Vector2i, HpDrain] = {}
 var _group_drains: Dictionary[Vector2i, HpDrain] = {}
+var _energy_drains: Dictionary[Vector2i, HpDrain] = {}
+var _energy_overlay_drains: Dictionary[Vector2i, HpDrain] = {}
 var _drain_delta := 0.0
 var _drain_prune_left := HpDrain.STEP
 ## A slot purchase not placed yet: {item, price} (see note_purchase), or {}.
@@ -119,6 +122,8 @@ func _process(delta: float) -> void:
 		_drain_prune_left = HpDrain.STEP
 		_prune_drains(_tile_drains)
 		_prune_drains(_group_drains)
+		_prune_drains(_energy_drains)
+		_prune_drains(_energy_overlay_drains)
 	queue_redraw()
 	_top.queue_redraw()
 
@@ -604,7 +609,7 @@ func _overlay_energy(coord: Vector2i, tile: IslandTile, hex: PackedVector2Array,
 	if cap <= 0.0:
 		_canvas.draw_colored_polygon(hex, Color(0.1, 0.1, 0.15, 0.65))
 		return
-	var ratio := clampf(tile.energy / cap, 0.0, 1.0)
+	var ratio := _drain(_energy_overlay_drains, coord, clampf(tile.energy / cap, 0.0, 1.0)).shown()
 	var alpha := 0.75 if tile.tower else 0.4
 	_canvas.draw_colored_polygon(hex, Color.from_hsv(ENERGY_COLOR.h, ENERGY_COLOR.s * ratio, 0.95, alpha))
 	if tile.tower and ratio < EnergyGrid.EMPTY_SHARE:
@@ -731,29 +736,22 @@ func _draw_group_status(group: Array[Vector2i]) -> void:
 	var hp_drain := _drain(_group_drains, coord, clampf(hp.x / maxf(hp.y, 0.001), 0.0, 1.0))
 	var hovered := group.has(hovered_coord)
 	if hovered or hp_drain.solid() < 0.995 or hp_drain.busy():
-		var solid := hp_drain.solid()
-		var color := HP_LOW_COLOR.lerp(HP_FULL_COLOR, solid)
-		_canvas.draw_polyline(_ring_piece(ring, sixth, hp_start, hp_edges, 1.0), TRACK_COLOR, HP_RING_WIDTH + 2.0, true)
-		_draw_ring_piece(_ring_piece(ring, sixth, hp_start, hp_edges, hp_drain.ghost()), HpDrain.GHOST_COLOR)
-		_draw_ring_piece(_ring_piece(ring, sixth, hp_start, hp_edges, solid), color)
+		_draw_ring_bar(ring, sixth, hp_start, hp_edges, hp_drain, HP_LOW_COLOR.lerp(HP_FULL_COLOR, hp_drain.solid()), TRACK_COLOR)
 	if shield.y > 0.0 and (hovered or shield.x < shield.y * 0.995):
 		_canvas.draw_polyline(_ring_piece(ring, sixth, 0, 2, 1.0), TRACK_COLOR, HP_RING_WIDTH + 2.0, true)
 		var points := _ring_piece(ring, sixth, 0, 2, clampf(shield.x / shield.y, 0.0, 1.0))
 		for i in points.size() - 1:
 			_canvas.draw_dashed_line(points[i], points[i + 1], SHIELD_COLOR, HP_RING_WIDTH, 6.0)
-	if energy.y > 0.0 and (hovered or energy.x < energy.y * ENERGY_SHOWN_BELOW):
-		var ratio := clampf(energy.x / energy.y, 0.0, 1.0)
-		var track := ENERGY_EMPTY_COLOR if ratio < 0.05 else TRACK_COLOR
+	if energy.y <= 0.0:
+		return
+	var energy_drain := _drain(_energy_drains, coord, clampf(energy.x / energy.y, 0.0, 1.0))
+	if hovered or energy_drain.solid() < ENERGY_SHOWN_BELOW:
+		var track := ENERGY_EMPTY_COLOR if energy_drain.solid() < 0.05 else TRACK_COLOR
 		# Anchored at the lower left, so energy drains from right to left.
-		_draw_ring_bar(ring, sixth, 2, 2, ratio, ENERGY_COLOR, track, true)
+		_draw_ring_bar(ring, sixth, 2, 2, energy_drain, ENERGY_COLOR, track, true)
 
 
-func _draw_ring_piece(piece: PackedVector2Array, color: Color) -> void:
-	if piece.size() >= 2:
-		_canvas.draw_polyline(piece, color, HP_RING_WIDTH, true)
-
-
-## The HP drain of `drains[key]`, advanced to `real`; a bar not drawn last frame belongs to
+## The drain of `drains[key]`, advanced to `real`; a bar not drawn last frame belongs to
 ## something new (a rebuilt tower, a restored tile) and starts at `real` without draining.
 func _drain(drains: Dictionary[Vector2i, HpDrain], key: Vector2i, real: float) -> HpDrain:
 	var frame := Engine.get_process_frames()
@@ -768,6 +766,21 @@ func _drain(drains: Dictionary[Vector2i, HpDrain], key: Vector2i, real: float) -
 		drain.advance(real, _drain_delta)
 	drain.seen_frame = frame
 	return drain
+
+
+## The share a bar shows right now – &"hp" or &"energy" of a building, &"ground" HP of a
+## tile – or `real` when it has no bar yet, so the info window's numbers follow the bar.
+func shown_share(coord: Vector2i, pool: StringName, real: float) -> float:
+	var drain: HpDrain
+	match pool:
+		&"ground":
+			drain = _tile_drains.get(coord)
+		&"hp":
+			drain = _group_drains.get(island.group_of(coord)[0])
+		_:
+			drain = _energy_drains.get(island.group_of(coord)[0])
+	var current := drain and drain.seen_frame >= Engine.get_process_frames() - 1
+	return drain.shown() if current else real
 
 
 ## Drops drains whose bar hasn't been drawn for a while (towers gone, tiles destroyed).
@@ -788,9 +801,16 @@ func _draw_hp_arc(center: Vector2, drain: HpDrain) -> void:
 		_canvas.draw_polyline(_arc(center, 0, 6, solid), HP_LOW_COLOR.lerp(HP_FULL_COLOR, solid), HP_RING_WIDTH, true)
 
 
-func _draw_ring_bar(ring: PackedVector2Array, sixth: float, start: int, edges: int, ratio: float, color: Color, track: Color, from_end := false) -> void:
+## A bar along a group's ring: `color` up to the drain's solid part, white up to its ghost.
+func _draw_ring_bar(ring: PackedVector2Array, sixth: float, start: int, edges: int, drain: HpDrain, color: Color, track: Color, from_end := false) -> void:
 	_canvas.draw_polyline(_ring_piece(ring, sixth, start, edges, 1.0), track, HP_RING_WIDTH + 2.0, true)
-	var piece := _ring_piece(ring, sixth, start, edges, ratio, from_end) if ratio > 0.0 else PackedVector2Array()
+	if drain.ghost() > 0.0:
+		_draw_ring_piece(_ring_piece(ring, sixth, start, edges, drain.ghost(), from_end), HpDrain.GHOST_COLOR)
+	if drain.solid() > 0.0:
+		_draw_ring_piece(_ring_piece(ring, sixth, start, edges, drain.solid(), from_end), color)
+
+
+func _draw_ring_piece(piece: PackedVector2Array, color: Color) -> void:
 	if piece.size() >= 2:
 		_canvas.draw_polyline(piece, color, HP_RING_WIDTH, true)
 

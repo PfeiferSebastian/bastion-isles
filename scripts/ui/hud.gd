@@ -491,7 +491,8 @@ func _describe_tile(coord: Vector2i) -> String:
 	if tile.destroyed:
 		what += " · WASTELAND"
 	lines.append("{icon:%s}%s" % [IconCache.biome_kind(shown_biome), what])
-	lines.append("Ground HP %d / %d" % [ceili(tile.hp), roundi(view.island.tile_max_hp(coord))])
+	var ground_max := view.island.tile_max_hp(coord)
+	lines.append("Ground HP %d / %d" % [ceili(view.shown_share(coord, &"ground", tile.hp / ground_max) * ground_max), roundi(ground_max)])
 	if view.island.construction.has(coord):
 		lines.append("Under construction: %d s of fighting left · takes %d%% damage · no work, energy, repairs or auras yet" % [ceili(view.island.construction_left(coord)), roundi(Island.CONSTRUCTION_DAMAGE * 100.0)])
 	if tile.tower == null:
@@ -533,12 +534,14 @@ func _describe_building(coord: Vector2i, tile: IslandTile) -> PackedStringArray:
 	if tower.solo:
 		lines.append("Single unit: the neighbouring cluster is full (at most %d)" % Island.MAX_CLUSTER)
 	var hp :=island.group_pool(coord, &"hp")
+	hp.x = view.shown_share(coord, &"hp", hp.x / maxf(hp.y, 0.001)) * hp.y
 	lines.append("HP %d / %d%s" % [ceili(hp.x), roundi(hp.y), _modifier(island.tower_max_hp(coord) / TowerDefs.base_hp(tower.type))])
 	var shield := island.group_pool(coord, &"shield")
 	if shield.y > 0.0:
 		lines.append("Shield %d / %d" % [ceili(shield.x), roundi(shield.y)])
 	var energy := island.group_pool(coord, &"energy")
 	if energy.y > 0.0:
+		energy.x = view.shown_share(coord, &"energy", energy.x / energy.y) * energy.y
 		lines.append("Energy %.0f / %.0f%s" % [energy.x, energy.y, _modifier(tower.stat_factor())])
 	match tower.type:
 		&"attack":

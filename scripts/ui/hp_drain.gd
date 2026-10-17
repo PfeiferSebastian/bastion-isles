@@ -1,7 +1,7 @@
 class_name HpDrain
 extends RefCounted
-## Calm HP bar: the shown share lags the real one and catches up in steps of STEP seconds.
-## A step drains (or fills) from where the bar stands to the share at the step's start;
+## Calm HP or energy bar: the shown share lags the real one and catches up in steps of STEP
+## seconds. A step drains (or fills) from where the bar stands to the share at the step's start;
 ## whatever changes during a step adds up into the next one. Bars draw solid() in colour and
 ## the gap up to ghost() white: a loss shrinks from the old value, a gain fills toward the new.
 ## Destruction isn't drained: the owner simply stops drawing the bar.
