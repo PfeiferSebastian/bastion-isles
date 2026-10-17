@@ -104,7 +104,8 @@ static func draw_group(ci: CanvasItem, type: StringName, art: Dictionary, r: flo
 			continue
 		# A merged tower is one big building over its hexes.
 		var size: int = art.sizes[i]
-		draw(ci, type, biome, art.big_centers[i], r * (1.0 + 0.45 * (size - 1)), [], link_length, aim)
+		var member_aim: float = art.aims[i] if art.has("aims") else aim
+		draw(ci, type, biome, art.big_centers[i], r * (1.0 + 0.45 * (size - 1)), [], link_length, member_aim)
 
 
 static func _link_dirs(links: Array[bool]) -> Array[Vector2]:

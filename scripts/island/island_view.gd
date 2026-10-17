@@ -58,6 +58,9 @@ var hovered_coord := Vector2i.ZERO
 var overlay: StringName = &""
 
 var _objects: Dictionary[Vector2i, Node2D] = {}
+## Members of combined buildings: coord -> {lead (the node drawing the group), index (in its
+## group art)}, so a turret's aim reaches the drawing that shows it.
+var _group_members: Dictionary[Vector2i, Dictionary] = {}
 ## Layer above the towers for status rings, overlays and hover; helpers draw onto _canvas.
 var _top := Node2D.new()
 ## Container for tower nodes, sorted by depth (back rows first).
@@ -118,6 +121,10 @@ func aim_tower(coord: Vector2i, angle: float) -> void:
 	var node: Node2D = _objects.get(coord)
 	if node:
 		node.set(&"aim_angle", angle)
+	var member: Dictionary = _group_members.get(coord, {})
+	if not member.is_empty() and is_instance_valid(member.lead):
+		member.lead.group_art.aims[member.index] = angle
+		member.lead.queue_redraw()
 
 
 # --- Input ---------------------------------------------------------------
@@ -348,6 +355,7 @@ func _on_tile_changed(_coord: Vector2i) -> void:
 ## (2+ towers of one type, except walls, which stay ramparts) is drawn by its first node over
 ## all its hexes; the other members' nodes hide.
 func _refresh_tower_nodes() -> void:
+	_group_members.clear()
 	for group in island.groups():
 		var lead: Node2D = _objects.get(group[0])
 		var combined: bool = group.size() > 1 and (island.get_tower(group[0]).type != &"wall" or island.cluster_towers(group[0]) < group.size())
@@ -364,11 +372,15 @@ func _refresh_tower_nodes() -> void:
 			node.visible = not combined or node == lead
 		if lead:
 			lead.set(&"group_art", _group_art(group, lead.position) if combined else {})
+			if combined:
+				for i in group.size():
+					_group_members[group[i]] = {lead = lead, index = i}
 
 
 ## What the lead node needs to draw a combined building, in its local space: the platform
 ## outline, every member's centre, links (none between hexes of one merged tower) and biome,
-## the main biome, and for merged towers where their one big building sits and its size.
+## the main biome, for merged towers where their one big building sits and its size, and
+## every member's turret angle (kept up to date by aim_tower).
 func _group_art(group: Array[Vector2i], origin: Vector2) -> Dictionary:
 	var platform := GroupShape.inset(GroupShape.outline(group, hex_size), hex_size * 0.07)
 	var members: Array[Vector2] = []
@@ -377,6 +389,7 @@ func _group_art(group: Array[Vector2i], origin: Vector2) -> Dictionary:
 	var parts: Array = []
 	var sizes: Array = []
 	var big_centers: Array = []
+	var aims: Array = []
 	var biomes := {}
 	var center := Vector2.ZERO
 	for coord in group:
@@ -389,6 +402,7 @@ func _group_art(group: Array[Vector2i], origin: Vector2) -> Dictionary:
 			links.append(group.has(coord + dir) and not own.has(coord + dir))
 		member_links.append(links)
 		var tower := island.get_tower(coord)
+		aims.append(tower.aim)
 		if tower.is_part:
 			parts.append(true)
 			sizes.append(1)
@@ -410,7 +424,7 @@ func _group_art(group: Array[Vector2i], origin: Vector2) -> Dictionary:
 	return {
 		platform = _offset(platform, -origin), members = members, links = member_links,
 		biomes = member_biomes, biome = main_biome, center = center / group.size(),
-		parts = parts, sizes = sizes, big_centers = big_centers,
+		parts = parts, sizes = sizes, big_centers = big_centers, aims = aims,
 	}
 
 
