@@ -16,6 +16,8 @@ signal towers_merged(hexes: Array[Vector2i])
 const HQ_COORD := Vector2i.ZERO
 ## Share of a tower's max shield that refills per second.
 const SHIELD_REGEN := 0.05
+## Seconds over which an Aura tower's power follows the energy it gets (so it doesn't flicker).
+const AURA_POWER_AVERAGE := 2.0
 ## Tile tiers come from merging later (milestone 4); until then they are capped here.
 const MAX_MERGE_TIER := 6
 ## Ground structure: plenty, so tiles outlast buildings. Placeholder numbers.
@@ -469,6 +471,7 @@ func place_tower(coord: Vector2i, type: StringName, level := 0, tier := 1) -> To
 	tile.tower.xp = Tower.xp_for_level(level)
 	tile.tower.level_seen = level
 	tile.tower.hp = tower_max_hp(coord)
+	tile.tower.last_max_hp = tile.tower.hp
 	tile_changed.emit(coord)
 	return tile.tower
 
@@ -481,6 +484,7 @@ func change_tower_type(coord: Vector2i, type: StringName) -> bool:
 	var ratio := tower.hp / tower_max_hp(coord)
 	tower.type = type
 	tower.hp = ratio * tower_max_hp(coord)
+	tower.last_max_hp = tower_max_hp(coord)
 	tile_changed.emit(coord)
 	return true
 
@@ -644,6 +648,7 @@ func upgrade_tower(coord: Vector2i) -> bool:
 		tower.xp = 0.0
 		tower.level_seen = 0
 		tower.hp = ratio * tower_max_hp(member)
+		tower.last_max_hp = tower_max_hp(member)
 		tile_changed.emit(member)
 	for member in group_of(coord):
 		_lift_merged_tiles(member)
@@ -1066,6 +1071,7 @@ func rebuild_losses() -> int:
 		var tower := get_tower(coord)
 		if tower:
 			tower.hp = tower_max_hp(coord)
+			tower.last_max_hp = tower.hp
 			tile_changed.emit(coord)
 	return rebuilt
 
@@ -1178,6 +1184,12 @@ func tick(delta: float) -> void:
 			continue
 		var aura := aura_at(coord)
 		var max_hp := tower_max_hp(coord)
+		# A rising max HP raises the HP by as much (the damage taken stays), a falling one only
+		# caps it. A fresh or loaded tower counts its HP against its unbuffed max.
+		var before := tower.last_max_hp if tower.last_max_hp >= 0.0 else TowerDefs.base_hp(tower.type) * tower.stat_factor()
+		if max_hp > before:
+			tower.hp += max_hp - before
+		tower.last_max_hp = max_hp
 		tower.time_since_damage += delta
 		var regen: float = aura.get(&"regen", 0.0)
 		if tower.type == &"wall" and tower.time_since_damage >= TowerDefs.WALL_REST_DELAY and tower.hp < max_hp:
@@ -1226,6 +1238,7 @@ func fill_up() -> void:
 		tile.starved = 0.0
 		if tile.tower:
 			tile.tower.hp = tower_max_hp(coord)
+			tile.tower.last_max_hp = tile.tower.hp
 			tile.tower.shield = tower_max_shield(coord)
 
 
@@ -1238,7 +1251,9 @@ func _power_auras(delta: float) -> void:
 				tower.aura_power = 0.0
 				continue
 			var energy := AuraProfiles.for_tile(self, coord).energy_per_second * delta
-			tower.aura_power = EnergyGrid.draw_energy(self, coord, energy)
+			var drawn := EnergyGrid.draw_energy(self, coord, energy)
+			# Averaged, so a trickle of energy gives a steady partial buff instead of flickering.
+			tower.aura_power = lerpf(tower.aura_power, drawn, minf(1.0, delta / AURA_POWER_AVERAGE))
 
 
 ## Regeneration auras (Forest tiles, Forest Aura towers) also mend the ground.
@@ -1292,6 +1307,7 @@ func _set_constructing(coord: Vector2i, on: bool) -> void:
 	_group_cache.clear()
 	if tower:
 		tower.hp = ratio * tower_max_hp(coord)
+		tower.last_max_hp = tower_max_hp(coord)
 	tile_changed.emit(coord)
 
 

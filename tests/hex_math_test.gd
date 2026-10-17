@@ -581,6 +581,8 @@ func _test_aura_towers() -> void:
 	_check(island.get_tower(aura).aura_power == 0.0, "aura starts unpowered")
 	island.get_tile(aura).energy = 20.0
 	island.tick(0.1)
+	_check(island.get_tower(aura).aura_power > 0.0 and island.get_tower(aura).aura_power < 0.2, "aura power rises gradually")
+	island.tick(Island.AURA_POWER_AVERAGE)
 	_check(island.get_tower(aura).aura_power == 1.0, "aura powered by its tile energy")
 	_check(is_equal_approx(AttackProfiles.for_tile(island, neighbour).damage, plain_damage * 1.25), "neutral aura boosts neighbour output 25%")
 	_check(is_equal_approx(AttackProfiles.for_tile(island, far).damage, plain_damage), "aura does not reach distance 3")
@@ -591,7 +593,7 @@ func _test_aura_towers() -> void:
 	var second := Vector2i(1, -1)
 	island.place_tower(second, &"aura")
 	island.get_tile(second).energy = 20.0
-	island.tick(0.1)
+	island.tick(Island.AURA_POWER_AVERAGE)
 	# The two touch, so they form a combined building (+30%), but still don't stack.
 	_check(is_equal_approx(island.aura_at(second).get(&"output", 0.0), 0.25 * (1.0 + Island.MERGE_BONUS)), "aura towers receive only their own buff")
 	# Mountain aura: armour reduces damage.
@@ -600,17 +602,27 @@ func _test_aura_towers() -> void:
 	armor.place_tower(aura, &"aura")
 	armor.place_tower(neighbour, &"attack")
 	armor.get_tile(aura).energy = 20.0
-	armor.tick(0.1)
+	armor.tick(Island.AURA_POWER_AVERAGE)
 	var hp := armor.get_tower(neighbour).hp
 	armor.damage_tower(neighbour, 10.0)
 	_check(is_equal_approx(hp - armor.get_tower(neighbour).hp, 9.0), "mountain aura armour reduces damage 10%")
+	# Its +HP raised the neighbour's HP along with its max, so the tower started full.
+	_check(is_equal_approx(hp, armor.tower_max_hp(neighbour)), "a max-HP bonus raises the HP too")
+	# Without energy the aura fades over a few seconds instead of switching off at once.
+	armor.get_tile(aura).energy = 0.0
+	armor.tick(0.1)
+	var fading := armor.get_tower(aura).aura_power
+	_check(fading > 0.9 and fading < 1.0, "aura power fades instead of flickering")
+	# A falling max HP only caps the HP.
+	var capped := armor.get_tower(neighbour).hp
+	_check(capped <= armor.tower_max_hp(neighbour) + 0.001, "a falling max HP caps the HP")
 	# Swamp aura buffs no allies.
 	var swamp := Island.create_starter(2)
 	swamp.set_biome(aura, Biome.Type.SWAMP)
 	swamp.place_tower(aura, &"aura")
 	swamp.place_tower(neighbour, &"attack")
 	swamp.get_tile(aura).energy = 20.0
-	swamp.tick(0.1)
+	swamp.tick(Island.AURA_POWER_AVERAGE)
 	_check(not swamp.aura_at(neighbour).has(&"output"), "swamp aura gives allies nothing")
 	_check(AuraProfiles.for_tile(swamp, aura).enemy_weaken > 0.0, "swamp aura weakens enemies")
 	# Forest Aura regen also mends the ground.
