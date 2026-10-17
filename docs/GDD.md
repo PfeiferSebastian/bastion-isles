@@ -456,7 +456,7 @@ How each biome changes each base tower. Tier 0 has no traits (6.1); the trait gr
 
 | Biome | Trait | Tier 3 / Tier 6 milestones 💡 |
 |---|---|---|
-| **Neutral (Tier 0)** | 💡 **+25% output** (damage, healing, energy, absorption…) for towers in radius 1. Tile auras in the radius +25% | – |
+| **Neutral (Tier 0)** | 💡 **+25% output** (damage, healing, energy, absorption…) for towers in radius 2. Tile auras in the radius +20% | – |
 | **Forest** | **Healing over time** on towers and tiles in its radius | T3: also slowly restores tile tiers · T6: larger radius |
 | **Mountain** | **Armour / more HP** for towers in its radius | T3: damage reduction on top · T6: spreads tier loss inside the radius (like the Mountain wall) |
 | **Desert** | **Acceleration ✅:** speeds up **whatever it touches** instead of only fire rate. Attack → fire rate · Energy → production rate · Repair → healing speed · Warehouse → capacity · Scout → reveal speed | T3: larger radius · T6: also cuts energy use of buffed towers |
@@ -464,9 +464,9 @@ How each biome changes each base tower. Tier 0 has no traits (6.1); the trait gr
 | **Swamp** | **Debuff aura:** weakens **enemies** in its radius instead of buffing allies | T3: debuffed enemies are revealed in fog (8.6) · T6: enemies killed in the radius give energy (like Swamp Energy) |
 
 - ✅ **Prototype implementation (2026-10-15)**, numbers 💡 placeholders:
-  - Radius 1 (own tile + neighbours), 1 energy/s from its own storage; without energy the aura is off (Forest keeps a third of its strength).
+  - Radius 2 (own tile and two rings around it; ✅ raised from 1 on 2026-10-17), 1 energy/s from its own storage; without energy the aura is off (Forest keeps a third of its strength).
   - Neutral +25% output (damage, healing, energy) · Forest +2%/s regen for towers **and ground** · Mountain +20% HP and 10% armour · Desert +25% efficiency · Plains shield worth 25% of max HP · Swamp weakens enemies by 25%, buffs no allies.
-  - Tile auras emitted inside the radius +25% (not for Swamp). Strength +25% per tier above 1.
+  - Tile auras emitted inside the radius +20% (✅ lowered from 25% on 2026-10-17; not for Swamp). Strength +25% per tier above 1.
   - No chaining: Aura towers only receive their own buff.
   - Side effects decided with it: **shields now regenerate from the tower's own storage** (0.05 energy per shield HP); **regen auras also mend damaged ground**.
   - Not yet: Tier 3/6 milestones (bigger radius etc.).

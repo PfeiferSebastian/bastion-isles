@@ -583,10 +583,10 @@ func _test_aura_towers() -> void:
 	island.tick(0.1)
 	_check(island.get_tower(aura).aura_power == 1.0, "aura powered by its tile energy")
 	_check(is_equal_approx(AttackProfiles.for_tile(island, neighbour).damage, plain_damage * 1.25), "neutral aura boosts neighbour output 25%")
-	_check(is_equal_approx(AttackProfiles.for_tile(island, far).damage, plain_damage), "aura does not reach distance 2")
+	_check(is_equal_approx(AttackProfiles.for_tile(island, far).damage, plain_damage), "aura does not reach distance 3")
 	# Tile auras inside the radius are boosted.
 	island.set_biome(neighbour, Biome.Type.MOUNTAIN)
-	_check(is_equal_approx(island.aura_at(neighbour).get(&"max_hp", 0.0), 0.05 * 1.25), "aura tower boosts tile auras in its radius")
+	_check(is_equal_approx(island.aura_at(neighbour).get(&"max_hp", 0.0), 0.05 * 1.2), "aura tower boosts tile auras in its radius by 20%")
 	# No chaining: a second aura tower next to the first gets only its own buff.
 	var second := Vector2i(1, -1)
 	island.place_tower(second, &"aura")
