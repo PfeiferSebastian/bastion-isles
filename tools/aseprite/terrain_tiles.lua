@@ -811,24 +811,13 @@ local function castle(s, g, d, theme)
 	window(33, KY1 - KH + 4)
 	window(CX0 - RX + 1, CY0 + 2 - SIDE[2] + 3)
 	window(CX0 + RX - 2, CY0 + 2 - SIDE[2] + 3)
-	-- Red banners hanging from the keep, flags on the spires.
+	-- Banners hanging from the keep.
 	for _, bx in ipairs({ 25, 30 }) do
 		for k = 0, 4 do
 			put(d, bx, KY1 - KH + 2 + k, BANNER[(k < 4) and 3 or 1])
 			put(d, bx + 1, KY1 - KH + 2 + k, BANNER[(k < 4) and 2 or 1])
 		end
 	end
-	local function flag(t)
-		local x, tip = math.floor(t[1]), math.floor(t[2] - t[4] - t[5])
-		for k = 1, 3 do put(d, x, tip - k, DARK_STONE[1]) end
-		put(d, x + 1, tip - 3, BANNER[4])
-		put(d, x + 2, tip - 3, BANNER[3])
-		put(d, x + 1, tip - 2, BANNER[2])
-		put(d, x + 3, tip - 2, BANNER[2])
-	end
-	flag(MAIN)
-	flag(SPIRE_A)
-	flag(SPIRE_B)
 
 	-- Soft dark outline on the lower and right edges of the silhouette.
 	local edge = {}
