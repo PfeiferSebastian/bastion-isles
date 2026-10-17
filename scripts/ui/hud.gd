@@ -618,11 +618,15 @@ static func _describe_repair(p: RepairProfile) -> PackedStringArray:
 		&"redistribute":
 			what = "Moves %.0f HP from healthy to damaged" % p.amount
 		&"lifesteal":
-			what = "Drains %.0f HP from enemies" % p.amount
+			what = "Alternates: drains %.0f HP from an enemy, then heals that essence (no heal without a drain first)" % p.amount
 		_:
 			what = "Repairs %.0f HP" % p.amount
 	var lines: PackedStringArray = [what + (" × %d targets" % p.targets if p.targets > 1 else "")]
-	lines.append("Every %.1f s (%.1f HP/s), %.1f energy each" % [p.cooldown, p.amount * p.targets / maxf(p.cooldown, 0.001), p.energy_per_heal])
+	if p.mode == &"lifesteal":
+		var half := p.amount / maxf(2.0 * p.cooldown, 0.001)
+		lines.append("One phase every %.1f s (%.1f damage/s and %.1f HP/s), %.1f energy each" % [p.cooldown, half, half, p.energy_per_heal])
+	else:
+		lines.append("Every %.1f s (%.1f HP/s), %.1f energy each" % [p.cooldown, p.amount * p.targets / maxf(p.cooldown, 0.001), p.energy_per_heal])
 	lines.append("Reach %d hexes, %d%% of the heal at the edge" % [p.reach(), roundi(p.falloff[p.reach()] * 100.0)])
 	return lines
 

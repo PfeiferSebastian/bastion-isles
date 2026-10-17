@@ -1082,7 +1082,9 @@ func _can_repair(coord: Vector2i, profile: RepairProfile, damaged: Array[Diction
 		&"redistribute":
 			return _donor_for(coord, profile, damaged[0]) != {}
 		&"lifesteal":
-			return _nearest_enemy(_view.hex_center_world(coord), profile.reach()) != null
+			# The heal phase needs drained essence; the drain phase an enemy in reach.
+			return _view.island.get_tower(coord).essence > 0.0 \
+				or _nearest_enemy(_view.hex_center_world(coord), profile.reach()) != null
 	return true
 
 
@@ -1118,17 +1120,25 @@ func _donor_for(coord: Vector2i, profile: RepairProfile, target: Dictionary) -> 
 	return best
 
 
-## Swamp: drains the nearest enemy in reach and heals the weakest target with it.
+## Swamp: alternates two phases, one per action. Drain: damages the nearest enemy in reach and
+## stores what it took as essence. Heal: heals the weakest target with that essence. No heal
+## without a drain first, so over two actions it deals and heals one heal's worth each.
 func _lifesteal(coord: Vector2i, profile: RepairProfile, target: Dictionary) -> void:
+	var island := _view.island
+	var tower := island.get_tower(coord)
 	var origin := _view.hex_center_world(coord)
+	if tower.essence > 0.0:
+		var share := profile.falloff[HexMath.distance(coord, target.coord)]
+		island.track(coord, &"healed", island.heal(target.coord, target.tower, tower.essence * share))
+		tower.essence = 0.0
+		_flash(coord, target.coord, profile.color)
+		return
 	var enemy := _nearest_enemy(origin, profile.reach())
 	var before := enemy.hp
 	enemy.take_damage(profile.amount)
-	var stolen := before - maxf(enemy.hp, 0.0)
-	var share := profile.falloff[HexMath.distance(coord, target.coord)]
-	_view.island.track(coord, &"healed", _view.island.heal(target.coord, target.tower, stolen * share))
+	tower.essence = before - maxf(enemy.hp, 0.0)
+	island.track(coord, &"damage", tower.essence)
 	_heal_flashes.append({from = enemy.global_position, to = origin, color = profile.color, time = HEAL_FLASH_TIME})
-	_flash(coord, target.coord, profile.color)
 
 
 func _nearest_enemy(origin: Vector2, reach_hexes: int) -> Enemy:

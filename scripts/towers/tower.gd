@@ -29,6 +29,9 @@ var time_since_damage := 0.0
 var attack_cooldown := 0.0
 ## Aura and Scout towers: how strongly they work right now (0 = no energy, 1 = full).
 var aura_power := 0.0
+## Swamp Repair towers: HP drained in their last drain phase, healed out in the next one
+## (0 = the next action drains).
+var essence := 0.0
 ## Max HP at the last island tick, so a rising max (aura, tile, level) raises the HP too;
 ## -1 until the first tick after the tower was built or loaded.
 var last_max_hp := -1.0

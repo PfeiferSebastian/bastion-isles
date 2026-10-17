@@ -439,7 +439,7 @@ How each biome changes each base tower. Tier 0 has no traits (6.1); the trait gr
 | **Mountain** | **Rebuild:** restores HP in **big chunks** with a long cooldown, like a construction crew | 💡 T3: shorter cooldown · T6: also repairs destroyed towers |
 | **Desert** | **Jumping pulses:** fast, small heals that jump to several targets | ✅ A **continuous healing beam** is a bigger fused Repair tower (e.g. 3 or more tiles/biomes) |
 | **Plains** | **Redistribution:** moves HP from healthy tiles to damaged ones; very cheap in energy | 💡 T3: larger radius · T6: also redistributes energy |
-| **Swamp** | **Lifesteal:** heals by draining life from enemies | 💡 T3: several enemies at once · T6: surplus is stored as energy |
+| **Swamp** | **Lifesteal:** heals by draining life from enemies. ✅ **Drain/heal cycle (2026-10-17):** alternates one action per cooldown: a **drain** phase damages the nearest enemy in reach and stores what it took as essence, the next **heal** phase heals the weakest target with that essence (distance drop-off applies). **No heal without a drain first**, so without an enemy in reach it heals nothing. Over two actions it deals and heals one heal's worth each (10 per action → on average 5 damage/s and 5 HP/s), same energy per action | 💡 T3: several enemies at once · T6: surplus is stored as energy |
 
 - ✅ **Prototype implementation (2026-10-15)**, numbers 💡 placeholders:
   - Repair towers heal **towers and ground**, weakest (lowest HP share) first, and only pay energy when they actually heal.
