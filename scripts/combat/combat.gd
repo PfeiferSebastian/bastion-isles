@@ -777,7 +777,8 @@ func _tick_locks(delta: float) -> void:
 	for key: Vector2i in _locks.keys():
 		var lock: Dictionary = _locks[key]
 		lock.wait = maxf(lock.wait - delta, 0.0)
-		if lock.target != null and (not is_instance_valid(lock.target) or lock.target.is_dead):
+		# (A freed enemy doesn't compare equal to null, so check it this way.)
+		if not is_instance_valid(lock.target) or lock.target.is_dead:
 			lock.target = null
 		if lock.target == null and lock.wait <= 0.0:
 			_locks.erase(key)
@@ -791,7 +792,7 @@ func _tick_locks(delta: float) -> void:
 func _locked_target(key: Vector2i, candidates: Array[Enemy], rank := Callable()) -> Enemy:
 	var lock: Dictionary = _locks.get(key, {target = null, wait = 0.0})
 	_locks[key] = lock
-	if lock.target != null and not candidates.has(lock.target):
+	if not is_instance_valid(lock.target) or not candidates.has(lock.target):
 		lock.target = null
 	if lock.wait > 0.0 or candidates.is_empty():
 		return lock.target
