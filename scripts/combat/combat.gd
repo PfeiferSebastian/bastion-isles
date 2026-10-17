@@ -85,8 +85,11 @@ var _popups: Array[Dictionary] = []
 var _loot_rng := RandomNumberGenerator.new()
 ## Seconds until the HQ weapon may fire (or heal) again.
 var _hq_cooldown := 0.0
-## HQ Swamp siphon this frame: {from (enemy), to (HQ), heal_to (building) or null}.
+## HQ Swamp siphon this frame: {from, to, color}; it flows from the enemy into the HQ while
+## draining and from the HQ to the building it heals while healing.
 var _siphons: Array[Dictionary] = []
+## Seconds the HQ siphon has been channelling (sets its phase, see HqWeapons.siphon_draining).
+var _siphon_clock := 0.0
 
 const HEAL_FLASH_TIME := 0.35
 const BURST_TIME := 0.4
@@ -884,24 +887,27 @@ func _hq_heal(profile: AttackProfile) -> void:
 	_flash(Island.HQ_COORD, target.coord, HqWeapons.HEAL_COLOR)
 
 
-## Swamp: a channelled stream drains the target and heals the closest damaged building
-## (the HQ itself counts, at distance 0) by the rest of the budget.
+## Swamp: a channelled stream that takes turns: one phase it drains the target, the next it
+## heals the closest damaged building (the HQ itself counts, at distance 0).
 func _hq_siphon(origin: Vector2, target: Enemy, profile: AttackProfile, delta: float) -> void:
 	var island := _view.island
-	var before := target.hp
-	target.take_damage(profile.beam_dps * delta)
-	_credit(target, before, Island.HQ_COORD)
-	var siphon := {from = target.global_position, to = origin, heal_to = null}
+	_siphon_clock += delta
+	if HqWeapons.siphon_draining(_siphon_clock):
+		var before := target.hp
+		target.take_damage(profile.beam_dps * delta)
+		_credit(target, before, Island.HQ_COORD)
+		_siphons.append({from = target.global_position, to = origin, color = HqWeapons.SIPHON_COLOR})
+		return
 	var closest := {}
 	for entry in island.damaged_in_reach(Island.HQ_COORD, int(profile.range_hexes)):
 		if not entry.tower and entry.coord != Island.HQ_COORD:
 			continue
 		if closest.is_empty() or HexMath.distance(Island.HQ_COORD, entry.coord) < HexMath.distance(Island.HQ_COORD, closest.coord):
 			closest = entry
-	if not closest.is_empty():
-		island.track(Island.HQ_COORD, &"healed", island.heal(closest.coord, closest.tower, profile.effect_dps * delta))
-		siphon.heal_to = _view.hex_center_world(closest.coord)
-	_siphons.append(siphon)
+	if closest.is_empty():
+		return
+	island.track(Island.HQ_COORD, &"healed", island.heal(closest.coord, closest.tower, HqWeapons.siphon_heal_rate() * delta))
+	_siphons.append({from = origin, to = _view.hex_center_world(closest.coord), color = HqWeapons.HEAL_COLOR})
 
 
 ## Lake: a bubble for the nearest enemy not already enclosed; on arrival it roots it.
@@ -1184,23 +1190,19 @@ func _draw_overheat() -> void:
 		draw_circle(tip, 3.5, Color(1.0, 0.45, 0.25, 0.9 * t))
 
 
-## HQ siphon: a purple stream with motes flowing from the enemy into the HQ, and a green
-## thread on to the building it heals.
+## HQ siphon: a stream with motes flowing from `from` to `to` – purple from the enemy into
+## the HQ while draining, green from the HQ to the building while healing.
 func _draw_siphon(siphon: Dictionary) -> void:
 	var a := to_local(siphon.from)
 	var b := to_local(siphon.to)
-	var color := HqWeapons.SIPHON_COLOR
+	var color: Color = siphon.color
 	draw_line(a, b, Color(color, 0.25), 9.0, true)
 	draw_line(a, b, Color(color, 0.8), 2.0, true)
 	var phase := fmod(Time.get_ticks_msec() / 600.0, 1.0)
 	for i in 5:
 		var t := fmod(phase + i / 5.0, 1.0)
 		draw_circle(a.lerp(b, t), 3.0, Color(color.lightened(0.4), 0.9))
-	if siphon.heal_to != null:
-		var c := to_local(siphon.heal_to)
-		draw_line(b, c, Color(HqWeapons.HEAL_COLOR, 0.25), 6.0, true)
-		draw_line(b, c, Color(HqWeapons.HEAL_COLOR, 0.8), 1.5, true)
-		draw_circle(c, 4.0, Color(HqWeapons.HEAL_COLOR, 0.7))
+	draw_circle(b, 4.0, Color(color, 0.7))
 
 
 ## A beam from `a` to `b` (local) in its style: the laser shimmers with a white core and a

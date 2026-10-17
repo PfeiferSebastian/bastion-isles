@@ -19,9 +19,10 @@ const TWIN_INTERVAL := 1.0
 const TWIN_SPREAD := 12.0
 ## Forest: heals the weakest building or ground in range, one pulse every HEAL_INTERVAL.
 const HEAL_INTERVAL := 1.0
-## Swamp siphon: this share of the budget is damage, the rest heals the closest damaged
-## building (the HQ counts, at distance 0).
-const SIPHON_DAMAGE_SHARE := 0.5
+## Swamp siphon: alternates SIPHON_PHASE seconds draining the nearest enemy (damage only)
+## with SIPHON_PHASE seconds healing the closest damaged building (the HQ counts, at distance
+## 0), each phase at the full budget rate, so on average half damage and half healing.
+const SIPHON_PHASE := 1.0
 ## Lake bubble: drifts to its target at BUBBLE_SPEED, encloses it and roots it in place
 ## (no movement; it still shoots) while dealing the interval's damage over BUBBLE_DURATION;
 ## a new bubble every BUBBLE_DURATION.
@@ -74,9 +75,11 @@ static func profile(biome: Biome.Type) -> AttackProfile:
 			p.color = HEAL_COLOR
 		Biome.Type.SWAMP:
 			p.beam_count = 1
-			p.beam_dps = BUDGET * SIPHON_DAMAGE_SHARE
+			# beam_dps: while draining; effect_dps: the average healing (HP/s while healing is
+			# siphon_heal_rate()).
+			p.beam_dps = BUDGET
 			p.beam_color = SIPHON_COLOR
-			p.effect_dps = BUDGET * (1.0 - SIPHON_DAMAGE_SHARE)
+			p.effect_dps = BUDGET / 2.0
 		Biome.Type.LAKE:
 			p.cooldown = BUBBLE_DURATION
 			p.dot_duration = BUBBLE_DURATION
@@ -96,9 +99,19 @@ static func profile(biome: Biome.Type) -> AttackProfile:
 	return p
 
 
-## Siphon only: HP per second sent to the closest damaged building.
+## Siphon only: average HP per second sent to the closest damaged building.
 static func heal_per_second(biome: Biome.Type) -> float:
 	return profile(biome).effect_dps if biome == Biome.Type.SWAMP else 0.0
+
+
+## Siphon only: HP per second while in its healing phase.
+static func siphon_heal_rate() -> float:
+	return BUDGET
+
+
+## Siphon only: true while it drains (the first half of every two phases), false while it heals.
+static func siphon_draining(clock: float) -> bool:
+	return fmod(clock, 2.0 * SIPHON_PHASE) < SIPHON_PHASE
 
 
 ## Damage per second against one target in range (0 for Forest's heal).
@@ -111,6 +124,9 @@ static func dps(biome: Biome.Type) -> float:
 			return p.dot_dps
 		Biome.Type.NEUTRAL:
 			return p.damage * 2.0 / p.cooldown
+		Biome.Type.SWAMP:
+			# Drains only every other phase.
+			return p.beam_dps / 2.0
 	return p.sustained_dps()
 
 
@@ -126,7 +142,8 @@ static func describe(biome: Biome.Type) -> PackedStringArray:
 		Biome.Type.FOREST:
 			lines.append("Heals the weakest building or ground in range: %.0f HP every %.1f s" % [p.damage, p.cooldown])
 		Biome.Type.SWAMP:
-			lines.append("Channelled stream: drains %.0f dps from the nearest enemy and heals the closest damaged building (or the HQ) by %.0f HP/s" % [p.beam_dps, p.effect_dps])
+			lines.append("Channelled stream, alternating every %.0f s: drains the nearest enemy at %.0f dps, then heals the closest damaged building (or the HQ) at %.0f HP/s (on average %.0f dps and %.0f HP/s)" % [
+				SIPHON_PHASE, p.beam_dps, siphon_heal_rate(), dps(biome), p.effect_dps])
 		Biome.Type.LAKE:
 			lines.append("Slow bubble encloses its target and roots it in place for %.0f s, dealing %.1f damage meanwhile; a new bubble every %.0f s" % [p.dot_duration, p.dot_dps * p.dot_duration, p.cooldown])
 		_:

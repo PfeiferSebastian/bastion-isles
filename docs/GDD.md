@@ -679,7 +679,7 @@ Every enemy type has an ordered **priority list**. Each moment the enemy takes t
   - **Mountain – rocket:** a very fast homing rocket (950 px/s), 25 every 2.5 s.
   - **Plains – laser:** continuous beam, 10 dps, pierces 30%.
   - **Forest – healing:** heals the weakest building or ground in range (lowest HP share), 10 HP every 1 s; no damage.
-  - **Swamp – siphon essence:** a channelled stream at the nearest enemy, 50% as damage (5 dps) and 50% as healing (5 HP/s) for the closest damaged building – the HQ itself counts and comes first.
+  - **Swamp – siphon essence:** a channelled stream that **takes turns (2026-10-17): 1 s draining** the nearest enemy (10 dps, damage only), **then 1 s healing** the closest damaged building (10 HP/s, healing only) – the HQ itself counts and comes first; on average still 5 dps and 5 HP/s. The stream shows its phase: purple motes flow from the enemy into the HQ while draining, green from the HQ to the building while healing (nothing to heal: it idles that second).
   - **Lake – bubble:** drifts to its target at moderate speed (170 px/s), **encloses it and roots it in place** for 3 s (it still attacks) while dealing 22.5 damage over that time (rooting costs 25%); a new bubble every 3 s, preferring enemies not yet enclosed.
 
 ### 9.2 Inventory ✅ (2026-10-15)
