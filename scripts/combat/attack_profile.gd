@@ -22,6 +22,10 @@ var range_hexes := 5.0
 var projectile_speed := 420.0
 var projectile_size := 4.0
 var color := Color.WHITE
+## How the shot (or beam) looks, see Projectile._draw and Combat._draw_beam: &"ball", &"shell"
+## (Neutral), &"tracer" (Mountain), &"thorns" (Forest), &"slime" (Swamp), &"laser" (Plains),
+## &"water" (Lake); the HQ adds &"rocket" and &"bubble".
+var style: StringName = &"ball"
 ## Energy drawn from the tile per projectile.
 var energy_per_shot := 1.0
 

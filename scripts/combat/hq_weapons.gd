@@ -61,10 +61,12 @@ static func profile(biome: Biome.Type) -> AttackProfile:
 			p.projectile_speed = 950.0
 			p.projectile_size = 4.0
 			p.color = Color("ff9a3c")
+			p.style = &"rocket"
 		Biome.Type.PLAINS:
 			p.beam_count = 1
 			p.beam_dps = BUDGET
-			p.beam_color = Color("dff3ff")
+			p.beam_color = AttackProfiles.LASER_GLOW
+			p.style = &"laser"
 			p.armor_pen = 0.3
 		Biome.Type.FOREST:
 			p.cooldown = HEAL_INTERVAL
@@ -83,6 +85,7 @@ static func profile(biome: Biome.Type) -> AttackProfile:
 			p.projectile_speed = BUBBLE_SPEED
 			p.projectile_size = 7.0
 			p.color = BUBBLE_COLOR
+			p.style = &"bubble"
 		_:
 			p.cooldown = TWIN_INTERVAL
 			p.damage = BUDGET * TWIN_INTERVAL / 2.0
@@ -131,13 +134,8 @@ static func describe(biome: Biome.Type) -> PackedStringArray:
 	return lines
 
 
-## Mountain rocket: points along its flight and trails smoke and flame.
+## Mountain rocket: points along its flight (Projectile turns it) and trails smoke and flame.
 class Rocket extends Projectile:
-	func _process(delta: float) -> void:
-		if is_instance_valid(target):
-			rotation = (target.global_position - global_position).angle()
-		super(delta)
-
 	func _draw() -> void:
 		draw_line(Vector2(-26, 0), Vector2(-8, 0), Color(0.85, 0.85, 0.85, 0.3), 5.0, true)
 		draw_circle(Vector2(-8, 0), 3.5, Color("ffd36b"))
@@ -147,14 +145,13 @@ class Rocket extends Projectile:
 
 ## Lake bubble: a wobbling, see-through sphere drifting to its target.
 class Bubble extends Projectile:
-	var _age := 0.0
-
 	func _process(delta: float) -> void:
-		_age += delta
 		queue_redraw()
 		super(delta)
 
 	func _draw() -> void:
+		# The shine stays on top however the bubble flies.
+		draw_set_transform(Vector2.ZERO, -rotation)
 		var r := profile.projectile_size * (1.0 + 0.08 * sin(_age * 9.0))
 		draw_circle(Vector2.ZERO, r, Color(profile.color, 0.3))
 		draw_arc(Vector2.ZERO, r, 0.0, TAU, 20, Color(profile.color, 0.9), 1.5, true)

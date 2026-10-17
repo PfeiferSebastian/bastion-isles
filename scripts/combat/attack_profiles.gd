@@ -22,6 +22,8 @@ const BASE_ENERGY := 1.0
 const BASE_RANGE := 5.0
 const DELIVERY := {&"slow": 0.75, &"normal": 1.0, &"fast": 1.25, &"beam": 1.75}
 const WATER_COLOR := Color("8fd8ff")
+## Glow around the laser's white core (Plains towers and the Plains HQ).
+const LASER_GLOW := Color("ffc98a")
 
 
 static func base(biome: Biome.Type) -> AttackProfile:
@@ -31,13 +33,15 @@ static func base(biome: Biome.Type) -> AttackProfile:
 			# Machine cannon: short range, a hail of small fast bullets, fast turret.
 			_weapon(p, 4.0, 0.25, &"fast")
 			p.turn_speed = 360.0
-			p.color = Color("3b2f2a")
+			p.style = &"tracer"
+			p.color = Color("ffc24a")
 			p.projectile_size = 3.0
-			p.projectile_speed = 620.0
+			p.projectile_speed = 850.0
 		Biome.Type.PLAINS:
 			# Laser: long range, instant and continuous (hungry for energy), pierces armour,
 			# slow precise turret.
-			_beam(p, 6.5, &"beam", Color("dff3ff"))
+			_beam(p, 6.5, &"beam", LASER_GLOW)
+			p.style = &"laser"
 			p.armor_pen = 0.3
 			p.turn_speed = 90.0
 		Biome.Type.FOREST:
@@ -46,8 +50,9 @@ static func base(biome: Biome.Type) -> AttackProfile:
 			_weapon(p, 5.0, 1.5, &"slow", 0.3)
 			p.dot_duration = 4.5
 			p.dot_dps = BASE_DPS * 0.7 * p.cooldown / p.dot_duration
-			p.color = Color("2f7a35")
-			p.projectile_speed = 300.0
+			p.style = &"thorns"
+			p.color = Color("8a5a2e")
+			p.projectile_speed = 380.0
 		Biome.Type.SWAMP:
 			# Sprayer: short range, fast weak globs that weaken (−1% per hit, see
 			# Enemy.add_weaken_stack); the weaken costs 40% of its damage.
@@ -55,18 +60,24 @@ static func base(biome: Biome.Type) -> AttackProfile:
 			p.weaken_per_hit = 0.01
 			p.effect_dps = BASE_DPS * BASE_RANGE / 3.5 * SWAMP_WEAKEN_COST
 			p.turn_speed = 240.0
-			p.color = Color("7b4bb0")
+			p.style = &"slime"
+			p.color = Color("9a5fd6")
+			p.projectile_size = 4.5
 			p.projectile_speed = 300.0
 		Biome.Type.LAKE:
 			# Water jet: very short, continuous, slows the target's attacks by 25% (costs 25%).
 			_beam(p, 3.0, &"beam", WATER_COLOR, 1.0 - LAKE_SLOW)
 			p.attack_slow = LAKE_SLOW
 			p.effect_dps = BASE_DPS * BASE_RANGE / 3.0 * LAKE_SLOW
+			p.style = &"water"
 			p.turn_speed = 240.0
 		_:
 			# Single-barrel cannon: the baseline, with a little armour piercing.
 			_weapon(p, BASE_RANGE, 1.0, &"normal")
 			p.armor_pen = 0.1
+			p.style = &"shell"
+			p.color = Color("d9a441")
+			p.projectile_speed = 550.0
 	# Neutral ground's tile trait: one hex more range.
 	if biome == Biome.Type.NEUTRAL:
 		p.range_hexes += NEUTRAL_RANGE_BONUS

@@ -71,6 +71,11 @@ var _enemy_layer := Node2D.new()
 var _projectile_layer := Node2D.new()
 var _beams: Array[PackedVector2Array] = []
 var _beam_colors: Array[Color] = []
+## Beam look per entry of _beams (AttackProfile.style).
+var _beam_styles: Array[StringName] = []
+## Short-lived shot effects: muzzle flashes and impacts, {kind, style, position, angle,
+## color, time, life}.
+var _shot_effects: Array[Dictionary] = []
 ## Short-lived heal lines: {from, to, color, time}.
 var _heal_flashes: Array[Dictionary] = []
 ## Bomb impacts: {position, time}.
@@ -86,6 +91,14 @@ var _siphons: Array[Dictionary] = []
 const HEAL_FLASH_TIME := 0.35
 const BURST_TIME := 0.4
 const POPUP_TIME := 1.2
+## Turret muzzles sit this share of the hex size out from the tower's centre (the barrel tip
+## of TowerArt._turret).
+const MUZZLE_REACH := 0.43
+const MUZZLE_TIME := 0.09
+const IMPACT_TIME := 0.3
+const SMOKE_TIME := 0.7
+## Solid shots that hit with a small fire blast and a smoke puff drifting on past the target.
+const BLAST_STYLES: Array[StringName] = [&"ball", &"shell", &"tracer", &"rocket"]
 
 ## Focus fire on `focus`: at FOCUS_CORE towers that have it inside their core range shoot it
 ## first, at FOCUS_FULL every tower that reaches it at all. FOCUS_NONE = normal targeting.
@@ -124,6 +137,7 @@ func _process(delta: float) -> void:
 	_drop_dead_focus()
 	_beams.clear()
 	_beam_colors.clear()
+	_beam_styles.clear()
 	_siphons.clear()
 	for enemy in enemies():
 		enemy.tick_statuses(delta)
@@ -906,6 +920,7 @@ func _launch(projectile: Projectile, origin: Vector2, target: Enemy, profile: At
 	projectile.target = target
 	projectile.profile = profile
 	projectile.on_hit = on_hit
+	projectile.on_land = _impact.bind(profile)
 	_projectile_layer.add_child(projectile)
 	projectile.global_position = origin
 
@@ -931,8 +946,9 @@ func _fire_beam(origin: Vector2, target: Enemy, profile: AttackProfile, power: f
 	if specials and profile.attack_slow > 0.0 and not target.is_dead:
 		target.add_attack_slow(profile.attack_slow, profile.attack_slow_duration)
 	_credit(target, before, source)
-	_beams.append(PackedVector2Array([origin, target.global_position]))
+	_beams.append(PackedVector2Array([_muzzle(origin, target.global_position), target.global_position]))
 	_beam_colors.append(profile.beam_color)
+	_beam_styles.append(profile.style)
 
 
 func _fire_projectile(origin: Vector2, target: Enemy, profile: AttackProfile, source := Island.HQ_COORD,
@@ -943,8 +959,32 @@ func _fire_projectile(origin: Vector2, target: Enemy, profile: AttackProfile, so
 	projectile.factor = factor
 	projectile.specials = specials
 	projectile.on_hit = _credit.bind(source)
+	projectile.on_land = _impact.bind(profile)
 	_projectile_layer.add_child(projectile)
-	projectile.global_position = origin
+	var muzzle := _muzzle(origin, target.global_position) if source != Island.HQ_COORD else origin
+	projectile.global_position = muzzle
+	if profile.style != &"ball" and source != Island.HQ_COORD:
+		_shot_effects.append({kind = &"muzzle", style = profile.style, position = muzzle,
+			angle = (target.global_position - origin).angle(), color = profile.color, time = MUZZLE_TIME, life = MUZZLE_TIME})
+
+
+## Where a turret on `origin` aiming at `aim_at` fires from.
+func _muzzle(origin: Vector2, aim_at: Vector2) -> Vector2:
+	return origin + (aim_at - origin).normalized() * _view.hex_size * MUZZLE_REACH
+
+
+## A shot of `profile` flying at `angle` lands at `world_position`: an impact in its style.
+## Solid shots (BLAST_STYLES) burst in a small fire blast, and a smoke puff drifts on a little
+## further along their flight.
+func _impact(world_position: Vector2, angle: float, profile: AttackProfile) -> void:
+	if profile.style == &"bubble":
+		return
+	var effect := {kind = &"impact", style = profile.style, position = world_position, angle = angle,
+		color = profile.color, size = profile.projectile_size, time = IMPACT_TIME, life = IMPACT_TIME}
+	if profile.style in BLAST_STYLES:
+		effect.kind = &"blast"
+		_shot_effects.append(effect.merged({kind = &"smoke", time = SMOKE_TIME, life = SMOKE_TIME}, true))
+	_shot_effects.append(effect)
 
 
 ## Analysis: credits the damage a hit did (and a kill) to the building on `source`.
@@ -976,7 +1016,7 @@ func _aura_debuffs() -> void:
 # --- Repair --------------------------------------------------------------
 
 func _towers_repair(delta: float) -> void:
-	for list in [_heal_flashes, _bursts, _popups]:
+	for list in [_heal_flashes, _bursts, _popups, _shot_effects]:
 		for i in range(list.size() - 1, -1, -1):
 			list[i].time -= delta
 			if list[i].time <= 0.0:
@@ -1121,11 +1161,9 @@ func _draw() -> void:
 	for siphon in _siphons:
 		_draw_siphon(siphon)
 	for i in _beams.size():
-		var a := to_local(_beams[i][0])
-		var b := to_local(_beams[i][1])
-		var color := _beam_colors[i]
-		draw_line(a, b, Color(color, 0.25), 8.0, true)
-		draw_line(a, b, color, 2.5, true)
+		_draw_beam(to_local(_beams[i][0]), to_local(_beams[i][1]), _beam_colors[i], _beam_styles[i])
+	for effect in _shot_effects:
+		_draw_shot_effect(effect)
 
 
 ## HQ siphon: a purple stream with motes flowing from the enemy into the HQ, and a green
@@ -1145,3 +1183,112 @@ func _draw_siphon(siphon: Dictionary) -> void:
 		draw_line(b, c, Color(HqWeapons.HEAL_COLOR, 0.25), 6.0, true)
 		draw_line(b, c, Color(HqWeapons.HEAL_COLOR, 0.8), 1.5, true)
 		draw_circle(c, 4.0, Color(HqWeapons.HEAL_COLOR, 0.7))
+
+
+## A beam from `a` to `b` (local) in its style: the laser shimmers with a white core and a
+## sizzling hot spot, the water jet is a sagging, wavy stream that splashes on the target.
+func _draw_beam(a: Vector2, b: Vector2, color: Color, style: StringName) -> void:
+	var t := Time.get_ticks_msec() / 1000.0
+	match style:
+		&"laser":
+			var pulse := 0.5 + 0.5 * sin(t * 14.0)
+			draw_line(a, b, Color(color, 0.18 + 0.12 * pulse), 9.0 + 3.0 * pulse, true)
+			draw_line(a, b, Color(color, 0.6), 4.0, true)
+			draw_line(a, b, Color(1, 1, 0.96), 1.6, true)
+			# Muzzle glow and a turning flare at the crystal tip.
+			draw_circle(a, 6.0 + 2.0 * pulse, Color(color, 0.35))
+			draw_circle(a, 3.0, Color(1, 1, 0.95, 0.9))
+			var flare := Vector2(7.0 + 3.0 * pulse, 0).rotated(t * 3.0)
+			draw_line(a - flare, a + flare, Color(1, 0.95, 0.85, 0.7), 1.2, true)
+			draw_line(a - flare.orthogonal(), a + flare.orthogonal(), Color(1, 0.95, 0.85, 0.7), 1.2, true)
+			# Sizzling hot spot on the target.
+			draw_circle(b, 4.0 + 1.5 * pulse, Color(color, 0.55))
+			draw_circle(b, 2.0, Color(1, 1, 0.9))
+			for k in 3:
+				var spark := Vector2.from_angle(t * 23.0 + k * 2.1) * (5.0 + 4.0 * fmod(t * 5.0 + k * 0.37, 1.0))
+				draw_circle(b + spark, 1.1, Color(1, 0.85, 0.55, 0.9))
+		&"water":
+			var length := a.distance_to(b)
+			var dir := (b - a) / maxf(length, 0.01)
+			var side := dir.orthogonal()
+			var points := PackedVector2Array()
+			var steps := maxi(int(length / 6.0), 2)
+			for k in steps + 1:
+				var u := float(k) / steps
+				var wave := sin(u * 12.0 - t * 18.0) * 1.6 * sin(u * PI)
+				var sag := Vector2(0, 6.0 * u * (1.0 - u) * length / 60.0)
+				points.append(a.lerp(b, u) + side * wave + sag)
+			draw_polyline(points, Color(color, 0.3), 7.0, true)
+			draw_polyline(points, Color(color, 0.85), 3.0, true)
+			draw_polyline(points, Color(1, 1, 1, 0.5), 1.0, true)
+			# Droplets running along the stream.
+			for k in 4:
+				var u := fmod(t * 2.2 + k / 4.0, 1.0)
+				draw_circle(points[int(u * steps)], 1.6, Color(1, 1, 1, 0.8))
+			# Splash spray at the target.
+			for k in 6:
+				var phase := fmod(t * 3.0 + k / 6.0, 1.0)
+				var spray := Vector2.from_angle(PI + dir.angle() + (k - 2.5) * 0.45) * (4.0 + 10.0 * phase)
+				draw_circle(b + spray + Vector2(0, 6.0 * phase * phase), 1.8 * (1.0 - phase) + 0.6, Color(color.lightened(0.3), 1.0 - phase))
+		_:
+			draw_line(a, b, Color(color, 0.25), 8.0, true)
+			draw_line(a, b, color, 2.5, true)
+
+
+## Muzzle flashes and impacts of projectile shots, by the shot's style.
+func _draw_shot_effect(effect: Dictionary) -> void:
+	var at := to_local(effect.position)
+	var left: float = effect.time / effect.life
+	var age := 1.0 - left
+	var color: Color = effect.color
+	var dir := Vector2.from_angle(effect.angle)
+	if effect.kind == &"muzzle":
+		match effect.style:
+			&"slime":
+				draw_circle(at + dir * 3.0, 4.0 * left + 1.0, Color(color, 0.6 * left))
+			&"thorns":
+				draw_circle(at, 4.0 * left, Color("c8d27a", 0.6 * left))
+			_:
+				# Flash: flame tongues fanning out from the barrel tip in the firing direction
+				# (narrow at the muzzle, wide in front), and a hot puff at the tip.
+				var side := dir.orthogonal()
+				for k in [-1, 0, 1]:
+					var tongue := dir.rotated(k * 0.5) * (12.0 if k == 0 else 7.0) * (0.6 + 0.4 * left)
+					var flame := PackedVector2Array([at + side * 1.2, at + tongue + tongue.orthogonal().normalized() * 2.5,
+						at + tongue * 1.25, at + tongue - tongue.orthogonal().normalized() * 2.5, at - side * 1.2])
+					draw_colored_polygon(flame, Color(1, 0.7, 0.25, 0.9 * left))
+				draw_circle(at + dir * 2.0, 3.0 * left + 1.0, Color(1, 0.97, 0.8, left))
+		return
+	# Bigger shots make bigger blasts (the machine cannon's tracers stay small).
+	var scale: float = clampf(effect.size / 4.5, 0.6, 1.4)
+	if effect.kind == &"smoke":
+		# Grey puffs drifting on past the target, growing and fading.
+		var drift := dir * (6.0 + 16.0 * age) * scale + Vector2(0, -5.0 * age)
+		for k in 3:
+			var offset := Vector2.from_angle(effect.angle + (k - 1) * 1.3) * 3.5 * scale * (1.0 + age)
+			draw_circle(at + drift + offset, (3.0 + 5.0 * age) * scale, Color(0.45, 0.43, 0.42, 0.45 * left))
+		return
+	if effect.kind == &"blast":
+		# Small fire blast: a hot white-yellow core, an orange ball and flame tongues.
+		var r := (3.0 + 7.0 * sqrt(age)) * scale
+		draw_circle(at, r, Color(1, 0.45, 0.1, 0.7 * left))
+		for k in 5:
+			var d := Vector2.from_angle(effect.angle + k * TAU / 5.0 + 0.3)
+			draw_circle(at + d * r * 0.8, r * 0.45, Color(1, 0.6, 0.15, 0.8 * left))
+		draw_circle(at, r * 0.55, Color(1, 0.85, 0.35, left))
+		draw_circle(at, r * 0.25 * left, Color(1, 1, 0.9, left))
+		return
+	match effect.style:
+		&"thorns":
+			# Splinters.
+			for k in 3:
+				var d := Vector2.from_angle(effect.angle + k * TAU / 3.0)
+				draw_line(at + d * 2.0, at + d * (2.0 + 6.0 * age), Color(color, left), 1.4, true)
+		&"slime":
+			# Splat: a flattened blot and a few falling drops.
+			draw_set_transform(at, 0.0, Vector2(1.4, 0.8))
+			draw_circle(Vector2.ZERO, 3.0 + 5.0 * age, Color(color, 0.55 * left))
+			draw_set_transform(Vector2.ZERO)
+			for k in 4:
+				var d := Vector2.from_angle(effect.angle + k * TAU / 4.0)
+				draw_circle(at + d * (4.0 + 6.0 * age) + Vector2(0, 5.0 * age * age), 1.4, Color(color, left))
