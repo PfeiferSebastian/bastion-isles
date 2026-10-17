@@ -18,6 +18,8 @@ const MENU_SCENE := "res://scenes/ui/main_menu.tscn"
 
 ## The battle is paused for editing (see set_editing).
 var editing := false
+## The retreat report is open; the battle stays paused until Return.
+var retreating := false
 
 
 func _ready() -> void:
@@ -32,6 +34,7 @@ func _ready() -> void:
 	_hud.leave_requested.connect(_leave)
 	_hud.flee_requested.connect(_flee)
 	_hud.edit_requested.connect(func() -> void: set_editing(not editing))
+	_hud.return_requested.connect(_leave)
 	if GameSession.edit_mode:
 		_island_view.island.gains_xp = false
 		_combat.set_process(false)
@@ -61,6 +64,11 @@ func _unhandled_key_input(event: InputEvent) -> void:
 	var key := event as InputEventKey
 	if key == null or not key.pressed or key.echo:
 		return
+	if retreating:
+		# The retreat report is open: Esc or Enter returns like its button.
+		if key.keycode in [KEY_ESCAPE, KEY_ENTER, KEY_KP_ENTER]:
+			_leave()
+		return
 	if key.keycode == KEY_E:
 		set_editing(not editing)
 	elif key.keycode == KEY_ESCAPE:
@@ -77,7 +85,7 @@ func _unhandled_key_input(event: InputEvent) -> void:
 ## Pauses the mission for editing (`on`) or resumes it exactly where it was. Not in the main
 ## menu's Edit Island, which has no fight.
 func set_editing(on: bool) -> void:
-	if GameSession.edit_mode or on == editing:
+	if GameSession.edit_mode or retreating or on == editing:
 		return
 	editing = on
 	get_tree().paused = on
@@ -85,11 +93,19 @@ func set_editing(on: bool) -> void:
 
 
 ## Leaves a running mission as a flight (Combat.flee: most of this mission's loot is lost,
-## lost towers come back at level 0); after a win, a defeat or in edit mode it's a plain leave.
+## lost towers come back at level 0, nothing is lost in endless mode): the battle pauses and
+## a report of the loot found, lost and kept opens; its Return leaves. After a win, a defeat
+## or in edit mode it's a plain leave.
 func _flee() -> void:
-	if not GameSession.edit_mode:
-		_combat.flee()
-	_leave()
+	if retreating:
+		return
+	if GameSession.edit_mode or _combat.mission_done or _combat.defeated:
+		_leave()
+		return
+	var result := _combat.flee()
+	retreating = true
+	get_tree().paused = true
+	_hud.show_retreat_report(_combat.mission_loot, result)
 
 
 ## Saves the island (repaired, as after any fight) and returns to the main menu.

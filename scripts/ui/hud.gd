@@ -23,6 +23,8 @@ signal leave_requested
 signal flee_requested
 ## The player toggles the battle edit mode (hammer icon or Resume; main also listens to E).
 signal edit_requested
+## Return in the retreat report: the player goes back to the menu.
+signal return_requested
 
 ## Set by main; the HUD reads hover state and island data from it every frame.
 var view: IslandView:
@@ -126,7 +128,7 @@ func _ready() -> void:
 			notify("Round %d: enemies +%d%% stronger, %d%% more of them" % [combat.mission_round + 1,
 				roundi((combat.strength_factor() - 1.0) * 100.0), roundi((combat.count_factor() - 1.0) * 100.0)]))
 	# Flee: leave the island at once (it is saved, as with Leave).
-	var flee := OverlayIcon.new(&"flee", "Flee: leave the island now. You keep only 10% of this mission's loot; towers destroyed in it are rebuilt at level 0, wasteland biomes come back at Tier 1. In endless mode you keep everything")
+	var flee := OverlayIcon.new(&"flee", "Flee: leave the island now (a report shows what you keep). You keep only 10% of this mission's loot; towers destroyed in it are rebuilt at level 0, wasteland biomes come back at Tier 1. In endless mode you keep everything")
 	flee.toggle_mode = false
 	flee.pressed.connect(flee_requested.emit)
 	_overlay_icons.get_parent().add_child(VSeparator.new())
@@ -323,6 +325,76 @@ func _build_battle_edit() -> void:
 	_edit_banner.add_child(row)
 	_edit_banner.visible = false
 	_root.add_child(_edit_banner)
+
+
+## Retreat report: a dimmed screen with a window listing this mission's loot – found, lost
+## by retreating and kept – plus what was rebuilt, and Return at the bottom.
+## `found` is Combat.mission_loot, `result` what Combat.flee returned ({} = nothing lost).
+func show_retreat_report(found: Dictionary, result: Dictionary) -> void:
+	var lost: Dictionary = result.get("lost", {})
+	var shade := ColorRect.new()
+	shade.color = Color(0, 0, 0, 0.55)
+	shade.set_anchors_preset(Control.PRESET_FULL_RECT)
+	shade.mouse_filter = Control.MOUSE_FILTER_STOP
+	_root.add_child(shade)
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	shade.add_child(center)
+	var window := PanelContainer.new()
+	center.add_child(window)
+	var column := VBoxContainer.new()
+	column.add_theme_constant_override("separation", 10)
+	window.add_child(column)
+	var title := Label.new()
+	title.text = "Retreat from " + ("endless mode" if GameSession.endless else "mission " + GameSession.mission_name())
+	title.add_theme_font_size_override("font_size", 24)
+	title.add_theme_color_override("font_color", MenuTheme.BRASS_LIGHT)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	column.add_child(title)
+	var note := Label.new()
+	note.text = "Everything found is kept." if lost.is_empty() else "Retreating keeps only %d%% of this mission's loot." % roundi(Island.FLEE_KEEP * 100.0)
+	note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	column.add_child(note)
+	var grid := GridContainer.new()
+	grid.columns = 4
+	grid.add_theme_constant_override("h_separation", 28)
+	grid.add_theme_constant_override("v_separation", 4)
+	column.add_child(grid)
+	for head in ["", "Found", "Lost", "Kept"]:
+		_report_cell(grid, head, MenuTheme.BRASS_LIGHT)
+	var rows: Array = [["Gold", found.gold, lost.get("gold", 0)], ["Blueprints", found.blueprints, lost.get("blueprints", 0)]]
+	for biome in Treasury.STONE_BIOMES:
+		var amount: int = found.resources.get(biome, 0)
+		if amount > 0:
+			rows.append([Biome.resource_name(biome), amount, lost.get("resources", {}).get(biome, 0)])
+	for biome in Treasury.STONE_BIOMES:
+		var amount: int = found.stones.get(biome, 0)
+		if amount > 0:
+			rows.append([Inventory.label_of(Inventory.stone_item(biome)), amount, lost.get("stones", {}).get(biome, 0)])
+	for row in rows:
+		_report_cell(grid, row[0], MenuTheme.CREAM)
+		_report_cell(grid, "+%d" % row[1], Color("7cc35a"))
+		_report_cell(grid, "−%d" % row[2] if row[2] > 0 else "–", Color("e05545") if row[2] > 0 else MenuTheme.CREAM)
+		_report_cell(grid, "+%d" % (row[1] - row[2]), MenuTheme.BRASS_LIGHT)
+	if result.get("rebuilt", 0) > 0:
+		var rebuilt := Label.new()
+		rebuilt.text = "%d destroyed towers rebuilt at level 0 · wasteland biomes back at Tier 1" % result.rebuilt
+		rebuilt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		column.add_child(rebuilt)
+	var back := Button.new()
+	back.text = "Return"
+	back.focus_mode = Control.FOCUS_NONE
+	back.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	back.pressed.connect(return_requested.emit)
+	column.add_child(back)
+
+
+func _report_cell(grid: GridContainer, text: String, color: Color) -> void:
+	var label := Label.new()
+	label.text = text
+	label.add_theme_color_override("font_color", color)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT if grid.get_child_count() % grid.columns > 0 else HORIZONTAL_ALIGNMENT_LEFT
+	grid.add_child(label)
 
 
 ## Battle edit mode on or off: shows the banner and frame; the wave controls rest meanwhile.

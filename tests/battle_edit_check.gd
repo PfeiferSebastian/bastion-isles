@@ -2,7 +2,7 @@ extends SceneTree
 ## Headless check of the battle edit mode: the fight freezes while editing, edits made then
 ## are under construction once it resumes (double damage) and nothing can be picked up in a
 ## mission. Also: a destroyed Scout's sky clouds over at once, and the blueprint bad luck
-## protection step shrinks with blueprints owned and found.
+## protection step shrinks with blueprints owned and found; fleeing opens the retreat report.
 ## Nothing is saved (persist_blueprints is switched off, the scene is never left).
 ##
 ## Run: godot --headless --path . -s tests/battle_edit_check.gd
@@ -83,6 +83,14 @@ func _initialize() -> void:
 	island.damage_tower(spot, 1e9)
 	_check(island.get_tower(spot) == null, "scout destroyed")
 	_check(outer.all(func(cell: Vector2i) -> bool: return fog.level_at(cell) == FogOfWar.Level.THICK), "its sky is thick clouds again")
+
+	# Retreating: the battle pauses and the report window opens (Return isn't pressed, so
+	# nothing is saved).
+	combat.mission_loot.gold = 40
+	main.call(&"_flee")
+	_check(paused and main.retreating, "retreat pauses and opens the report")
+	_check(combat.mission_loot.gold == 40 and island.treasury.gold >= 0, "loot found stays listed")
+	await _frames(2)
 
 	# Bad luck protection: smaller with more blueprints owned and found this mission.
 	_check(Economy.pity_step(0, 0) == Economy.PITY_STEP, "full pity step with no blueprints")
