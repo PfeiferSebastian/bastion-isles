@@ -67,21 +67,23 @@ func _initialize() -> void:
 	_check(combat.enemies().is_empty() or combat.enemies().map(func(e: Enemy) -> Vector2: return e.global_position) != positions, "enemies move again")
 	_check(island.construction_left(free) < Island.CONSTRUCTION_TIME, "construction clock runs in the fight")
 
-	# A destroyed Scout's sky turns back into thick clouds at once.
-	var fog: FogOfWar = main.get_node("FogLayer").fog
+	# A destroyed Scout's sky turns back into thick clouds at once (on a fresh starter island,
+	# so Scouts of the saved island don't cover it).
+	var fresh := Island.create_starter(1)
+	var fog := FogOfWar.new(fresh)
 	var spot := Vector2i(999, 999)
-	for coord in island.coords():
-		if island.can_place_tower(coord, &"scout"):
+	for coord in fresh.coords():
+		if fresh.can_place_tower(coord, &"scout"):
 			spot = coord
 			break
-	island.place_tower(spot, &"scout")
-	await _frames(2)
+	fresh.place_tower(spot, &"scout")
+	fog.tick(0.01)
 	var outer: Array = fog._scouts.get(spot, []).filter(func(cell: Vector2i) -> bool: return not fog.always_open(cell))
 	_check(not outer.is_empty(), "scout reveals sky beyond the island")
 	for cell in outer:
 		fog.reveal(cell, FogOfWar.Level.OPEN, 99.0)
-	island.damage_tower(spot, 1e9)
-	_check(island.get_tower(spot) == null, "scout destroyed")
+	fresh.damage_tower(spot, 1e9)
+	_check(fresh.get_tower(spot) == null, "scout destroyed")
 	_check(outer.all(func(cell: Vector2i) -> bool: return fog.level_at(cell) == FogOfWar.Level.THICK), "its sky is thick clouds again")
 
 	# Retreating: the battle pauses and the report window opens (Return isn't pressed, so
