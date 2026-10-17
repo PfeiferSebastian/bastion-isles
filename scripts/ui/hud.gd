@@ -7,7 +7,7 @@ extends CanvasLayer
 ## that shows every hover text.
 
 ## Shown in the info window while nothing with a description is hovered.
-const HELP := "Click a slot, then the island · or drag a slot onto it\nRight click: pick up / cancel\nClick an enemy: focus fire · again: all towers in reach · right click an enemy: stop\nDrag: pan · Wheel: zoom · Esc: menu\nP: waves on/off · W: spawn a wave · U: tier upgrade (level 100) · I: analysis view\n\nDebug: D damage · +/- tier · F1–F4 enemies · V fog\nG +500 gold · R +5 stones and tiles · B +10 blueprints"
+const HELP := "Click a slot, then the island · or drag a slot onto it\nRight click: pick up / cancel\nClick an enemy: focus fire · again: all towers in reach · right click an enemy: stop\nDrag: pan · Wheel: zoom · Esc: menu\nE: edit mode – pause the battle and rebuild (new builds: 10 s of fighting at 200% damage)\nP: waves on/off · W: spawn a wave · U: tier upgrade (level 100) · I: analysis view\n\nDebug: D damage · +/- tier · F1–F4 enemies · V fog\nG +500 gold · R +5 stones and tiles · B +10 blueprints"
 
 const OVERLAYS := [
 	[&"energy", "Energy: generators bright, storages by fill (red = empty), empty tiles show how much they let through"],
@@ -21,6 +21,8 @@ const OVERLAYS := [
 signal leave_requested
 ## The player fled a running mission (flee icon).
 signal flee_requested
+## The player toggles the battle edit mode (hammer icon or Resume; main also listens to E).
+signal edit_requested
 
 ## Set by main; the HUD reads hover state and island data from it every frame.
 var view: IslandView:
@@ -57,6 +59,13 @@ var _notices := VBoxContainer.new()
 ## Wave controls in the top right panel (icons; the symbol shows what a click does).
 var _waves := OverlayIcon.new(&"pause", "")
 var _spawn := OverlayIcon.new(&"spawn", "Spawn a wave now (W)")
+var _edit := OverlayIcon.new(&"edit", "Edit mode (E): pause the battle and place, pick up or move towers, tiles and biome stones. Free, but whatever you build is under construction for %d s of fighting once the battle resumes and takes %d%% damage until then" % [Island.CONSTRUCTION_TIME, Island.CONSTRUCTION_DAMAGE * 100.0])
+
+## Battle edit mode (mission paused for rebuilding): banner below the mission bar and an
+## amber frame around the screen.
+var _battle_edit := false
+var _edit_banner := PanelContainer.new()
+var _edit_frame := Panel.new()
 
 ## Editing the island from the main menu: no waves, the mission bar offers "Done".
 var _edit_mode := false
@@ -104,8 +113,11 @@ func _ready() -> void:
 	_spawn.pressed.connect(func() -> void:
 		if combat:
 			combat.spawn_wave())
+	_edit.toggle_mode = false
+	_edit.pressed.connect(edit_requested.emit)
 	_wave_row.add_child(_waves)
 	_wave_row.add_child(_spawn)
+	_wave_row.add_child(_edit)
 	_wave_row.move_child(_stats, -1)
 	_leave.pressed.connect(leave_requested.emit)
 	_proceed.pressed.connect(func() -> void:
@@ -136,6 +148,7 @@ func _ready() -> void:
 	_top_bar.add_theme_stylebox_override("panel", panel)
 	_deck.windows = [_inventory_panel, _info_panel, _treasury_panel]
 	add_child(_icons)
+	_build_battle_edit()
 	_notices.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_notices.add_theme_constant_override("separation", 4)
 	_root.add_child(_notices)
@@ -187,6 +200,10 @@ func _process(delta: float) -> void:
 	_show_info(_hover_text())
 	_overlay_panel.reset_size()
 	_notices.position = _overlay_panel.position + Vector2(0, _overlay_panel.size.y + 8.0)
+	if _battle_edit:
+		_edit_banner.reset_size()
+		var below := _mission_panel.position.y + _mission_panel.size.y + 8.0 if _mission_panel.visible else 12.0
+		_edit_banner.position = Vector2((_root.size.x - _edit_banner.size.x) / 2.0, below)
 
 
 ## Shows `text` in the info window. "{icon:kind}" in it becomes that inventory icon. A new
@@ -265,6 +282,7 @@ func _hover_text() -> String:
 func show_edit_mode() -> void:
 	_edit_mode = true
 	_top_bar.visible = false
+	_edit.visible = false
 	_mission_tube.visible = false
 	_mission_panel.visible = true
 	_mission_text.text = "Editing island"
@@ -275,6 +293,46 @@ func show_edit_mode() -> void:
 	_flee.visible = false
 	_mission_panel.reset_size()
 	_mission_panel.position.x = (_root.size.x - _mission_panel.size.x) / 2.0
+
+
+## Banner and screen frame of the battle edit mode, hidden until show_battle_edit.
+func _build_battle_edit() -> void:
+	var frame := StyleBoxFlat.new()
+	frame.draw_center = false
+	frame.border_color = Color(1.0, 0.7, 0.28, 0.85)
+	frame.set_border_width_all(5)
+	_edit_frame.add_theme_stylebox_override("panel", frame)
+	_edit_frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_edit_frame.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_edit_frame.visible = false
+	_root.add_child(_edit_frame)
+	_root.move_child(_edit_frame, 0)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 12)
+	var label := Label.new()
+	label.text = "EDIT MODE – battle paused"
+	label.add_theme_color_override("font_color", Color(1.0, 0.75, 0.35))
+	label.add_theme_font_size_override("font_size", 20)
+	row.add_child(label)
+	var resume := Button.new()
+	resume.text = "Resume (E)"
+	resume.focus_mode = Control.FOCUS_NONE
+	resume.set_meta(&"info", "Resume the battle where it stopped. What you built is under construction for %d s of fighting and takes %d%% damage until then" % [Island.CONSTRUCTION_TIME, Island.CONSTRUCTION_DAMAGE * 100.0])
+	resume.pressed.connect(edit_requested.emit)
+	row.add_child(resume)
+	_edit_banner.add_child(row)
+	_edit_banner.visible = false
+	_root.add_child(_edit_banner)
+
+
+## Battle edit mode on or off: shows the banner and frame; the wave controls rest meanwhile.
+func show_battle_edit(on: bool) -> void:
+	_battle_edit = on
+	_edit_banner.visible = on
+	_edit_frame.visible = on
+	_waves.disabled = on
+	_spawn.disabled = on
+	notify("Edit mode – the battle is paused (E or Esc to resume)" if on else "Battle resumed")
 
 
 ## The HQ fell: says what was lost.
@@ -360,6 +418,8 @@ func _describe_tile(coord: Vector2i) -> String:
 		what += " · WASTELAND"
 	lines.append("{icon:%s}%s" % [IconCache.biome_kind(shown_biome), what])
 	lines.append("Ground HP %d / %d" % [ceili(tile.hp), roundi(view.island.tile_max_hp(coord))])
+	if view.island.construction.has(coord):
+		lines.append("Under construction: %d s of fighting left · takes %d%% damage" % [ceili(view.island.construction_left(coord)), roundi(Island.CONSTRUCTION_DAMAGE * 100.0)])
 	if tile.tower == null and not tile.is_hq:
 		lines.append("Conducts %d%% of passing energy" % roundi(EnergyGrid.pass_through(tile, view.island) * 100.0))
 	if tile.is_hq:

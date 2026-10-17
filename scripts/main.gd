@@ -3,6 +3,10 @@ extends Node2D
 ## or in edit mode (GameSession.edit_mode) just lets the player build without enemies.
 ## Esc drops the selected item, otherwise flees to the main menu (see _flee); leaving or
 ## fleeing saves the island (IslandSave).
+## During a mission E (or the HUD's hammer icon) toggles the battle edit mode: the fight is
+## paused (scene tree paused; only the island view, camera and HUD keep running) and the
+## player rearranges towers and biomes; what is built then stays under construction for a
+## while once the fight resumes (Island.start_construction).
 
 const MENU_SCENE := "res://scenes/ui/main_menu.tscn"
 
@@ -11,19 +15,29 @@ const MENU_SCENE := "res://scenes/ui/main_menu.tscn"
 @onready var _hud: Hud = $HUD
 @onready var _combat: Combat = $Combat
 
+## The battle is paused for editing (see set_editing).
+var editing := false
+
 
 func _ready() -> void:
+	# Pausing the tree freezes the fight; the view, camera and HUD keep working for editing.
+	process_mode = Node.PROCESS_MODE_ALWAYS
+	for frozen: Node in [_combat, $FogLayer, $SkyBackground]:
+		frozen.process_mode = Node.PROCESS_MODE_PAUSABLE
 	_camera.tapped.connect(_on_tapped)
 	_camera.secondary_tapped.connect(_on_secondary_tapped)
 	_hud.view = _island_view
 	_hud.combat = _combat
 	_hud.leave_requested.connect(_leave)
 	_hud.flee_requested.connect(_flee)
+	_hud.edit_requested.connect(func() -> void: set_editing(not editing))
 	if GameSession.edit_mode:
 		_island_view.island.gains_xp = false
 		_combat.set_process(false)
 		_combat.set_process_unhandled_key_input(false)
 		_hud.show_edit_mode()
+	else:
+		_island_view.island.builds_take_time = true
 	_hud.get_node("%Inventory").set(&"view", _island_view)
 	_island_view.message.connect(func(at: Vector2, text: String) -> void: _combat.popup(at, text, Color("ffb070")))
 
@@ -31,25 +45,42 @@ func _ready() -> void:
 ## Clicks on enemies set the focus fire scope (Combat.focus_click); with an inventory item
 ## held, or off the enemies, they go to the island as usual.
 func _on_tapped(world_position: Vector2) -> void:
-	if _island_view.held.is_empty() and _combat.focus_click(world_position):
+	if _island_view.held.is_empty() and not editing and _combat.focus_click(world_position):
 		return
 	_island_view.handle_tap(world_position)
 
 
 func _on_secondary_tapped(world_position: Vector2) -> void:
-	if _island_view.held.is_empty() and _combat.focus_secondary_click(world_position):
+	if _island_view.held.is_empty() and not editing and _combat.focus_secondary_click(world_position):
 		return
 	_island_view.handle_secondary_tap(world_position)
 
 
 func _unhandled_key_input(event: InputEvent) -> void:
 	var key := event as InputEventKey
-	if key and key.pressed and not key.echo and key.keycode == KEY_ESCAPE:
-		# Esc first drops a selected inventory item, otherwise returns to the menu.
+	if key == null or not key.pressed or key.echo:
+		return
+	if key.keycode == KEY_E:
+		set_editing(not editing)
+	elif key.keycode == KEY_ESCAPE:
+		# Esc first drops a selected inventory item, then leaves edit mode, otherwise returns
+		# to the menu.
 		if not _island_view.held.is_empty():
 			_island_view.release_hold()
+		elif editing:
+			set_editing(false)
 		else:
 			_flee()
+
+
+## Pauses the mission for editing (`on`) or resumes it exactly where it was. Not in the main
+## menu's Edit Island, which has no fight.
+func set_editing(on: bool) -> void:
+	if GameSession.edit_mode or on == editing:
+		return
+	editing = on
+	get_tree().paused = on
+	_hud.show_battle_edit(on)
 
 
 ## Leaves a running mission as a flight (Combat.flee: most of this mission's loot is lost,
@@ -62,6 +93,7 @@ func _flee() -> void:
 
 ## Saves the island (repaired, as after any fight) and returns to the main menu.
 func _leave() -> void:
+	get_tree().paused = false
 	if not GameSession.edit_mode:
 		_combat.finish_wave_log()
 	_island_view.island.restore_tiles()

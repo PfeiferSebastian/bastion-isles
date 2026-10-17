@@ -1,7 +1,7 @@
 class_name OverlayIcon
 extends Button
 ## Small brass icon button for a map overlay (energy, repair, hp, tier) or a wave control
-## (play, pause, spawn). For overlays, hovering previews it and clicking locks it on.
+## (play, pause, spawn, edit). For overlays, hovering previews it and clicking locks it on.
 
 signal preview_started(mode: StringName)
 signal preview_ended
@@ -68,6 +68,14 @@ func _draw() -> void:
 			draw_circle(c + Vector2(-4, 1), 1.8, MenuTheme.BRASS_LIGHT)
 			draw_line(c + Vector2(-2, 0), c + Vector2(13, 0), Color("e05545"), 4.0)
 			draw_colored_polygon(PackedVector2Array([c + Vector2(17, 0), c + Vector2(8, -8), c + Vector2(8, 8)]), Color("e05545"))
+		&"edit":
+			# Hammer: wooden handle, brass head.
+			var dir := Vector2.from_angle(deg_to_rad(-45))
+			draw_line(c - dir * 14, c + dir * 8, Color("8a5a32"), 5.0, true)
+			var side := dir.orthogonal()
+			var head := c + dir * 9
+			draw_colored_polygon(PackedVector2Array([head - side * 11 - dir * 4, head + side * 9 - dir * 4,
+				head + side * 9 + dir * 4, head - side * 11 + dir * 4]), MenuTheme.BRASS_LIGHT)
 		&"spawn":
 			# Enemy airship: balloon over a small hull, with a red plus.
 			draw_circle(c + Vector2(-3, -5), 10.0, Color("8a8f98"))

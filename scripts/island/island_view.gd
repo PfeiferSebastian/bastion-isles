@@ -41,6 +41,8 @@ const ARC_GAP := 0.08
 const WALL_REACH_COLOR := Color("9fb4d8")
 const MERGE_COLOR := Color("ffd27a")
 const ATTACK_REACH_COLOR := Color(1, 1, 1)
+## Outline of hexes under construction (Island.construction).
+const CONSTRUCTION_COLOR := Color("ffb347")
 
 var island: Island
 ## Inventory item selected for placing (see Inventory), or empty.
@@ -89,7 +91,9 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
-	island.tick(delta)
+	# The view keeps running while the battle is paused (edit mode), the island doesn't.
+	if not get_tree().paused:
+		island.tick(delta)
 	hovered_coord = world_to_hex(get_global_mouse_position())
 	queue_redraw()
 	_top.queue_redraw()
@@ -186,6 +190,8 @@ func place_item(coord: Vector2i, item: Dictionary, world_position: Vector2) -> b
 					inventory.add(Inventory.stone_item(tile.biome))
 				inventory.take(item)
 				island.set_biome(coord, item.biome)
+	# During missions whatever was built stays under construction for a while.
+	island.start_construction(coord)
 	_pending_purchase = {}
 	return true
 
@@ -201,6 +207,8 @@ func pick_up(coord: Vector2i, world_position: Vector2) -> void:
 		var root_tower := island.get_tower(island.merge_root_of(coord))
 		var level := root_tower.level()
 		var tier := root_tower.tier
+		# It keeps its damage for when it is placed again this mission.
+		island.remember_picked_up_damage(root_tower.type, level, tier, island.health_ratio(coord, true), hexes.size())
 		var type := island.remove_tower(coord)
 		for hex in hexes:
 			_free_tower_node(hex)
@@ -438,6 +446,8 @@ func _draw_top() -> void:
 			_draw_hq_pennant(center)
 	for group in island.groups():
 		_draw_group_status(group)
+	for coord in island.construction:
+		_draw_construction(HexMath.to_pixel(coord, hex_size), island.construction_left(coord))
 	_draw_tier_arrows()
 	_draw_overlay()
 	_draw_tower_reach()
@@ -782,6 +792,17 @@ func _draw_tier(center: Vector2, tile: IslandTile) -> void:
 	var pos := center + Vector2(-hex_size * 0.62, 5)
 	_canvas.draw_string_outline(_font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, 4, Color(0, 0, 0, 0.6))
 	_canvas.draw_string(_font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color.WHITE)
+
+
+## Hex under construction: a dashed amber outline and the seconds left.
+func _draw_construction(center: Vector2, left: float) -> void:
+	var hex := _offset(_scaled(_hex_points, 0.66), center)
+	for i in hex.size():
+		var a := hex[i]
+		var b := hex[(i + 1) % hex.size()]
+		_canvas.draw_line(a, b, TRACK_COLOR, 4.5)
+		_canvas.draw_dashed_line(a, b, CONSTRUCTION_COLOR, 2.5, 5.0)
+	_draw_label(center + Vector2(0, hex_size * 0.42), "%ds" % ceili(left), CONSTRUCTION_COLOR, 12)
 
 
 ## Charred cracks on a tile destroyed in battle.
