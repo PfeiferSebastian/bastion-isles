@@ -191,6 +191,7 @@ static func draw_energy(island: Island, coord: Vector2i, amount: float) -> float
 		return 1.0
 	if tile.biome == Biome.Type.SWAMP and _drain_neighbours(island, coord, amount - tile.energy):
 		tile.energy = 0.0
+		island.track(coord, &"energy_used", amount)
 		return 1.0
 	if tile.biome == Biome.Type.FOREST:
 		return FOREST_SLOW_EFFICIENCY
