@@ -5,7 +5,8 @@ extends RefCounted
 ## there, but not what) and OPEN (clear sky). The island and the ring of hexes right
 ## around it are always open.
 ## Scout towers keep a circle around themselves open; revealed sky clouds over again
-## after a while. Enemy fire gives its position away one level per shot.
+## after a while, or at once to thick clouds where a destroyed Scout no longer reveals it.
+## Enemy fire gives its position away one level per shot.
 
 enum Level { OPEN, GREY, THICK }
 
@@ -19,12 +20,16 @@ var island: Island
 
 var _level: Dictionary[Vector2i, int] = {}
 var _hold: Dictionary[Vector2i, float] = {}
+## Scout towers seen at the last tick (merge roots) -> the hexes they reveal.
+var _scouts: Dictionary[Vector2i, Array] = {}
 
 
 func _init(for_island: Island) -> void:
 	island = for_island
 	for cell in HexMath.area(Island.HQ_COORD, RADIUS):
 		_level[cell] = Level.THICK
+	# Bound method, not a lambda, so the island doesn't keep this alive.
+	island.tower_destroyed.connect(_on_tower_destroyed)
 
 
 func level_at(cell: Vector2i) -> int:
@@ -84,15 +89,36 @@ func tick(delta: float) -> void:
 			else:
 				_level[cell] = Level.THICK
 				_hold.erase(cell)
+	_scouts.clear()
 	for coord in island.coords():
 		var tower := island.get_tower(coord)
 		if tower == null or tower.type != &"scout" or tower.is_part:
 			continue
 		var profile := ScoutProfiles.for_tile(island, coord)
+		var area := scout_area(coord, profile)
+		_scouts[coord] = area
 		tower.aura_power = EnergyGrid.draw_energy(island, coord, profile.energy_per_second * delta)
 		if tower.aura_power > 0.0:
-			for cell in scout_area(coord, profile):
+			for cell in area:
 				reveal(cell, Level.OPEN, OPEN_HOLD * profile.hold_factor)
+
+
+## A Scout fell: the sky only it kept open turns back into thick clouds right away.
+func _on_tower_destroyed(coord: Vector2i) -> void:
+	if not _scouts.has(coord):
+		return
+	var area: Array = _scouts[coord]
+	_scouts.erase(coord)
+	var covered := {}
+	for other in _scouts:
+		var tower := island.get_tower(other)
+		if tower and tower.type == &"scout" and tower.aura_power > 0.0:
+			for cell in _scouts[other]:
+				covered[cell] = true
+	for cell in area:
+		if not covered.has(cell) and _level.has(cell) and not always_open(cell):
+			_level[cell] = Level.THICK
+			_hold.erase(cell)
 
 
 ## The hexes a Scout tower keeps open.

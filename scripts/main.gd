@@ -5,8 +5,9 @@ extends Node2D
 ## fleeing saves the island (IslandSave).
 ## During a mission E (or the HUD's hammer icon) toggles the battle edit mode: the fight is
 ## paused (scene tree paused; only the island view, camera and HUD keep running) and the
-## player rearranges towers and biomes; what is built then stays under construction for a
-## while once the fight resumes (Island.start_construction).
+## player adds towers, tiles and biome stones (nothing can be removed in a mission); what is
+## built stays under construction for a while once the fight resumes
+## (Island.start_construction).
 
 const MENU_SCENE := "res://scenes/ui/main_menu.tscn"
 

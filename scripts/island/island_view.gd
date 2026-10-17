@@ -196,10 +196,14 @@ func place_item(coord: Vector2i, item: Dictionary, world_position: Vector2) -> b
 	return true
 
 
+## Not during missions: there the player can only add (removing is for Edit Island).
 func pick_up(coord: Vector2i, world_position: Vector2) -> void:
 	var inventory := island.treasury.inventory
 	var tile := island.get_tile(coord)
 	if tile == null or tile.is_hq:
+		return
+	if island.builds_take_time:
+		message.emit(world_position, "Removing only in Edit Island (main menu)")
 		return
 	if tile.tower:
 		# A merged tower comes apart into its towers (at its tier, level 0 like after a merge).
@@ -207,8 +211,6 @@ func pick_up(coord: Vector2i, world_position: Vector2) -> void:
 		var root_tower := island.get_tower(island.merge_root_of(coord))
 		var level := root_tower.level()
 		var tier := root_tower.tier
-		# It keeps its damage for when it is placed again this mission.
-		island.remember_picked_up_damage(root_tower.type, level, tier, island.health_ratio(coord, true), hexes.size())
 		var type := island.remove_tower(coord)
 		for hex in hexes:
 			_free_tower_node(hex)

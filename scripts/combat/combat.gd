@@ -375,8 +375,9 @@ func _on_enemy_died(enemy: Enemy) -> void:
 		popup(at + Vector2(0, -32), "+1 Blueprint", Color("8fc8ff"))
 		item_found.emit("Blueprint found (%d)" % treasury.blueprints)
 	else:
-		# Bad luck protection: blueprints get a little likelier every kill without one.
-		treasury.pity += Economy.PITY_STEP
+		# Bad luck protection: blueprints get a little likelier every kill without one, less
+		# so the more the player owns and has found this mission.
+		treasury.pity += Economy.pity_step(treasury.blueprints, mission_loot.blueprints)
 	if not mission_done and kills >= mission_kill_goal:
 		mission_done = true
 		# The fight is won: towers stop gaining experience.

@@ -69,13 +69,11 @@ var wasted_tiles: Dictionary = {}
 const CONSTRUCTION_TIME := 10.0
 ## Damage to a hex under construction (its building and its ground) is multiplied by this.
 const CONSTRUCTION_DAMAGE := 2.0
-## On during missions: what is placed goes under construction first (see start_construction).
+## On during missions: what is placed goes under construction first (see start_construction),
+## and nothing can be picked up (removing is for the main menu's Edit Island only).
 var builds_take_time := false
 ## Hexes under construction -> seconds left.
 var construction: Dictionary[Vector2i, float] = {}
-## HP shares of damaged towers picked up this mission, per stack ("type:level:tier"), so
-## moving a tower doesn't heal it. Never saved: back at full HP after the mission.
-var _picked_up_damage: Dictionary[String, Array] = {}
 
 ## Analysis: totals of the current wave per building type (&"hq" for the HQ), e.g.
 ## {&"attack": {&"damage": 120.0, &"lost": 1}}; the battle log reads and resets them.
@@ -453,7 +451,7 @@ func place_tower(coord: Vector2i, type: StringName, level := 0, tier := 1) -> To
 	tile.tower.tier = tier
 	tile.tower.xp = Tower.xp_for_level(level)
 	tile.tower.level_seen = level
-	tile.tower.hp = tower_max_hp(coord) * _take_picked_up_damage(type, level, tier)
+	tile.tower.hp = tower_max_hp(coord)
 	tile_changed.emit(coord)
 	return tile.tower
 
@@ -1201,26 +1199,3 @@ func _tick_construction(delta: float) -> void:
 		construction[coord] -= delta
 		if construction[coord] <= 0.0 or not has_tile(coord):
 			construction.erase(coord)
-
-
-## Remembers the HP share of a damaged tower (`count` towers for a merged one) going back to
-## the inventory, so placing one of that stack again brings the damage back.
-func remember_picked_up_damage(type: StringName, level: int, tier: int, ratio: float, count := 1) -> void:
-	if ratio >= 0.999:
-		return
-	var key := "%s:%d:%d" % [type, level, tier]
-	if not _picked_up_damage.has(key):
-		_picked_up_damage[key] = []
-	for i in count:
-		_picked_up_damage[key].append(clampf(ratio, 0.01, 1.0))
-
-
-## HP share for a tower placed from that stack: the most damaged one picked up first, 1.0 if
-## none of that stack was damaged.
-func _take_picked_up_damage(type: StringName, level: int, tier: int) -> float:
-	var key := "%s:%d:%d" % [type, level, tier]
-	var ratios: Array = _picked_up_damage.get(key, [])
-	if ratios.is_empty():
-		return 1.0
-	ratios.sort()
-	return ratios.pop_front()

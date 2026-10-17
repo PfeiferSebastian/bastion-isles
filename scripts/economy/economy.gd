@@ -19,10 +19,12 @@ const STONE_DROP_CHANCE := 0.001
 const BLUEPRINT_DROP_CHANCE := 0.02
 ## Faction resources (one random faction per drop).
 const RESOURCE_DROP_CHANCE := 0.2
-## Bad luck protection: blueprints gain this much chance every kill without one, until one
-## drops (rare drops like biome stones don't get it). Switched off for now (0); 0.0005 was
-## the last value in use.
-const PITY_STEP := 0.0
+## Bad luck protection: blueprints gain up to this much chance every kill without one, until
+## one drops (rare drops like biome stones don't get it). The step shrinks with every
+## blueprint the player owns and every one found this mission (see pity_step).
+const PITY_STEP := 0.0005
+const PITY_DAMPING_OWNED := 0.1
+const PITY_DAMPING_FOUND := 0.25
 const MAX_DROP_CHANCE := 0.6
 
 
@@ -43,6 +45,12 @@ static func blueprint_kinds() -> Array[StringName]:
 	var kinds: Array[StringName] = TowerDefs.TYPES.duplicate()
 	kinds.append(&"tile")
 	return kinds
+
+
+## Extra blueprint chance a kill without one adds: PITY_STEP / (1 + 0.1 per blueprint owned
+## + 0.25 per blueprint found this mission).
+static func pity_step(owned: int, found_this_mission: int) -> float:
+	return PITY_STEP / (1.0 + PITY_DAMPING_OWNED * maxi(owned, 0) + PITY_DAMPING_FOUND * maxi(found_this_mission, 0))
 
 
 ## Chance that `enemy` drops a blueprint, plus the bad luck protection's `pity`.

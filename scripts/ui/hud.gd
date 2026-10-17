@@ -7,7 +7,7 @@ extends CanvasLayer
 ## that shows every hover text.
 
 ## Shown in the info window while nothing with a description is hovered.
-const HELP := "Click a slot, then the island · or drag a slot onto it\nRight click: pick up / cancel\nClick an enemy: focus fire · again: all towers in reach · right click an enemy: stop\nDrag: pan · Wheel: zoom · Esc: menu\nE: edit mode – pause the battle and rebuild (new builds: 10 s of fighting at 200% damage)\nP: waves on/off · W: spawn a wave · U: tier upgrade (level 100) · I: analysis view\n\nDebug: D damage · +/- tier · F1–F4 enemies · V fog\nG +500 gold · R +5 stones and tiles · B +10 blueprints"
+const HELP := "Click a slot, then the island · or drag a slot onto it\nRight click: cancel · pick up (Edit Island only – in missions you can only add)\nClick an enemy: focus fire · again: all towers in reach · right click an enemy: stop\nDrag: pan · Wheel: zoom · Esc: menu\nE: edit mode – pause the battle and build (new builds: 10 s of fighting at 200% damage)\nP: waves on/off · W: spawn a wave · U: tier upgrade (level 100) · I: analysis view\n\nDebug: D damage · +/- tier · F1–F4 enemies · V fog\nG +500 gold · R +5 stones and tiles · B +10 blueprints"
 
 const OVERLAYS := [
 	[&"energy", "Energy: generators bright, storages by fill (red = empty), empty tiles show how much they let through"],
@@ -59,7 +59,7 @@ var _notices := VBoxContainer.new()
 ## Wave controls in the top right panel (icons; the symbol shows what a click does).
 var _waves := OverlayIcon.new(&"pause", "")
 var _spawn := OverlayIcon.new(&"spawn", "Spawn a wave now (W)")
-var _edit := OverlayIcon.new(&"edit", "Edit mode (E): pause the battle and place, pick up or move towers, tiles and biome stones. Free, but whatever you build is under construction for %d s of fighting once the battle resumes and takes %d%% damage until then" % [Island.CONSTRUCTION_TIME, Island.CONSTRUCTION_DAMAGE * 100.0])
+var _edit := OverlayIcon.new(&"edit", "Edit mode (E): pause the battle and add towers, tiles and biome stones (removing is only possible in Edit Island). Free, but whatever you build is under construction for %d s of fighting once the battle resumes and takes %d%% damage until then" % [Island.CONSTRUCTION_TIME, Island.CONSTRUCTION_DAMAGE * 100.0])
 
 ## Battle edit mode (mission paused for rebuilding): banner below the mission bar and an
 ## amber frame around the screen.
