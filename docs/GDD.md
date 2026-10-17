@@ -560,7 +560,28 @@ There are three levels of visibility, shown as clouds:
 ---
 
 ### 8.7 Enemy types & behaviour ✅ (prototype, 2026-10-15)
-Enemies fly, so they can cross the island without collision. They pick targets by the same rule as before: buildings in reach first, otherwise the nearest ground or the HQ.
+Enemies fly, so they can cross the island without collision. They pick targets by their **target priority** (below).
+
+#### Target priority ✅ (prototype, 2026-10-17)
+Every enemy type has an ordered **priority list**. Each moment the enemy takes the **first entry that finds something** and attacks the **nearest** target of that kind; it re-checks continuously, so it switches when a better target comes in reach. Buildings count only within **seek reach** (💡 340 px; Corsairs: their weapon range), the HQ and ground at any distance. 💡 Later **chip items** change an enemy's list (each enemy carries its own copy).
+
+| Entry | Target |
+|---|---|
+| **Nearest** | the nearest building of any type |
+| **Wall · Attack · Energy · Repair · Aura · Scout · Warehouse** | the nearest building of that type |
+| **HQ** | the main building, while it has HP |
+| **Ground** | the nearest standing tile without a building (the HQ counts) |
+| **Strafe** | bombers only: a pass over a random spot near the island centre, bombing whatever is below |
+
+| Type | 💡 Default priority | Idea |
+|---|---|---|
+| **Rammer** | Nearest → Ground | brute: smashes whatever is closest |
+| **Gunboat** | Attack → Nearest → Ground | counter-battery: duels the turrets first |
+| **Corsair** | Energy → Warehouse → Nearest → Ground | raider: cuts the power and the stores |
+| **Bomber** | Strafe | carpet bombing; with another entry first (e.g. a chip: HQ → Strafe) its passes go over that target |
+
+- No type targets **Walls** or the **HQ** by default – those are left for chips, bosses and the planned wall **taunt** (Mountain T6, Bulwark).
+- Walls still block every enemy shot that crosses them, whatever it was aimed at.
 
 | Type | Behaviour | 💡 Stats (wave 1) |
 |---|---|---|

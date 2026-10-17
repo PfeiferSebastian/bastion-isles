@@ -473,16 +473,39 @@ func _fly_in_formation(enemy: Enemy, delta: float) -> bool:
 	return true
 
 
-## Target for an enemy at `from`: a building within seek reach, otherwise the nearest ground.
-func _pick_target(from: Vector2) -> Variant:
-	var tower: Variant = _nearest(from, true, building_seek_range)
-	# Ground (tiles, HQ) has lots of HP but is only attacked when no building is in reach.
-	return tower if tower != null else _nearest(from, false, INF)
+## Target coord for `enemy` by its target priority (EnemyDefs `targets`): the first entry
+## that finds something, the nearest of its kind. Buildings count within `building_range`,
+## the HQ and ground within `ground_range` (default: building_seek_range and anywhere).
+## Null if nothing fits, or when the list reaches strafe.
+func _pick_target(enemy: Enemy, building_range := -1.0, ground_range := INF) -> Variant:
+	if building_range < 0.0:
+		building_range = building_seek_range
+	var from := enemy.global_position
+	for entry in enemy.target_priority:
+		var found: Variant = null
+		match entry:
+			&"nearest":
+				found = _nearest(from, true, building_range)
+			&"ground":
+				found = _nearest(from, false, ground_range)
+			&"hq":
+				var hq := _view.island.get_tile(Island.HQ_COORD)
+				var hq_distance := from.distance_to(_view.hex_center_world(Island.HQ_COORD))
+				if hq and not hq.destroyed and hq.hp > 0.0 and hq_distance <= ground_range:
+					found = Island.HQ_COORD
+			&"strafe":
+				return null
+			_:
+				if entry in TowerDefs.TYPES:
+					found = _nearest(from, true, building_range, entry)
+		if found != null:
+			return found
+	return null
 
 
 ## Rammer: flies to its target and damages it on contact.
 func _ram(enemy: Enemy, delta: float) -> void:
-	var target: Variant = _pick_target(enemy.global_position)
+	var target: Variant = _pick_target(enemy)
 	var goal := _view.global_position if target == null else _view.hex_center_world(target)
 	var stop := idle_range if target == null else contact_range
 	if _approach(enemy, goal, stop, delta) and target != null:
@@ -491,7 +514,7 @@ func _ram(enemy: Enemy, delta: float) -> void:
 
 ## Gunboat: closes in until its target is in weapon range, then holds position and shoots.
 func _standoff(enemy: Enemy, delta: float) -> void:
-	var target: Variant = _pick_target(enemy.global_position)
+	var target: Variant = _pick_target(enemy)
 	if target == null:
 		_approach(enemy, _view.global_position, idle_range, delta)
 		return
@@ -514,9 +537,7 @@ func _orbit(enemy: Enemy, delta: float) -> void:
 	var velocity := (tangent + radial * correction).normalized() * enemy.speed
 	enemy.global_position += velocity * delta
 	enemy.face(velocity.angle())
-	var target: Variant = _nearest(enemy.global_position, true, range_px)
-	if target == null:
-		target = _nearest(enemy.global_position, false, range_px)
+	var target: Variant = _pick_target(enemy, range_px, range_px)
 	if target != null:
 		_shoot(enemy, target)
 
@@ -527,8 +548,10 @@ func _flyover(enemy: Enemy, delta: float) -> void:
 	var turn_radius := _island_radius_px() + 300.0
 	var away := enemy.global_position - center
 	if enemy.heading == Vector2.ZERO or (away.length() > turn_radius and away.dot(enemy.heading) > 0.0):
-		# New pass through the island, slightly off-centre.
-		var aim := center + Vector2.from_angle(randf() * TAU) * randf() * _view.hex_size * 1.5
+		# New pass: over the target its priority picks, or (strafe) slightly off-centre.
+		var target: Variant = _pick_target(enemy, INF)
+		var aim := center if target == null else _view.hex_center_world(target)
+		aim += Vector2.from_angle(randf() * TAU) * randf() * _view.hex_size * (1.5 if target == null else 0.5)
 		enemy.heading = (aim - enemy.global_position).normalized()
 	enemy.global_position += enemy.heading * enemy.speed * delta
 	enemy.face(enemy.heading.angle())
@@ -598,16 +621,16 @@ func _island_radius_px() -> float:
 	return furthest + _view.hex_size
 
 
-## Closest coord within `max_distance` px: a tower when `towers`, otherwise standing ground
-## without a tower (including the HQ while it has HP). Null if there is none.
-func _nearest(from: Vector2, towers: bool, max_distance: float) -> Variant:
+## Closest coord within `max_distance` px: a tower when `towers` (only of `type` if given),
+## otherwise standing ground without a tower (including the HQ while it has HP). Null if none.
+func _nearest(from: Vector2, towers: bool, max_distance: float, type := &"") -> Variant:
 	var island := _view.island
 	var best: Variant = null
 	var best_distance := max_distance * max_distance
 	for coord in island.coords():
 		var tile := island.get_tile(coord)
 		if towers:
-			if tile.tower == null:
+			if tile.tower == null or (type != &"" and tile.tower.type != type):
 				continue
 		elif tile.tower != null or tile.destroyed or tile.hp <= 0.0:
 			continue

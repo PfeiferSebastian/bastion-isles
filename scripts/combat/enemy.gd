@@ -12,6 +12,8 @@ const WEAKEN_ARMOUR_FACTOR := 0.5
 
 var kind: StringName = &"rammer"
 var behaviour: StringName = &"ram"
+## What it attacks first, in order (see EnemyDefs `targets`).
+var target_priority: Array[StringName] = [&"nearest", &"ground"]
 var max_hp := 60.0
 var speed := 55.0
 ## Contact damage per second (rammers).
@@ -51,6 +53,7 @@ func setup(type_kind: StringName, factor := 1.0, speed_factor := -1.0) -> void:
 	var def: Dictionary = EnemyDefs.TYPES[type_kind]
 	kind = type_kind
 	behaviour = def.behaviour
+	target_priority.assign(def.get("targets", [&"nearest", &"ground"]))
 	max_hp = def.hp * factor
 	hp = max_hp
 	speed = def.speed * (factor if speed_factor < 0.0 else speed_factor)
