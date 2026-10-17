@@ -610,13 +610,14 @@ local CASTLE_THEMES = {
 		banner = palette { "8a8a82", "b8b8b0", "e2e2da", "f2f2ec" },
 	} },
 	{ "hexCastleSwamp00", {
-		ground = palette { "0d0a11", "16101d", "201729", "2b1e37", "372646", "443055" },
+		ground = palette { "2b1e37", "372646", "443055", "553c68", "664a7c", "785a90" },
 		roof = palette { "1a1222", "2a1d38", "3c2a52", "50386c", "664a88", "8062a6" },
 		banner = palette { "2a1840", "4a2a70", "7b4bb0", "a98cc8" },
 		tufts = BOG_REED,
 	} },
 	{ "hexCastleLake00", {
-		ground = palette { "1d2e12", "2b4218", "3c5a1f", "507227", "678a30", "82a23c" },
+		ground = WATER,
+		sea = true,
 		roof = palette { "0a1a36", "102b54", "173f72", "1f5590", "2c6dab", "4a8bc4" },
 		banner = palette { "0e2a54", "1a4a8a", "2f6db5", "6aa0dc" },
 	} },
@@ -839,7 +840,7 @@ local SANDSTONE = palette { "6a5a42", "8a7656", "a8946c", "c4b086", "dccaa0", "e
 local GOLD = palette { "4a3008", "7a5410", "a87a18", "d0a428", "ecc84a", "fae68a", "fffbe0" }
 local NECRO = palette { "050408", "0b0910", "121019", "1a1724", "241f30", "2f283e", "3b3350" }
 local GHOST = palette { "08200f", "0f3d1c", "1d6a30", "36a04c", "6be08a", "c0ffd0" }
-local GLASS = palette { "0a2a52", "15457a", "2466a0", "3b88c0", "62a8d8", "98cbea", "d4ecf8" }
+local GLASS = palette { "0e3a4a", "176070", "2a8a96", "4cb2b8", "82d4d4", "bdeeea", "f0fffc" }
 
 -- Themed ground: the biome's ground around the keep, a trodden path to the front, the Lake
 -- moat and the theme's tufts.
@@ -847,6 +848,16 @@ local function keep_ground(s, g, theme)
 	fill_hex(g, function(x, y, px, py)
 		local dx, dy = x + 0.5 - 28, y + 0.5 - 67
 		local v = 0.42 + (fbm(x * 0.1, y * 0.14, s) - 0.5) * 0.7 + light(px, py)
+		if theme.sea then
+			-- Open water with wave glints, a small sandy islet under the keep.
+			local islet = ((x + 0.5 - 28) / 23) ^ 2 + ((y + 0.5 - 73) / 10) ^ 2 + (vnoise(x * 0.4, y * 0.4, s) - 0.5) * 0.3
+			if islet < 1 then return dither(SAND, 0.55 - islet * 0.25 + light(px, py), x, y) end
+			if islet < 1.25 then return dither(WATER, 0.75, x, y) end
+			local wave = vnoise(x * 0.22 + y * 0.05, y * 0.75, s + 6)
+			if wave > 0.86 then return WATER[8] end
+			if wave > 0.8 then return WATER[7] end
+			return dither(WATER, v, x, y)
+		end
 		local path = math.abs(dx + math.sin(y * 0.4) * 0.8) < 2.2 and dy > 13
 		if path then v = v + 0.25 end
 		local e = math.sqrt((dx / 20) ^ 2 + (dy / 13) ^ 2)
@@ -1030,18 +1041,51 @@ local function keep_forest(s, g, d, theme)
 	put(d, 28, 75, GLOW[3])
 end
 
--- Mountain: the castle with rock peaks rising behind it and leaning on its side walls.
-local function keep_mountain(s, g, d, theme, castle_fn)
-	castle_fn(s, g, d, theme)
-	local back = buffer(W, H)
-	peak(g, back, 28, 55, 31, s + 3)
-	peak(g, back, 13, 60, 23, s + 1)
-	peak(g, back, 43, 59, 22, s + 2)
-	for i, c in pairs(back.px) do
-		if not d.px[i] then d.px[i] = c end
+-- Mountain: one broad mountain in the middle with the stronghold built into it – a curtain
+-- wall and gatehouse at its foot, a hall and a lookout on its flanks, the keep high up near the
+-- snowy summit, a winding path between them.
+local function keep_mountain(s, g, d, theme)
+	keep_ground(s, g, theme)
+	peak(g, d, 28, 81, 37, s + 3)
+	-- Path zigzagging up from the gate.
+	local path = { { 28, 79 }, { 17, 72 }, { 38, 66 }, { 26, 58 } }
+	for i = 1, #path - 1 do
+		local a, b = path[i], path[i + 1]
+		local steps = math.ceil(math.max(math.abs(b[1] - a[1]), math.abs(b[2] - a[2])))
+		for k = 0, steps do
+			local x = a[1] + (b[1] - a[1]) * k / steps
+			local y = a[2] + (b[2] - a[2]) * k / steps
+			put(d, x, y, STONE[9])
+			put(d, x, y + 1, STONE[4])
+		end
 	end
-	peak(g, d, 6, 79, 12, s + 4)
-	peak(g, d, 50, 80, 11, s + 5)
+	local m = massing()
+	-- Curtain wall across the front foot, gatehouse in its middle.
+	for x = 9, 47 do
+		local y = math.floor(80 - ((x - 28) / 19) ^ 2 * 7 + 0.5)
+		local h = 4 + ((x % 2 == 0) and 2 or 0)
+		m.set(x, y, h, h, (x - 28) / 19, DARK_STONE)
+		m.set(x, y - 1, h, h, (x - 28) / 19, DARK_STONE)
+	end
+	m.block(24, 76, 32, 80, 7, DARK_STONE)
+	-- Hall on the left flank, lookout on the right, the keep below the summit.
+	m.block(11, 67, 19, 71, 5, DARK_STONE)
+	m.cylinder(13, 68, 2.4, 7, 5, DARK_STONE, theme.roof)
+	m.cylinder(41, 64, 2.2, 9, 5, DARK_STONE, theme.roof)
+	m.block(23, 55, 33, 59, 6, DARK_STONE)
+	m.cylinder(28, 55, 3.2, 10, 8, DARK_STONE, theme.roof)
+	m.cylinder(34, 50, 1.6, 6, 4, DARK_STONE, theme.roof)
+	m.render(g, d)
+	-- Gate, lit windows, banners in the biome colour.
+	for k = 0, 3 do
+		for x = 27, 29 do put(d, x, 80 - k, k == 0 and GLOW[1] or DARK_STONE[1]) end
+	end
+	for _, w in ipairs({ { 15, 66 }, { 28, 47 }, { 26, 52 }, { 31, 52 }, { 41, 57 }, { 34, 46 } }) do
+		put(d, w[1], w[2], GLOW[3]); put(d, w[1], w[2] + 1, GLOW[2])
+	end
+	for _, bx in ipairs({ 25, 31 }) do
+		for k = 0, 3 do put(d, bx, 71 + k, theme.banner[(k < 3) and 3 or 1]) end
+	end
 end
 
 -- A horseshoe onion dome: narrow neck, wide bulb, drawn out into a point, lit from the left.
@@ -1108,7 +1152,7 @@ end
 -- above its apex, obelisks at the front.
 local function keep_swamp(s, g, d, theme)
 	keep_ground(s, g, theme)
-	glow(g, 28, 70, 24, GHOST[3], 0.5)
+	glow(g, 28, 68, 26, GHOST[4], 0.75)
 	local m = massing()
 	for y = 50, 80 do
 		for x = 8, 48 do
@@ -1293,7 +1337,7 @@ local KEEPS = {
 for _, theme in ipairs(CASTLE_THEMES) do
 	local g, d = buffer(W, H), buffer(W, H)
 	local build = KEEPS[theme[1]]
-	if build then build(77, g, d, theme[2], castle) else castle(77, g, d, theme[2]) end
+	if build then build(77, g, d, theme[2]) else castle(77, g, d, theme[2]) end
 	save(theme[1], { { "ground", g }, { "decor", d } })
 	tiles[theme[1]:sub(1, -3)] = { [0] = flatten({ g, d }) }
 end
