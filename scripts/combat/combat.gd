@@ -24,8 +24,8 @@ extends Node2D
 ## Placeholder mission until zones exist: progress is kills out of this many.
 @export var mission_kill_goal := 100
 ## Each further round ("Proceed" after a won mission): enemies this much stronger (HP and
-## damage) and this many more of them, compounding.
-const ROUND_STRENGTH := 1.2
+## damage) and this many more of them, compounding (1.1 × 1.1: about +21% per round overall).
+const ROUND_STRENGTH := 1.1
 const ROUND_COUNT := 1.1
 ## Endless mode: enemies get this much stronger with every wave.
 const ENDLESS_STEP := 0.03
@@ -312,7 +312,7 @@ func count_factor() -> float:
 	return _mission_count * pow(ROUND_COUNT, mission_round)
 
 
-## Starts the next, harder round after a won mission: enemies 20% stronger, 10% more of them
+## Starts the next, harder round after a won mission: enemies 10% stronger, 10% more of them
 ## (more per wave and a higher kill goal), after the usual countdown. Towers gain XP again.
 func proceed() -> void:
 	if not mission_done:

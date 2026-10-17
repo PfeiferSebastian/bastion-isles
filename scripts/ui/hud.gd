@@ -122,6 +122,8 @@ func _ready() -> void:
 	_wave_row.add_child(_edit)
 	_wave_row.move_child(_stats, -1)
 	_leave.pressed.connect(leave_requested.emit)
+	# Overall rise per round: stronger enemies times more of them.
+	_proceed.text = "Proceed +%d%%" % roundi((Combat.ROUND_STRENGTH * Combat.ROUND_COUNT - 1.0) * 100.0)
 	_proceed.pressed.connect(func() -> void:
 		if combat:
 			combat.proceed()
