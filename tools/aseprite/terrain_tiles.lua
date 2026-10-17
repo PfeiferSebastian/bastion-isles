@@ -1390,12 +1390,17 @@ local KEEPS = {
 	hexCastleForest00 = keep_forest, hexCastleMountain00 = keep_mountain, hexCastlePlains00 = keep_plains,
 	hexCastleSwamp00 = keep_swamp, hexCastleLake00 = keep_lake,
 }
+-- Keeps finished by hand in Aseprite: the script leaves their files alone (their builder above
+-- is only the starting point they were painted over).
+local HAND_PAINTED = { hexCastleSwamp00 = true }
 for _, theme in ipairs(CASTLE_THEMES) do
 	local g, d = buffer(W, H), buffer(W, H)
 	local build = KEEPS[theme[1]]
+	if HAND_PAINTED[theme[1]] then goto continue end
 	if build then build(77, g, d, theme[2]) else castle(77, g, d, theme[2]) end
 	save(theme[1], { { "ground", g }, { "decor", d } })
 	tiles[theme[1]:sub(1, -3)] = { [0] = flatten({ g, d }) }
+	::continue::
 end
 
 -- --- preview: a small island with every biome, scaled up ----------------------------
