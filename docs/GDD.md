@@ -582,6 +582,7 @@ How long battle damage to tiers lasts (8.4) could **define the difficulty**, or 
 
 ### 8.5 Player control
 - Units and towers act on their own according to their scripts.
+- ✅ **Target lock (2026-10-17):** everything that shoots at enemies – attack towers, the Swamp repair tower's drain, the HQ weapon (the Swamp siphon's drain too) – **keeps its target** while it stays in reach and visible, and **picks a new one at most once per second** (counted from its last pick). If its target dies or leaves reach within that second, it has **no target and doesn't fire** until the second is over. Even with the second over it only switches when it has lost its target or a clearly better one is there (an attack tower: one inside its core range while the old one is only in its outer reach; anyone: the scoped enemy). **A focus fire click lifts the wait:** towers the scope applies to switch to it at once. The Swamp siphon's healing half and the healers (repair towers, Forest HQ) aren't locked; they still look for damaged buildings at every pulse.
 - The player shapes battles with **active skills** from the skill trees (11).
 
 ### 8.6 Fog of war ✅

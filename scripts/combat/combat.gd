@@ -115,6 +115,14 @@ var focus_level := FOCUS_NONE
 ## Draws the scope above the enemies.
 var _scope_layer := Node2D.new()
 
+## Everything that shoots at enemies (attack towers, the Swamp repair tower's drain, the HQ
+## weapon) keeps its target: it picks a new one at most once every RETARGET_TIME seconds and
+## doesn't fire while it has none (see _locked_target). A scope click lifts the wait.
+const RETARGET_TIME := 1.0
+## Target locks by shooter (the building's coord, Island.HQ_COORD for the HQ weapon):
+## {target: Enemy or null, wait: seconds until it may pick again}.
+var _locks := {}
+
 
 func _ready() -> void:
 	_view = get_node(island_view_path)
@@ -138,6 +146,7 @@ func _process(delta: float) -> void:
 			spawn_wave()
 	_check_defeat()
 	_drop_dead_focus()
+	_tick_locks(delta)
 	_beams.clear()
 	_beam_colors.clear()
 	_beam_styles.clear()
@@ -699,6 +708,9 @@ func focus_click(world_position: Vector2) -> bool:
 	else:
 		focus = enemy
 		focus_level = FOCUS_CORE
+	# The player's call beats the retarget wait: shooters the focus applies to switch at once.
+	for lock: Dictionary in _locks.values():
+		lock.wait = 0.0
 	return true
 
 
@@ -735,6 +747,39 @@ func _focus_first(targets: Array[Enemy], origin: Vector2, core_px: float) -> voi
 		return
 	targets.remove_at(index)
 	targets.push_front(focus)
+
+
+# --- Target locks --------------------------------------------------------
+
+## Runs the retarget waits down and lets go of dead targets; locks with neither go.
+func _tick_locks(delta: float) -> void:
+	for key: Vector2i in _locks.keys():
+		var lock: Dictionary = _locks[key]
+		lock.wait = maxf(lock.wait - delta, 0.0)
+		if lock.target != null and (not is_instance_valid(lock.target) or lock.target.is_dead):
+			lock.target = null
+		if lock.target == null and lock.wait <= 0.0:
+			_locks.erase(key)
+
+
+## The target the shooter `key` aims at, from `candidates` (in its own order of preference,
+## the scoped enemy first where the focus applies to it), or null: then it doesn't fire. It
+## keeps its target while that stays a candidate. It picks again only RETARGET_TIME after its
+## last pick, and then only if it has lost its target or candidates[0] ranks above it: the
+## scoped enemy, or a lower `rank` (e.g. inside the core range rather than past it).
+func _locked_target(key: Vector2i, candidates: Array[Enemy], rank := Callable()) -> Enemy:
+	var lock: Dictionary = _locks.get(key, {target = null, wait = 0.0})
+	_locks[key] = lock
+	if lock.target != null and not candidates.has(lock.target):
+		lock.target = null
+	if lock.wait > 0.0 or candidates.is_empty():
+		return lock.target
+	var best := candidates[0]
+	var current: Enemy = lock.target
+	if current == null or (best != current and (best == focus or (rank.is_valid() and rank.call(best) < rank.call(current)))):
+		lock.target = best
+		lock.wait = RETARGET_TIME
+	return lock.target
 
 
 ## Scope over the focused enemy: a ring with four gaps and inward ticks; the widened focus
@@ -789,15 +834,16 @@ func _towers_attack(delta: float) -> void:
 		var profile := AttackProfiles.for_tile(island, coord)
 		var origin := _view.hex_center_world(coord)
 		var hex_px := HexMath.SQRT3 * _view.hex_size
+		var core_px := profile.range_hexes * hex_px
+		var in_core := func(enemy: Enemy) -> int:
+			return 0 if origin.distance_to(enemy.global_position) <= core_px else 1
 		# Targets out to the furthest reach, those inside the core range first.
 		var targets := _targets_in_range(origin, profile.max_reach() * hex_px)
 		targets.sort_custom(func(a: Enemy, b: Enemy) -> bool:
-			var a_in := origin.distance_to(a.global_position) <= profile.range_hexes * hex_px
-			var b_in := origin.distance_to(b.global_position) <= profile.range_hexes * hex_px
-			if a_in != b_in:
-				return a_in
+			if in_core.call(a) != in_core.call(b):
+				return in_core.call(a) < in_core.call(b)
 			return origin.distance_squared_to(a.global_position) < origin.distance_squared_to(b.global_position))
-		_focus_first(targets, origin, profile.range_hexes * HexMath.SQRT3 * _view.hex_size)
+		_focus_first(targets, origin, core_px)
 		tower.attack_cooldown = maxf(tower.attack_cooldown - delta, 0.0)
 		tower.overheat = maxf(tower.overheat - delta, 0.0)
 		# Reloading after a shot counts as working.
@@ -806,6 +852,12 @@ func _towers_attack(delta: float) -> void:
 			continue
 		tower.saw_target = true
 		EnergyGrid.mark_active(tower)
+		var target := _locked_target(coord, targets, in_core)
+		if target == null:
+			continue
+		# The kept target leads (extra beams take the next ones).
+		targets.erase(target)
+		targets.push_front(target)
 		# The turret turns toward the target and fires only once it points at it.
 		var wanted := (targets[0].global_position - origin).angle()
 		tower.aim = rotate_toward(tower.aim, wanted, deg_to_rad(profile.turn_speed) * delta)
@@ -853,25 +905,29 @@ func _hq_attack(delta: float) -> void:
 	_focus_first(targets, origin, INF)
 	if targets.is_empty():
 		return
+	if biome == Biome.Type.LAKE:
+		_skip_rooted(targets)
+	var target := _locked_target(Island.HQ_COORD, targets)
 	match biome:
 		Biome.Type.PLAINS:
-			_fire_beam(origin, targets[0], profile, 1.0, delta, Island.HQ_COORD)
+			if target:
+				_fire_beam(origin, target, profile, 1.0, delta, Island.HQ_COORD)
 		Biome.Type.SWAMP:
-			_hq_siphon(origin, targets[0], profile, delta)
+			_hq_siphon(origin, target, profile, delta)
 		_:
-			if _hq_cooldown > 0.0:
+			if _hq_cooldown > 0.0 or target == null:
 				return
 			_hq_cooldown = profile.cooldown
 			match biome:
 				Biome.Type.MOUNTAIN:
-					_launch(HqWeapons.Rocket.new(), origin, targets[0], profile, _credit.bind(Island.HQ_COORD))
+					_launch(HqWeapons.Rocket.new(), origin, target, profile, _credit.bind(Island.HQ_COORD))
 				Biome.Type.LAKE:
-					_hq_bubble(origin, targets, profile)
+					_hq_bubble(origin, target, profile)
 				_:
 					# Twin cannon: both barrels at once, side by side across the line of fire.
-					var side := (targets[0].global_position - origin).normalized().orthogonal() * HqWeapons.TWIN_SPREAD / 2.0
+					var side := (target.global_position - origin).normalized().orthogonal() * HqWeapons.TWIN_SPREAD / 2.0
 					for barrel in [side, -side]:
-						_launch(Projectile.new(), origin + barrel, targets[0], profile, _credit.bind(Island.HQ_COORD))
+						_launch(Projectile.new(), origin + barrel, target, profile, _credit.bind(Island.HQ_COORD))
 
 
 ## Forest: heals the weakest building or ground in range, one pulse per interval.
@@ -889,11 +945,14 @@ func _hq_heal(profile: AttackProfile) -> void:
 
 
 ## Swamp: a channelled stream that takes turns: one phase it drains the target, the next it
-## heals the closest damaged building (the HQ itself counts, at distance 0).
+## heals the closest damaged building (the HQ itself counts, at distance 0). It drains only
+## with a kept `target` (none while it waits to pick one) but heals while enemies are in range.
 func _hq_siphon(origin: Vector2, target: Enemy, profile: AttackProfile, delta: float) -> void:
 	var island := _view.island
 	_siphon_clock += delta
 	if HqWeapons.siphon_draining(_siphon_clock):
+		if target == null:
+			return
 		var before := target.hp
 		target.take_damage(profile.beam_dps * delta)
 		_credit(target, before, Island.HQ_COORD)
@@ -911,14 +970,18 @@ func _hq_siphon(origin: Vector2, target: Enemy, profile: AttackProfile, delta: f
 	_siphons.append({from = origin, to = _view.hex_center_world(closest.coord), color = HqWeapons.HEAL_COLOR})
 
 
-## Lake: a bubble for the nearest enemy not already enclosed; on arrival it roots it.
-func _hq_bubble(origin: Vector2, targets: Array[Enemy], profile: AttackProfile) -> void:
-	var target := targets[0]
-	if target.is_rooted() and target != focus:
-		for enemy in targets:
-			if not enemy.is_rooted():
-				target = enemy
-				break
+## Lake: enemies already enclosed in a bubble aren't worth another (unless scoped, or all are).
+func _skip_rooted(targets: Array[Enemy]) -> void:
+	var free: Array[Enemy] = []
+	for enemy in targets:
+		if not enemy.is_rooted() or enemy == focus:
+			free.append(enemy)
+	if not free.is_empty():
+		targets.assign(free)
+
+
+## Lake: a bubble for `target`; on arrival it roots it.
+func _hq_bubble(origin: Vector2, target: Enemy, profile: AttackProfile) -> void:
 	var on_hit := func(enemy: Enemy, before: float) -> void:
 		if not enemy.is_dead:
 			enemy.root(profile.dot_duration)
@@ -1084,9 +1147,8 @@ func _can_repair(coord: Vector2i, profile: RepairProfile, damaged: Array[Diction
 		&"redistribute":
 			return _donor_for(coord, profile, damaged[0]) != {}
 		&"lifesteal":
-			# The heal phase needs drained essence; the drain phase an enemy in reach.
-			return _view.island.get_tower(coord).essence > 0.0 \
-				or _nearest_enemy(_view.hex_center_world(coord), profile.reach()) != null
+			# The heal phase needs drained essence; the drain phase a kept target.
+			return _view.island.get_tower(coord).essence > 0.0 or _drain_target(coord, profile) != null
 	return true
 
 
@@ -1135,7 +1197,7 @@ func _lifesteal(coord: Vector2i, profile: RepairProfile, target: Dictionary) -> 
 		tower.essence = 0.0
 		_flash(coord, target.coord, profile.color)
 		return
-	var enemy := _nearest_enemy(origin, profile.reach())
+	var enemy := _drain_target(coord, profile)
 	var before := enemy.hp
 	enemy.take_damage(profile.amount)
 	tower.essence = before - maxf(enemy.hp, 0.0)
@@ -1143,16 +1205,14 @@ func _lifesteal(coord: Vector2i, profile: RepairProfile, target: Dictionary) -> 
 	_heal_flashes.append({from = enemy.global_position, to = origin, color = profile.color, time = HEAL_FLASH_TIME})
 
 
-func _nearest_enemy(origin: Vector2, reach_hexes: int) -> Enemy:
-	var range_px := (reach_hexes + 0.5) * HexMath.SQRT3 * _view.hex_size
-	var best: Enemy = null
-	var best_distance := range_px
-	for enemy in enemies():
-		var d := origin.distance_to(enemy.global_position)
-		if d <= best_distance and is_enemy_visible(enemy):
-			best_distance = d
-			best = enemy
-	return best
+## The enemy a Swamp repair tower drains: its kept target among the visible enemies in reach
+## (nearest first, the scoped one first), or null.
+func _drain_target(coord: Vector2i, profile: RepairProfile) -> Enemy:
+	var origin := _view.hex_center_world(coord)
+	var range_px := (profile.reach() + 0.5) * HexMath.SQRT3 * _view.hex_size
+	var targets := _targets_in_range(origin, range_px)
+	_focus_first(targets, origin, range_px)
+	return _locked_target(coord, targets)
 
 
 ## Battle edit mode: no heal flashes or siphon streams stay on screen while it is paused.

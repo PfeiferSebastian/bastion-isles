@@ -119,7 +119,41 @@ func _initialize() -> void:
 		_check(is_equal_approx(island.get_tile(laser).energy, 50.0), "overheated beam doesn't fire even with energy back")
 		combat._towers_attack(1.6)
 		_check(laser_tower.overheat == 0.0 and island.get_tile(laser).energy < 50.0, "beam fires again after the lockout")
+		target.is_dead = true
 		target.queue_free()
+
+		# Target lock: a shooter keeps its target, picks again at most once a second and
+		# doesn't fire meanwhile; a scope click lifts the wait.
+		combat._tick_locks(Combat.RETARGET_TIME)
+		var first := combat.spawn_enemy(&"rammer", 1.0, view.hex_center_world(laser) + Vector2(60, 0))
+		var second := combat.spawn_enemy(&"rammer", 1.0, view.hex_center_world(laser) + Vector2(90, 0))
+		combat._towers_attack(0.05)
+		_check(combat._locks[laser].target == first, "picks the nearest")
+		second.global_position = view.hex_center_world(laser) + Vector2(40, 0)
+		combat._tick_locks(Combat.RETARGET_TIME)
+		combat._towers_attack(0.05)
+		_check(combat._locks[laser].target == first, "keeps its target when another comes closer")
+		first.is_dead = true
+		combat._tick_locks(0.1)
+		combat._towers_attack(0.05)
+		_check(combat._locks[laser].target == second, "picks again at once when the last pick is over a second old")
+		second.is_dead = true
+		combat._tick_locks(0.1)
+		var third := combat.spawn_enemy(&"rammer", 1.0, view.hex_center_world(laser) + Vector2(50, 0))
+		var hp := third.hp
+		combat._towers_attack(0.05)
+		_check(combat._locks[laser].target == null and third.hp == hp, "no new target and no fire within a second of the last pick")
+		combat._tick_locks(Combat.RETARGET_TIME)
+		combat._towers_attack(0.05)
+		_check(combat._locks[laser].target == third and third.hp < hp, "picks again after the second")
+		var scoped := combat.spawn_enemy(&"rammer", 1.0, view.hex_center_world(laser) + Vector2(0, 70))
+		combat.focus_click(scoped.global_position)
+		combat._towers_attack(0.05)
+		_check(combat._locks[laser].target == scoped, "a scope click switches at once")
+		combat.clear_focus()
+		for enemy: Enemy in [first, second, third, scoped]:
+			enemy.is_dead = true
+			enemy.queue_free()
 
 	# Under construction a tower only takes damage: no work, energy, repairs, auras or clusters.
 	var site := _free_tile(island, &"attack")
