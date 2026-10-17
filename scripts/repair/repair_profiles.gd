@@ -15,8 +15,8 @@ static func base(biome: Biome.Type) -> RepairProfile:
 			p.mode = &"over_time"
 			p.amount = 50.0
 			p.duration = 8.0
-			p.cooldown = 2.0
-			p.energy_per_heal = 1.0
+			p.cooldown = 4.0
+			p.energy_per_heal = 2.0
 		Biome.Type.MOUNTAIN:
 			# Rebuild: big chunks with a long cooldown.
 			p.amount = 70.0

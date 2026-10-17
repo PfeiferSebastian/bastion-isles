@@ -1,46 +1,46 @@
 [gd_scene format=3 uid="uid://pmmvl4s76wpw"]
 
-[ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
-[ext_resource type="Script" path="res://scripts/world/sky_background.gd" id="2_sky"]
-[ext_resource type="Script" path="res://scripts/island/island_view.gd" id="3_island"]
+[ext_resource type="Script" uid="uid://tj3b7evge0r8" path="res://scripts/main.gd" id="1_main"]
+[ext_resource type="Script" uid="uid://f24yddvvwh1o" path="res://scripts/world/sky_background.gd" id="2_sky"]
+[ext_resource type="Script" uid="uid://b2l0x7ymqhbyk" path="res://scripts/island/island_view.gd" id="3_island"]
 [ext_resource type="PackedScene" path="res://scenes/objects/placeholder_tower.tscn" id="4_tower"]
-[ext_resource type="Script" path="res://scripts/world/camera_controller.gd" id="5_camera"]
-[ext_resource type="Script" path="res://scripts/ui/hud.gd" id="6_hud"]
-[ext_resource type="Script" path="res://scripts/ui/inventory_bar.gd" id="7_toolbar"]
-[ext_resource type="Script" path="res://scripts/combat/combat.gd" id="8_combat"]
-[ext_resource type="Script" path="res://scripts/fog/fog_layer.gd" id="9_fog"]
-[ext_resource type="Script" path="res://scripts/ui/progress_tube.gd" id="10_tube"]
-[ext_resource type="Script" path="res://scripts/ui/console_deck.gd" id="11_deck"]
-[ext_resource type="Script" path="res://scripts/ui/treasury_row.gd" id="12_treasury"]
+[ext_resource type="Script" uid="uid://buo0sgbdkbapr" path="res://scripts/world/camera_controller.gd" id="5_camera"]
+[ext_resource type="Script" uid="uid://biafj5w2i10ty" path="res://scripts/ui/hud.gd" id="6_hud"]
+[ext_resource type="Script" uid="uid://c5p3y5cwsdwa7" path="res://scripts/ui/inventory_bar.gd" id="7_toolbar"]
+[ext_resource type="Script" uid="uid://c04uuop31g2dn" path="res://scripts/combat/combat.gd" id="8_combat"]
+[ext_resource type="Script" uid="uid://3reyo4ttma67" path="res://scripts/fog/fog_layer.gd" id="9_fog"]
+[ext_resource type="Script" uid="uid://dot6mfynacfac" path="res://scripts/ui/progress_tube.gd" id="10_tube"]
+[ext_resource type="Script" uid="uid://crta3q3riy10i" path="res://scripts/ui/console_deck.gd" id="11_deck"]
+[ext_resource type="Script" uid="uid://ckalhabmsndbu" path="res://scripts/ui/treasury_row.gd" id="12_treasury"]
 
-[node name="Main" type="Node2D"]
+[node name="Main" type="Node2D" unique_id=538911594]
 script = ExtResource("1_main")
 
-[node name="SkyBackground" type="Node2D" parent="."]
+[node name="SkyBackground" type="Node2D" parent="." unique_id=1786574683]
 script = ExtResource("2_sky")
 
-[node name="IslandView" type="Node2D" parent="."]
-script = ExtResource("3_island")
+[node name="IslandView" type="Node2D" parent="." unique_id=423462458]
 texture_filter = 1
-placeable_scene = ExtResource("4_tower")
+script = ExtResource("3_island")
 load_saved = true
+placeable_scene = ExtResource("4_tower")
 
-[node name="Combat" type="Node2D" parent="."]
+[node name="Combat" type="Node2D" parent="." unique_id=1920687007]
 script = ExtResource("8_combat")
 island_view_path = NodePath("../IslandView")
 
-[node name="FogLayer" type="Node2D" parent="."]
+[node name="FogLayer" type="Node2D" parent="." unique_id=1662372717]
 script = ExtResource("9_fog")
 island_view_path = NodePath("../IslandView")
 combat_path = NodePath("../Combat")
 
-[node name="Camera" type="Camera2D" parent="."]
+[node name="Camera" type="Camera2D" parent="." unique_id=199348850]
 script = ExtResource("5_camera")
 
-[node name="HUD" type="CanvasLayer" parent="."]
+[node name="HUD" type="CanvasLayer" parent="." unique_id=140030727]
 script = ExtResource("6_hud")
 
-[node name="Root" type="Control" parent="HUD"]
+[node name="Root" type="Control" parent="HUD" unique_id=363842447]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -49,7 +49,7 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 
-[node name="ConsoleDeck" type="Control" parent="HUD/Root"]
+[node name="ConsoleDeck" type="Control" parent="HUD/Root" unique_id=843466255]
 unique_name_in_owner = true
 layout_mode = 1
 anchors_preset = 15
@@ -59,7 +59,7 @@ grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("11_deck")
 
-[node name="InfoPanel" type="PanelContainer" parent="HUD/Root"]
+[node name="InfoPanel" type="PanelContainer" parent="HUD/Root" unique_id=219417384]
 unique_name_in_owner = true
 clip_contents = true
 layout_mode = 1
@@ -76,12 +76,12 @@ grow_horizontal = 0
 grow_vertical = 0
 mouse_filter = 2
 
-[node name="InfoClip" type="Control" parent="HUD/Root/InfoPanel"]
+[node name="InfoClip" type="Control" parent="HUD/Root/InfoPanel" unique_id=2088066840]
 clip_contents = true
 layout_mode = 2
 mouse_filter = 2
 
-[node name="Info" type="RichTextLabel" parent="HUD/Root/InfoPanel/InfoClip"]
+[node name="Info" type="RichTextLabel" parent="HUD/Root/InfoPanel/InfoClip" unique_id=2092540903]
 unique_name_in_owner = true
 layout_mode = 1
 anchors_preset = 10
@@ -95,7 +95,7 @@ fit_content = true
 scroll_active = false
 autowrap_mode = 2
 
-[node name="Treasury" type="PanelContainer" parent="HUD/Root"]
+[node name="Treasury" type="PanelContainer" parent="HUD/Root" unique_id=160115301]
 unique_name_in_owner = true
 layout_mode = 1
 anchors_preset = 7
@@ -107,16 +107,17 @@ offset_left = -150.0
 offset_top = -178.0
 offset_right = -20.0
 offset_bottom = -142.0
+grow_horizontal = 2
 grow_vertical = 0
 mouse_filter = 1
 
-[node name="TreasuryRow" type="Control" parent="HUD/Root/Treasury"]
+[node name="TreasuryRow" type="Control" parent="HUD/Root/Treasury" unique_id=51947066]
 unique_name_in_owner = true
 layout_mode = 2
 mouse_filter = 2
 script = ExtResource("12_treasury")
 
-[node name="TopBar" type="PanelContainer" parent="HUD/Root"]
+[node name="TopBar" type="PanelContainer" parent="HUD/Root" unique_id=1182915812]
 unique_name_in_owner = true
 layout_mode = 1
 anchors_preset = 1
@@ -128,12 +129,12 @@ offset_right = -16.0
 offset_bottom = 54.0
 grow_horizontal = 0
 
-[node name="Row" type="HBoxContainer" parent="HUD/Root/TopBar"]
+[node name="Row" type="HBoxContainer" parent="HUD/Root/TopBar" unique_id=1218999070]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/separation = 5
 
-[node name="Stats" type="Label" parent="HUD/Root/TopBar/Row"]
+[node name="Stats" type="Label" parent="HUD/Root/TopBar/Row" unique_id=221149420]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(62, 0)
 layout_mode = 2
@@ -143,7 +144,7 @@ text = "Enemies 0
 Killed 0"
 vertical_alignment = 1
 
-[node name="MissionPanel" type="PanelContainer" parent="HUD/Root"]
+[node name="MissionPanel" type="PanelContainer" parent="HUD/Root" unique_id=29534443]
 unique_name_in_owner = true
 layout_mode = 1
 anchors_preset = 5
@@ -155,33 +156,33 @@ offset_right = 120.0
 offset_bottom = 54.0
 grow_horizontal = 2
 
-[node name="Row" type="HBoxContainer" parent="HUD/Root/MissionPanel"]
+[node name="Row" type="HBoxContainer" parent="HUD/Root/MissionPanel" unique_id=867567253]
 layout_mode = 2
 theme_override_constants/separation = 12
 alignment = 1
 
-[node name="MissionText" type="Label" parent="HUD/Root/MissionPanel/Row"]
+[node name="MissionText" type="Label" parent="HUD/Root/MissionPanel/Row" unique_id=1788085470]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Mission starts in 10"
 
-[node name="Leave" type="Button" parent="HUD/Root/MissionPanel/Row"]
+[node name="Leave" type="Button" parent="HUD/Root/MissionPanel/Row" unique_id=751500432]
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
 focus_mode = 0
-metadata/info = "Leave the island: the mission is complete"
 text = "Leave"
+metadata/info = "Leave the island: the mission is complete"
 
-[node name="Proceed" type="Button" parent="HUD/Root/MissionPanel/Row"]
+[node name="Proceed" type="Button" parent="HUD/Root/MissionPanel/Row" unique_id=474044117]
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
 focus_mode = 0
-metadata/info = "Proceed: another round here – enemies 20% stronger (HP and damage) and 10% more of them, compounding each round"
 text = "Proceed +20%"
+metadata/info = "Proceed: another round here – enemies 20% stronger (HP and damage) and 10% more of them, compounding each round"
 
-[node name="OverlayPanel" type="PanelContainer" parent="HUD/Root"]
+[node name="OverlayPanel" type="PanelContainer" parent="HUD/Root" unique_id=1838259125]
 unique_name_in_owner = true
 layout_mode = 0
 offset_left = 16.0
@@ -189,16 +190,16 @@ offset_top = 16.0
 offset_right = 200.0
 offset_bottom = 54.0
 
-[node name="Column" type="HBoxContainer" parent="HUD/Root/OverlayPanel"]
+[node name="Column" type="HBoxContainer" parent="HUD/Root/OverlayPanel" unique_id=1231594836]
 layout_mode = 2
 theme_override_constants/separation = 6
 
-[node name="OverlayIcons" type="HBoxContainer" parent="HUD/Root/OverlayPanel/Column"]
+[node name="OverlayIcons" type="HBoxContainer" parent="HUD/Root/OverlayPanel/Column" unique_id=2125211226]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/separation = 5
 
-[node name="InventoryPanel" type="PanelContainer" parent="HUD/Root"]
+[node name="InventoryPanel" type="PanelContainer" parent="HUD/Root" unique_id=1514898359]
 unique_name_in_owner = true
 layout_mode = 1
 anchors_preset = 2
@@ -210,12 +211,12 @@ offset_right = 804.0
 offset_bottom = -30.0
 grow_vertical = 0
 
-[node name="Inventory" type="VBoxContainer" parent="HUD/Root/InventoryPanel"]
+[node name="Inventory" type="VBoxContainer" parent="HUD/Root/InventoryPanel" unique_id=1092616391]
 unique_name_in_owner = true
 layout_mode = 2
 script = ExtResource("7_toolbar")
 
-[node name="MissionTube" type="Control" parent="HUD/Root"]
+[node name="MissionTube" type="Control" parent="HUD/Root" unique_id=690706743]
 unique_name_in_owner = true
 layout_mode = 1
 anchors_preset = 12
@@ -229,4 +230,3 @@ offset_bottom = -4.0
 grow_horizontal = 2
 grow_vertical = 0
 script = ExtResource("10_tube")
-

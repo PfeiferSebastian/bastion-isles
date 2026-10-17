@@ -44,7 +44,7 @@ const WALL_NEIGHBOUR_HP := {
 }
 
 ## Largest radius any Aura profile has.
-const AURA_RADIUS_MAX := 1
+const AURA_RADIUS_MAX := 3
 ## Energy per shield HP regenerated, paid from the tower's own storage.
 const SHIELD_ENERGY_PER_HP := 0.05
 
