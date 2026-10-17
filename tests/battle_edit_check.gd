@@ -13,6 +13,8 @@ var _failures := 0
 func _initialize() -> void:
 	GameSession.edit_mode = false
 	GameSession.endless = false
+	# Never touch the player's kept XP.
+	IslandSave.xp_path = "user://test_tower_xp.json"
 	var main: Node = load("res://main.tscn").instantiate()
 	root.add_child(main)
 	await process_frame

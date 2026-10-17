@@ -6,14 +6,20 @@ extends RefCounted
 ## Blueprints are kept apart as well and saved the moment one is found, so they survive a
 ## mission that ends any other way (quitting the game, a crash). Towers completed from
 ## blueprints since the last island save are listed there too and handed out on the next load.
+## Tower XP from a running mission is kept apart too (save_tower_xp, every few seconds and when
+## the window closes): only XP, so closing the game never keeps the loot a retreat would cost.
 
 ## Save files (tests point these elsewhere so they never touch the player's saves).
 static var path := "user://island.json"
 static var blueprint_path := "user://blueprints.json"
+static var xp_path := "user://tower_xp.json"
 
 
 static func save(island: Island) -> void:
 	_write(path, island.to_dict())
+	# The island save holds the latest XP now.
+	if FileAccess.file_exists(xp_path):
+		DirAccess.remove_absolute(xp_path)
 	# The island save now holds every completed tower.
 	island.unsaved_towers.clear()
 	save_blueprints(island)
@@ -25,14 +31,39 @@ static func save_blueprints(island: Island) -> void:
 		pity = island.treasury.pity})
 
 
+## Every tower's XP as it is now: {towers = [{q, r, type, tier, xp}]}.
+static func save_tower_xp(island: Island) -> void:
+	var towers: Array = []
+	for coord in island.coords():
+		var tower := island.get_tower(coord)
+		if tower:
+			towers.append({q = coord.x, r = coord.y, type = String(tower.type), tier = tower.tier, xp = tower.xp})
+	_write(xp_path, {towers = towers})
+
+
+## Gives towers the XP from save_tower_xp where the same type and tier still stands on the hex
+## and the kept XP is higher.
+static func _apply_tower_xp(island: Island) -> void:
+	var data: Variant = _read(xp_path)
+	if not data is Dictionary:
+		return
+	for entry: Dictionary in data.get("towers", []):
+		var tower := island.get_tower(Vector2i(int(entry.q), int(entry.r)))
+		if tower and String(tower.type) == String(entry.type) and tower.tier == int(entry.tier) and float(entry.xp) > tower.xp:
+			tower.xp = float(entry.xp)
+			tower.level_seen = tower.level()
+
+
 ## The saved island (or a fresh one with `starter_radius`), with the separately kept
-## blueprints applied. Towers completed while the island wasn't saved go into its inventory,
+## blueprints and tower XP applied. Towers completed while the island wasn't saved go into its inventory,
 ## and the island is saved again right away so they are kept.
 static func load_island(starter_radius: int) -> Island:
 	var data: Variant = _read(path)
 	var island := Island.from_dict(data) if data is Dictionary else null
 	if island == null:
 		island = Island.create_starter(starter_radius)
+	else:
+		_apply_tower_xp(island)
 	var kept: Variant = _read(blueprint_path)
 	if kept is Dictionary:
 		island.treasury.blueprints = Treasury.blueprints_from(kept.get("blueprints", 0))

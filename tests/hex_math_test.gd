@@ -638,10 +638,21 @@ func _test_economy() -> void:
 	_check(reloaded.treasury.blueprints == 1, "blueprints survive without an island save")
 	_check(reloaded.treasury.inventory.count(Inventory.tower_item(&"scout")) == 1, "towers bought with blueprints survive without an island save")
 	_check(IslandSave.load_island(1).treasury.inventory.count(Inventory.tower_item(&"scout")) == 1, "and are handed out only once")
+	# Tower XP from a mission survives closing the game without an island save.
+	IslandSave.xp_path = "user://test_tower_xp.json"
+	var xp_island := IslandSave.load_island(1)
+	xp_island.place_tower(Vector2i(0, 1), &"attack")
+	IslandSave.save(xp_island)
+	xp_island.get_tower(Vector2i(0, 1)).xp = 500.0
+	IslandSave.save_tower_xp(xp_island)
+	_check(is_equal_approx(IslandSave.load_island(1).get_tower(Vector2i(0, 1)).xp, 500.0), "tower XP survives closing the game")
+	IslandSave.save(xp_island)
+	_check(not FileAccess.file_exists(IslandSave.xp_path), "an island save replaces the kept XP")
 	DirAccess.remove_absolute(IslandSave.path)
 	DirAccess.remove_absolute(IslandSave.blueprint_path)
 	IslandSave.path = "user://island.json"
 	IslandSave.blueprint_path = "user://blueprints.json"
+	IslandSave.xp_path = "user://tower_xp.json"
 	var inv := Inventory.new()
 	inv.add(Inventory.tower_item(&"wall", 1), 2)
 	inv.add(Inventory.tower_item(&"wall", 3))

@@ -21,6 +21,11 @@ var editing := false
 ## The retreat report is open; the battle stays paused until Return.
 var retreating := false
 
+## Seconds of fighting between saves of the towers' XP (IslandSave.save_tower_xp), so closing
+## the game or a crash loses at most this much.
+const XP_SAVE_INTERVAL := 15.0
+var _xp_save_time := 0.0
+
 
 func _ready() -> void:
 	# Pausing the tree freezes the fight; the view, camera and HUD keep working for editing.
@@ -44,6 +49,26 @@ func _ready() -> void:
 		_island_view.island.builds_take_time = true
 	_hud.get_node("%Inventory").set(&"view", _island_view)
 	_island_view.message.connect(func(at: Vector2, text: String) -> void: _combat.popup(at, text, Color("ffb070")))
+
+
+func _process(delta: float) -> void:
+	if GameSession.edit_mode or get_tree().paused:
+		return
+	_xp_save_time += delta
+	if _xp_save_time >= XP_SAVE_INTERVAL:
+		_xp_save_time = 0.0
+		IslandSave.save_tower_xp(_island_view.island)
+
+
+## Closing the window: Edit Island saves everything; a mission keeps its towers' XP, while its
+## loot stays as if the player had never left the menu.
+func _notification(what: int) -> void:
+	if what != NOTIFICATION_WM_CLOSE_REQUEST:
+		return
+	if GameSession.edit_mode:
+		IslandSave.save(_island_view.island)
+	else:
+		IslandSave.save_tower_xp(_island_view.island)
 
 
 ## Clicks on enemies set the focus fire scope (Combat.focus_click); with an inventory item
