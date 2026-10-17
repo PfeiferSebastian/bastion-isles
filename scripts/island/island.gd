@@ -307,6 +307,8 @@ func heal(coord: Vector2i, tower: bool, amount: float) -> float:
 	var tile := get_tile(coord)
 	if tile == null or amount <= 0.0:
 		return 0.0
+	# Forest tiles make repairs on them stronger.
+	amount *= 1.0 + aura_at(coord).get(&"heal_received", 0.0)
 	var before: float
 	if tower:
 		if tile.tower == null:

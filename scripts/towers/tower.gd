@@ -29,6 +29,9 @@ var time_since_damage := 0.0
 var attack_cooldown := 0.0
 ## Aura and Scout towers: how strongly they work right now (0 = no energy, 1 = full).
 var aura_power := 0.0
+## Attack towers: where the turret points (radians, world space); it turns at the profile's
+## turn speed and fires only once it points at its target.
+var aim := -PI / 2.0
 var xp := 0.0
 ## Tower tier (1–MAX_TIER), raised at level 100.
 var tier := 1

@@ -6,6 +6,9 @@ var target: Enemy
 var profile: AttackProfile
 ## Called after the hit with (target, its HP before), for the analysis counters.
 var on_hit: Callable
+## Range falloff (see AttackProfile.performance) and whether extra effects apply.
+var factor := 1.0
+var specials := true
 
 
 func _process(delta: float) -> void:
@@ -16,7 +19,7 @@ func _process(delta: float) -> void:
 	var step := profile.projectile_speed * delta
 	if to.length() <= step:
 		var before := target.hp
-		profile.apply_hit(target)
+		profile.apply_hit(target, factor, specials)
 		if on_hit.is_valid():
 			on_hit.call(target, before)
 		queue_free()

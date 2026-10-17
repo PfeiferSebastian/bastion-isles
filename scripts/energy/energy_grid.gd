@@ -20,9 +20,9 @@ const STORAGE_OUTPUT := 6.0
 const CONDUIT_EFFICIENCY := {
 	Biome.Type.NEUTRAL: 0.30,
 	Biome.Type.FOREST: 0.60,
-	Biome.Type.MOUNTAIN: 0.25,
-	Biome.Type.PLAINS: 0.45,
-	Biome.Type.SWAMP: 0.35,
+	Biome.Type.MOUNTAIN: 0.10,
+	Biome.Type.PLAINS: 0.40,
+	Biome.Type.SWAMP: 0.15,
 	# Hydro power: water carries energy best (placeholder until the Seafolk are designed).
 	Biome.Type.LAKE: 0.70,
 }
@@ -30,10 +30,8 @@ const CONDUIT_EFFICIENCY := {
 const CONDUIT_PER_TIER := 0.03
 const CONDUIT_PER_TIER_WATER := 0.06
 const CONDUIT_MAX := 0.95
-## Forest tiles produce this much per second and tier, feeding themselves and their neighbours.
-const FOREST_PASSIVE := 0.3
-## …and this many times more when connected to a Forest Energy tower (root network).
-const ROOT_NETWORK_FACTOR := 3.0
+## Swamp tiles produce this much per second and tier, feeding themselves and their neighbours.
+const SWAMP_PASSIVE := 0.3
 ## Plains conduit closes this share of the gap to the average fill per second.
 const CONDUIT_RATE := 0.5
 ## Swamp decay: energy released when an enemy dies within DECAY_REACH hexes.
@@ -117,7 +115,7 @@ static func tick(island: Island, delta: float) -> void:
 	for coord in island.coords():
 		var tile := island.get_tile(coord)
 		tile.energy = minf(tile.energy, capacity(tile))
-	_forest_passive(island, delta)
+	_swamp_passive(island, delta)
 	for coord in island.coords():
 		var profile := generator_at(island, coord)
 		if profile == null:
@@ -224,40 +222,20 @@ static func _drain_neighbours(island: Island, coord: Vector2i, needed: float) ->
 	return true
 
 
-## Forest tiles act as tiny generators: they fill their own storage (if they have one)
-## and their direct neighbours.
-static func _forest_passive(island: Island, delta: float) -> void:
-	var rooted := _root_network(island)
+## Swamp tiles produce a little energy of their own (more per tier) for their building and
+## their neighbours.
+static func _swamp_passive(island: Island, delta: float) -> void:
 	var profile := EnergyProfile.new()
 	profile.falloff = PackedFloat32Array([1.0, 1.0])
 	for coord in island.coords():
 		var tile := island.get_tile(coord)
-		if tile.biome != Biome.Type.FOREST:
+		if tile.biome != Biome.Type.SWAMP or tile.destroyed:
 			continue
-		var budget := FOREST_PASSIVE * tile.tier * (ROOT_NETWORK_FACTOR if rooted.has(coord) else 1.0) * delta
+		var budget := SWAMP_PASSIVE * tile.tier * delta
 		var own_missing := capacity(tile) - tile.energy
 		var own := minf(own_missing, budget)
 		tile.energy += own
 		distribute(island, coord, profile, budget - own)
-
-
-## Forest tiles connected (through Forest) to a Forest tile with an Energy tower.
-static func _root_network(island: Island) -> Dictionary:
-	var seen := {}
-	var frontier: Array[Vector2i] = []
-	for coord in island.coords():
-		var tile := island.get_tile(coord)
-		if tile.biome == Biome.Type.FOREST and tile.tower and tile.tower.type == &"energy":
-			seen[coord] = true
-			frontier.append(coord)
-	while not frontier.is_empty():
-		var current: Vector2i = frontier.pop_back()
-		for n in HexMath.neighbors(current):
-			var tile := island.get_tile(n)
-			if tile and tile.biome == Biome.Type.FOREST and not seen.has(n):
-				seen[n] = true
-				frontier.append(n)
-	return seen
 
 
 ## Plains conduit: evens out the storages it reaches.

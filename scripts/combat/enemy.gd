@@ -1,12 +1,17 @@
 class_name Enemy
 extends Node2D
-## An enemy airship. Its type (EnemyDefs) sets stats, weapon and behaviour; Combat moves
-## it. Keeps its own status effects (thorns, poison, weaken).
+## An enemy airship. Its type (EnemyDefs) sets stats, armour, weapon and behaviour; Combat
+## moves it. Keeps its own status effects: damage-over-time stacks, weaken, attack slow.
 
 signal died(enemy: Enemy)
 
-const THORN_DURATION := 4.0
+## Damage over time lands in ticks of this many seconds.
+const DOT_TICK := 0.2
 const WEAKEN_DURATION := 4.0
+## Weaken from hits stacks freely up to WEAKEN_SOFT_CAP, then each hit adds less and less
+## until WEAKEN_MAX.
+const WEAKEN_SOFT_CAP := 0.5
+const WEAKEN_MAX := 0.75
 ## Weakened enemies take this much extra damage per point of weaken ("less armour").
 const WEAKEN_ARMOUR_FACTOR := 0.5
 
@@ -20,6 +25,8 @@ var speed := 55.0
 var dps := 6.0
 var hp := max_hp
 var is_dead := false
+## Share of direct hit damage shrugged off (see EnemyDefs).
+var armor := 0.0
 
 # Weapon (shooters and bombers)
 var weapon_range_hexes := 0.0
@@ -39,12 +46,12 @@ var in_formation := false
 var formation_leader: Enemy = null
 var formation_offset := Vector2.ZERO
 
-var _thorn_stacks := 0
-var _thorn_dps := 0.0
-var _thorn_time := 0.0
-var _poisons: Array[Vector2] = []  # x = damage per second, y = time left
+var _dots: Array[Vector2] = []  # x = damage per second, y = time left
+var _dot_tick := 0.0
 var _weaken := 0.0
 var _weaken_time := 0.0
+var _attack_slow := 0.0
+var _attack_slow_time := 0.0
 
 
 ## Applies the stats of `type_kind`, HP and damage scaled by `factor`, speed by `speed_factor`
@@ -62,6 +69,7 @@ func setup(type_kind: StringName, factor := 1.0, speed_factor := -1.0) -> void:
 	weapon_damage = def.get("damage", 0.0) * factor
 	weapon_cooldown = def.get("cooldown", 1.0)
 	projectile_speed = def.get("projectile_speed", 300.0)
+	armor = def.get("armor", 0.0)
 	cooldown_left = randf() * weapon_cooldown
 	orbit_direction = 1.0 if randf() < 0.5 else -1.0
 	queue_redraw()
@@ -72,9 +80,18 @@ func shot_damage() -> float:
 	return weapon_damage * (1.0 - _weaken)
 
 
-func take_damage(amount: float) -> void:
+## Seconds until the next shot after firing: longer while the attack slow is on.
+func reload_time() -> float:
+	return weapon_cooldown / (1.0 - _attack_slow)
+
+
+## Takes a hit: armour (less the attacker's `armor_pen`) shrugs off part of it, weaken makes
+## it hurt more. Damage over time passes `ignore_armor`.
+func take_damage(amount: float, armor_pen := 0.0, ignore_armor := false) -> void:
 	if is_dead or amount <= 0.0:
 		return
+	if not ignore_armor:
+		amount *= 1.0 - maxf(armor - armor_pen, 0.0)
 	hp -= amount * (1.0 + _weaken * WEAKEN_ARMOUR_FACTOR)
 	queue_redraw()
 	if hp <= 0.0:
@@ -83,48 +100,64 @@ func take_damage(amount: float) -> void:
 		queue_free()
 
 
-func add_thorns(dps_per_stack: float, max_stacks: int) -> void:
-	_thorn_dps = maxf(_thorn_dps, dps_per_stack)
-	_thorn_stacks = mini(_thorn_stacks + 1, max_stacks)
-	_thorn_time = THORN_DURATION
+## A stack of damage over time: `dps` for `duration` seconds (stacks add up).
+func add_dot(dps_per_stack: float, duration: float) -> void:
+	_dots.append(Vector2(dps_per_stack, duration))
 
 
-func add_poison(total: float, duration: float) -> void:
-	_poisons.append(Vector2(total / duration, duration))
+## Weaken from a hit: +`amount` up to WEAKEN_SOFT_CAP, then shrinking steps toward WEAKEN_MAX.
+func add_weaken_stack(amount: float) -> void:
+	if _weaken >= WEAKEN_SOFT_CAP:
+		amount *= 1.0 - (_weaken - WEAKEN_SOFT_CAP) / (WEAKEN_MAX - WEAKEN_SOFT_CAP)
+	_weaken = minf(_weaken + amount, WEAKEN_MAX)
+	_weaken_time = WEAKEN_DURATION
 
 
+## Weaken of at least `strength` (Swamp obelisks).
 func add_weaken(strength: float) -> void:
 	_weaken = maxf(_weaken, strength)
 	_weaken_time = WEAKEN_DURATION
 
 
-func thorn_stacks() -> int:
-	return _thorn_stacks
+## Slows this enemy's attacks by `share` for `duration` seconds (the strongest slow counts).
+func add_attack_slow(share: float, duration: float) -> void:
+	_attack_slow = maxf(_attack_slow, share)
+	_attack_slow_time = maxf(_attack_slow_time, duration)
 
 
-## Damage per second this enemy deals right now; weaken lowers it.
+func dot_stacks() -> int:
+	return _dots.size()
+
+
+func weaken() -> float:
+	return _weaken
+
+
+## Damage per second this enemy deals right now; weaken and attack slow lower it.
 func damage_output() -> float:
-	return dps * (1.0 - _weaken)
+	return dps * (1.0 - _weaken) * (1.0 - _attack_slow)
 
 
-## Advances status timers and applies damage over time.
+## Advances status timers and applies damage over time in ticks of DOT_TICK.
 func tick_statuses(delta: float) -> void:
-	var dot := 0.0
-	if _thorn_stacks > 0:
-		dot += _thorn_stacks * _thorn_dps
-		_thorn_time -= delta
-		if _thorn_time <= 0.0:
-			_thorn_stacks = 0
-	for i in range(_poisons.size() - 1, -1, -1):
-		dot += _poisons[i].x
-		_poisons[i].y -= delta
-		if _poisons[i].y <= 0.0:
-			_poisons.remove_at(i)
+	_dot_tick += delta
+	while _dot_tick >= DOT_TICK and not is_dead:
+		_dot_tick -= DOT_TICK
+		var dot := 0.0
+		for i in range(_dots.size() - 1, -1, -1):
+			dot += _dots[i].x * DOT_TICK
+			_dots[i].y -= DOT_TICK
+			if _dots[i].y <= 0.0:
+				_dots.remove_at(i)
+		take_damage(dot, 0.0, true)
 	if _weaken_time > 0.0:
 		_weaken_time -= delta
 		if _weaken_time <= 0.0:
 			_weaken = 0.0
-	take_damage(dot * delta)
+	if _attack_slow_time > 0.0:
+		_attack_slow_time -= delta
+		if _attack_slow_time <= 0.0:
+			_attack_slow = 0.0
 
 
 func face(angle: float) -> void:
@@ -156,11 +189,13 @@ func _draw() -> void:
 			draw_colored_polygon(hull, Color("7a2a2a"))
 			draw_polyline(hull + PackedVector2Array([hull[0]]), Color("2a0d0d"), 1.5, true)
 	if _weaken > 0.0:
-		draw_arc(Vector2.ZERO, 17, 0, TAU, 24, Color("b07be0"), 2.0, true)
+		draw_arc(Vector2.ZERO, 17, 0, TAU * _weaken / WEAKEN_MAX, 24, Color("b07be0"), 2.0, true)
+	if _attack_slow > 0.0:
+		draw_arc(Vector2.ZERO, 20, 0, TAU, 24, Color(AttackProfiles.WATER_COLOR, 0.8), 1.5, true)
 	# Health bar and thorn stacks stay upright regardless of rotation.
 	draw_set_transform(Vector2.ZERO, -rotation)
-	for i in _thorn_stacks:
-		draw_circle(Vector2(-8 + i * 4, 16), 1.8, Color("5fd068"))
+	for i in mini(_dots.size(), 6):
+		draw_circle(Vector2(-10 + i * 4, 16), 1.8, Color("5fd068"))
 	var ratio := clampf(hp / max_hp, 0.0, 1.0)
 	draw_rect(Rect2(-12, -20, 24, 3), Color(0, 0, 0, 0.6))
 	draw_rect(Rect2(-12, -20, 24 * ratio, 3), Color("e05545"))

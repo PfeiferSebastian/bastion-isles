@@ -110,13 +110,9 @@ static func island_lines(island: Island, combat: Combat) -> PackedStringArray:
 	return lines
 
 
-## Damage per second of an attack building (projectiles and lasers; thorns and poison left out).
+## Damage per second of an attack building inside its core range (thorns fully stacked).
 static func dps_of(island: Island, coord: Vector2i) -> float:
-	var p := AttackProfiles.for_tile(island, coord)
-	var dps := p.beam_dps * p.beam_count
-	if p.has_projectile():
-		dps += p.damage / maxf(p.cooldown, 0.001)
-	return dps
+	return AttackProfiles.for_tile(island, coord).sustained_dps()
 
 
 ## Most energy per second the building on `coord` uses while working.

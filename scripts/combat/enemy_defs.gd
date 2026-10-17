@@ -8,6 +8,9 @@ extends RefCounted
 ## - &"orbit":    circles the island just inside weapon range of the outer buildings, shooting
 ## - &"flyover":  crosses the island in straight passes, bombing the tile below; turns and repeats
 ##
+## `armor` is the share of direct hit damage an enemy shrugs off (towers' armour piercing
+## ignores part of it); damage over time ignores armour.
+##
 ## `targets` is the enemy's target priority (GDD §8.7): the first entry that finds something
 ## wins, the nearest of its kind. Each enemy keeps its own copy (Enemy.target_priority), so
 ## chips can change it later. Entries:
@@ -20,12 +23,12 @@ extends RefCounted
 
 const TYPES := {
 	&"rammer": {
-		behaviour = &"ram", hp = 60.0, speed = 55.0, contact_dps = 6.0,
+		behaviour = &"ram", hp = 60.0, speed = 55.0, contact_dps = 6.0, armor = 0.1,
 		targets = [&"nearest", &"ground"],
 	},
 	&"gunboat": {
 		behaviour = &"standoff", hp = 80.0, speed = 42.0,
-		range_hexes = 3.0, damage = 8.0, cooldown = 1.6, projectile_speed = 260.0,
+		range_hexes = 3.0, damage = 8.0, cooldown = 1.6, projectile_speed = 260.0, armor = 0.2,
 		targets = [&"attack", &"nearest", &"ground"],
 	},
 	&"corsair": {
@@ -35,7 +38,7 @@ const TYPES := {
 	},
 	&"bomber": {
 		behaviour = &"flyover", hp = 120.0, speed = 58.0,
-		damage = 15.0, cooldown = 0.7,
+		damage = 15.0, cooldown = 0.7, armor = 0.3,
 		targets = [&"strafe"],
 	},
 }

@@ -162,9 +162,9 @@ static func _sprite(type: StringName, biome: Biome.Type) -> Texture2D:
 
 # --- Attack ----------------------------------------------------------------
 
-## Turret: a round gun platform with a weapon that shows the biome's attack – cannon
-## (neutral), thorn launcher (forest), heavy mortar (mountain), crystal laser (plains),
-## poison sprayer (swamp). The weapon turns toward `aim`.
+## Turret: a round gun platform with a weapon that shows the biome's attack – single-barrel
+## cannon (neutral), thorn launcher (forest), machine cannon (mountain), crystal laser
+## (plains), sprayer (swamp), water jet (lake). The weapon turns toward `aim`.
 static func _turret(ci: CanvasItem, c: Vector2, r: float, m: Array, biome: Biome.Type, aim: float) -> void:
 	ci.draw_circle(c + Vector2(2, 3), r, SHADOW)
 	_ring(ci, c, r, m[0], m[2], 2.0)
@@ -175,10 +175,18 @@ static func _turret(ci: CanvasItem, c: Vector2, r: float, m: Array, biome: Biome
 	var side := dir.orthogonal()
 	match biome:
 		Biome.Type.MOUNTAIN:
-			# Short, fat mortar tube.
-			ci.draw_colored_polygon(_strip(c, c + dir * r * 0.95, r * 0.62), IRON)
-			ci.draw_circle(c + dir * r * 0.95, r * 0.31, IRON)
-			ci.draw_circle(c + dir * r * 0.95, r * 0.19, Color("120e0c"))
+			# Machine cannon: three thin barrels on a drum, with a band near the muzzles.
+			for k in [-1, 0, 1]:
+				var offset: Vector2 = side * r * 0.17 * k
+				ci.draw_colored_polygon(_strip(c + offset, c + offset + dir * r * 1.2, r * 0.13), IRON)
+			ci.draw_colored_polygon(_strip(c + dir * r * 0.85, c + dir * r * 0.98, r * 0.6), IRON.lightened(0.2))
+			ci.draw_circle(c, r * 0.36, IRON.lightened(0.1))
+		Biome.Type.LAKE:
+			# Water jet: a bronze nozzle with a splash of water at its mouth.
+			ci.draw_colored_polygon(PackedVector2Array([c + side * r * 0.24, c + dir * r * 0.95 + side * r * 0.1,
+				c + dir * r * 0.95 - side * r * 0.1, c - side * r * 0.24]), Color("b07a3a"))
+			ci.draw_circle(c + dir * r * 1.02, r * 0.16, AttackProfiles.WATER_COLOR)
+			ci.draw_circle(c + dir * r * 1.14, r * 0.09, Color(AttackProfiles.WATER_COLOR, 0.7))
 		Biome.Type.PLAINS:
 			# Crystal emitter: a slim prism with a glowing tip.
 			ci.draw_colored_polygon(PackedVector2Array([c + side * r * 0.22, c + dir * r * 1.15, c - side * r * 0.22]), m[3])

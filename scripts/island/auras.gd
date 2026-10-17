@@ -4,11 +4,11 @@ extends RefCounted
 ## 2026-10-16), scaled by its tier. Wall and Aura towers still buff the buildings around them.
 ## Values are shares (0.05 = +5%) per tier; placeholder numbers until playtesting.
 
-## Forest has no tile aura: its tile trait is passive energy (EnergyGrid).
+## Swamp has no tile aura: its tile trait is passive energy (EnergyGrid).
 const PER_TIER := {
 	Biome.Type.MOUNTAIN: {&"max_hp": 0.05},
-	Biome.Type.PLAINS: {&"shield": 0.03},
-	Biome.Type.SWAMP: {&"poison": 0.03},
+	Biome.Type.LAKE: {&"shield": 0.03},
+	Biome.Type.FOREST: {&"heal_received": 0.05},
 }
 
 ## More effects of the tile itself (kept apart from PER_TIER, which Aura towers boost).
@@ -26,6 +26,7 @@ const LABELS := {
 	&"damage_spread": "Damage spread",
 	&"output": "Output",
 	&"armor": "Armor",
+	&"heal_received": "Healing received",
 }
 
 

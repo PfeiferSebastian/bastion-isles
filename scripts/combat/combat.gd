@@ -61,6 +61,8 @@ var fog: FogOfWar
 var _view: IslandView
 ## Waves sent so far.
 var wave := 0
+## A turret fires once it points within this angle (radians) of its target.
+const AIM_TOLERANCE := 0.12
 ## The wave being logged (see BattleLog), or {} before the first wave.
 var _wave_log: Dictionary = {}
 var _wave_timer := 0.0
@@ -558,7 +560,7 @@ func _flyover(enemy: Enemy, delta: float) -> void:
 	var below := _view.world_to_hex(enemy.global_position)
 	var tile := _view.island.get_tile(below)
 	if tile and not tile.destroyed and enemy.cooldown_left <= 0.0:
-		enemy.cooldown_left = enemy.weapon_cooldown
+		enemy.cooldown_left = enemy.reload_time()
 		_reveal_shooter(enemy)
 		_hit(below, enemy.shot_damage())
 		_bursts.append({position = _view.hex_center_world(below), time = BURST_TIME})
@@ -579,7 +581,7 @@ func _approach(enemy: Enemy, goal: Vector2, stop: float, delta: float) -> bool:
 func _shoot(enemy: Enemy, target: Vector2i) -> void:
 	if enemy.cooldown_left > 0.0:
 		return
-	enemy.cooldown_left = enemy.weapon_cooldown
+	enemy.cooldown_left = enemy.reload_time()
 	_reveal_shooter(enemy)
 	var shot := EnemyProjectile.new()
 	shot.target_position = _view.hex_center_world(target) + Vector2(randf_range(-8, 8), randf_range(-8, 8))
@@ -756,8 +758,15 @@ func _towers_attack(delta: float) -> void:
 			continue
 		var profile := AttackProfiles.for_tile(island, coord)
 		var origin := _view.hex_center_world(coord)
-		var range_px := profile.range_hexes * HexMath.SQRT3 * _view.hex_size
-		var targets := _targets_in_range(origin, range_px)
+		var hex_px := HexMath.SQRT3 * _view.hex_size
+		# Targets out to the furthest reach, those inside the core range first.
+		var targets := _targets_in_range(origin, profile.max_reach() * hex_px)
+		targets.sort_custom(func(a: Enemy, b: Enemy) -> bool:
+			var a_in := origin.distance_to(a.global_position) <= profile.range_hexes * hex_px
+			var b_in := origin.distance_to(b.global_position) <= profile.range_hexes * hex_px
+			if a_in != b_in:
+				return a_in
+			return origin.distance_squared_to(a.global_position) < origin.distance_squared_to(b.global_position))
 		_focus_first(targets, origin, profile.range_hexes * HexMath.SQRT3 * _view.hex_size)
 		tower.attack_cooldown = maxf(tower.attack_cooldown - delta, 0.0)
 		# Reloading after a shot counts as working.
@@ -765,12 +774,18 @@ func _towers_attack(delta: float) -> void:
 		if targets.is_empty():
 			continue
 		tower.saw_target = true
-		_view.aim_tower(coord, (targets[0].global_position - origin).angle())
+		# The turret turns toward the target and fires only once it points at it.
+		var wanted := (targets[0].global_position - origin).angle()
+		tower.aim = rotate_toward(tower.aim, wanted, deg_to_rad(profile.turn_speed) * delta)
+		_view.aim_tower(coord, tower.aim)
+		if absf(angle_difference(tower.aim, wanted)) > AIM_TOLERANCE:
+			continue
 		var beams := mini(profile.beam_count, targets.size())
 		if beams > 0:
 			var beam_power := EnergyGrid.draw_energy(island, coord, profile.beam_energy * beams * delta)
 			for i in beams:
-				_fire_beam(origin, targets[i], profile, beam_power, delta, coord)
+				var distance := origin.distance_to(targets[i].global_position) / hex_px
+				_fire_beam(origin, targets[i], profile, beam_power, delta, coord, profile.performance(distance), distance <= profile.range_hexes)
 			if beam_power > 0.0:
 				tower.did_work = true
 			island.add_xp(coord, beam_power * delta)
@@ -779,7 +794,8 @@ func _towers_attack(delta: float) -> void:
 			if power > 0.0:
 				# Below 1 (e.g. Forest without energy) the tower fires more slowly.
 				tower.attack_cooldown = profile.cooldown / power
-				_fire_projectile(origin, targets[0], profile, coord)
+				var distance := origin.distance_to(targets[0].global_position) / hex_px
+				_fire_projectile(origin, targets[0], profile, coord, profile.performance(distance), distance <= profile.range_hexes)
 				tower.did_work = true
 				island.add_xp(coord, 1.0)
 
@@ -813,20 +829,26 @@ func _targets_in_range(origin: Vector2, range_px: float) -> Array[Enemy]:
 
 
 ## The laser stops at its target and only damages that enemy.
-func _fire_beam(origin: Vector2, target: Enemy, profile: AttackProfile, power: float, delta: float, source := Vector2i(9999, 9999)) -> void:
+func _fire_beam(origin: Vector2, target: Enemy, profile: AttackProfile, power: float, delta: float,
+		source := Vector2i(9999, 9999), factor := 1.0, specials := true) -> void:
 	if power <= 0.0:
 		return
 	var before := target.hp
-	target.take_damage(profile.beam_dps * power * delta)
+	target.take_damage(profile.beam_dps * power * delta * factor, profile.armor_pen)
+	if specials and profile.attack_slow > 0.0 and not target.is_dead:
+		target.add_attack_slow(profile.attack_slow, profile.attack_slow_duration)
 	_credit(target, before, source)
 	_beams.append(PackedVector2Array([origin, target.global_position]))
 	_beam_colors.append(profile.beam_color)
 
 
-func _fire_projectile(origin: Vector2, target: Enemy, profile: AttackProfile, source := Island.HQ_COORD) -> void:
+func _fire_projectile(origin: Vector2, target: Enemy, profile: AttackProfile, source := Island.HQ_COORD,
+		factor := 1.0, specials := true) -> void:
 	var projectile := Projectile.new()
 	projectile.target = target
 	projectile.profile = profile
+	projectile.factor = factor
+	projectile.specials = specials
 	projectile.on_hit = _credit.bind(source)
 	_projectile_layer.add_child(projectile)
 	projectile.global_position = origin

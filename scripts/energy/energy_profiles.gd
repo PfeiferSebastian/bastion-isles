@@ -16,9 +16,8 @@ static func base(biome: Biome.Type) -> EnergyProfile:
 			p.output = 10.0
 			p.falloff = PackedFloat32Array([1.0, 1.0, 0.4, 0.1])
 		Biome.Type.FOREST:
-			# Root network: little output, boosts passive production of its connected forest.
+			# Little output (its root network bonus was removed).
 			p.output = 2.0
-			p.special = &"roots"
 		Biome.Type.PLAINS:
 			# Aether conduit: balances storage between tiles in reach.
 			p.output = 3.0

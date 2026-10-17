@@ -6,7 +6,7 @@ extends RefCounted
 var output := 6.0
 ## Share that arrives at distance 0, 1, 2… The last entry sets the reach.
 var falloff := PackedFloat32Array([1.0, 1.0, 0.5])
-## Biome trait: &"roots" (Forest), &"conduit" (Plains), &"decay" (Swamp), &"solar" (Desert) or &"".
+## Biome trait: &"conduit" (Plains), &"decay" (Swamp) or &"".
 var special: StringName = &""
 
 

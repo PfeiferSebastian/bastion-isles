@@ -444,18 +444,21 @@ static func _modifier(factor: float) -> String:
 static func _describe_attack(p: AttackProfile, range_factor: float) -> PackedStringArray:
 	var lines: PackedStringArray = []
 	if p.has_projectile():
-		lines.append("Damage %.0f every %.1f s (%.1f dps)" % [p.damage, p.cooldown, p.damage / maxf(p.cooldown, 0.001)])
-		lines.append("Energy %.1f per shot" % p.energy_per_shot)
+		lines.append("Damage %.1f every %.2f s (%.1f dps)" % [p.damage, p.cooldown, p.damage / maxf(p.cooldown, 0.001)])
+		lines.append("Energy %.2f per shot (%.2f/s)" % [p.energy_per_shot, p.energy_per_shot / maxf(p.cooldown, 0.001)])
 	if p.beam_dps > 0.0:
-		lines.append("Laser %.1f damage/s × %d" % [p.beam_dps, p.beam_count])
-		lines.append("Energy %.1f/s for the laser" % (p.beam_energy * p.beam_count))
-	if p.thorn_dps > 0.0:
-		lines.append("Thorns %.1f damage/s, up to %d stacks" % [p.thorn_dps, p.thorn_max])
-	if p.weaken > 0.0:
-		lines.append("Weakens enemies %d%%" % roundi(p.weaken * 100.0))
-	if p.poison > 0.0:
-		lines.append("Poison %d%%" % roundi(p.poison * 100.0))
-	lines.append("Range %.1f hexes%s" % [p.range_hexes, _modifier(range_factor)])
+		lines.append("Beam %.1f damage/s" % (p.beam_dps * p.beam_count))
+		lines.append("Energy %.2f/s" % (p.beam_energy * p.beam_count))
+	if p.dot_dps > 0.0:
+		lines.append("Thorns: +%.2f damage/s per hit for %.1f s, stacking (%.1f dps when stacked)" % [p.dot_dps, p.dot_duration, p.dot_dps * p.dot_duration / maxf(p.cooldown, 0.001)])
+	if p.weaken_per_hit > 0.0:
+		lines.append("Weakens %d%% per hit (up to %d%%, slower past %d%%)" % [roundi(p.weaken_per_hit * 100.0), roundi(Enemy.WEAKEN_MAX * 100.0), roundi(Enemy.WEAKEN_SOFT_CAP * 100.0)])
+	if p.attack_slow > 0.0:
+		lines.append("Slows the target's attacks by %d%%" % roundi(p.attack_slow * 100.0))
+	lines.append("Range %.1f hexes%s, then −%d%%/hex up to %.1f (min %d%%, no extra effects)" % [p.range_hexes, _modifier(range_factor),
+		roundi(AttackProfile.FALLOFF_PER_HEX * 100.0), p.max_reach(),
+		roundi(p.min_factor() * 100.0)])
+	lines.append("Turret turns %d°/s · pierces %d%% armour" % [roundi(p.turn_speed), roundi(p.armor_pen * 100.0)])
 	return lines
 
 
