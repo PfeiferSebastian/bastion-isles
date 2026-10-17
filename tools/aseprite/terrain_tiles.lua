@@ -959,7 +959,7 @@ local function massing()
 							col = dither(STONE, v, x, sy)
 						elseif c.rock then
 							-- Top of the rock: snow drifts between bare stone.
-							col = vnoise(x * 0.4, sy * 0.5, 93) > 0.62 and dither(SNOW, 0.55 - (c.rnx or 0) * 0.3, x, sy) or dither(STONE, 0.72, x, sy)
+							col = vnoise(x * 0.3, sy * 0.4, 93) > 0.7 and dither(SNOW, 0.55 - (c.rnx or 0) * 0.3, x, sy) or dither(STONE, 0.72, x, sy)
 						elseif k > c.wall then
 							col = dither(c.rpal, 0.6 - c.nx * 0.4 - slope * 0.06, x, sy)
 						elseif k == top then
@@ -1057,15 +1057,28 @@ end
 local WARM_STONE = palette { "2a2420", "3a322c", "4a4038", "5c5046", "6e6054", "827262", "988670", "b09c84" }
 
 local function keep_mountain(s, g, d, theme)
-	keep_ground(s, g, theme)
+	-- The same broken rock ground as the Mountain tiles, so the mound grows out of it.
+	rock_ground(s, g)
+	scree(g, s, 0.58)
+	hex_rim(g, STONE[2])
 	local m = massing()
+	-- Smooth lumps (flat top, soft foot): the main mound and a ring of smaller ones around it.
+	local lumps = { { 28, 66, 21, 13, 10 } }
+	for k = 0, 9 do
+		local a = k / 10 * 2 * math.pi + hash(k, 5, s) * 0.4
+		lumps[#lumps + 1] = { 28 + math.cos(a) * (19 + hash(k, 6, s) * 5), 67 + math.sin(a) * (12 + hash(k, 7, s) * 3),
+			6 + hash(k, 8, s) * 4, 4 + hash(k, 9, s) * 3, 2 + hash(k, 10, s) * 4 }
+	end
 	local function rock(x, y)
-		local function bump(cx, cy, rx, ry, h)
-			local e = ((x + 0.5 - cx) / rx) ^ 2 + ((y + 0.5 - cy) / ry) ^ 2
-			return e < 1 and h * (1 - e) ^ 0.35 or 0
+		local r = 0
+		for _, l in ipairs(lumps) do
+			local e = math.sqrt(((x + 0.5 - l[1]) / l[3]) ^ 2 + ((y + 0.5 - l[2]) / l[4]) ^ 2)
+			if e < 1 then
+				local t = 1 - e
+				r = math.max(r, l[5] * t * t * (3 - 2 * t))
+			end
 		end
-		local r = math.max(bump(28, 66, 20, 12, 13), bump(12, 70, 8, 6, 9), bump(44, 70, 8, 6, 8))
-		return r > 0.5 and r + (vnoise(x * 0.3, y * 0.3, s + 80) - 0.5) * 3 or 0
+		return r > 0.6 and r + (vnoise(x * 0.3, y * 0.3, s + 80) - 0.5) * 2 * math.min(r / 3, 1) or 0
 	end
 	for y = 0, H - 1 do
 		for x = 0, W - 1 do
@@ -1088,14 +1101,24 @@ local function keep_mountain(s, g, d, theme)
 		return base
 	end
 	local towers = {
-		{ 23, 60, 33, 65, 17 }, -- the tall keep
-		{ 16, 63, 22, 67, 12 }, { 34, 63, 40, 67, 11 }, -- flanking towers
-		{ 26, 57, 30, 60, 21 }, -- the high spire behind the keep
+		{ 23, 60, 33, 65, 15 }, -- the tall keep
+		{ 16, 63, 22, 67, 11 }, { 34, 63, 40, 67, 10 }, -- flanking towers
+		{ 26, 57, 30, 60, 19 }, -- the high spire behind the keep
 		{ 23, 71, 33, 75, 7 }, -- gatehouse
 	}
 	local bases = {}
 	for i, t in ipairs(towers) do bases[i] = build(t[1], t[2], t[3], t[4], t[5]) end
 	m.render(g, d)
+	-- Boulders where the rock meets the ground, front ones last.
+	local rocks = {}
+	for _, p in ipairs(scatter(16, s + 85, 4)) do
+		local r = rock(p[1], p[2])
+		if r > 0 and r < 2.5 and not d.px[p[2] * W + p[1]] or (r == 0 and p[3] > 0.6) then
+			rocks[#rocks + 1] = { p[1], p[2], 1.8 + p[3] * 1.8 }
+		end
+	end
+	table.sort(rocks, function(a, b) return a[2] < b[2] end)
+	for i, b in ipairs(rocks) do boulder(g, d, b[1], b[2], b[3], s + 90 + i) end
 	-- Glowing window slits on the front faces, the gate in the gatehouse.
 	local function window(x, row, base, k)
 		put(d, x, row - base - k, GLOW[3])
