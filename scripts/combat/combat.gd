@@ -561,9 +561,21 @@ func _shoot(enemy: Enemy, target: Vector2i) -> void:
 	var shot := EnemyProjectile.new()
 	shot.target_position = _view.hex_center_world(target) + Vector2(randf_range(-8, 8), randf_range(-8, 8))
 	shot.speed = enemy.projectile_speed
-	shot.on_hit = _hit.bind(target, enemy.shot_damage())
+	shot.on_hit = _shot_landed.bind(enemy.shot_damage())
+	shot.blocks = _wall_at
 	_projectile_layer.add_child(shot)
 	shot.global_position = enemy.global_position
+
+
+## An enemy shot hits whatever stands where it lands: a wall in its path, or the aim point.
+func _shot_landed(world_position: Vector2, amount: float) -> void:
+	_hit(_view.world_to_hex(world_position), amount)
+
+
+## Walls block enemy shots flying over them.
+func _wall_at(world_position: Vector2) -> bool:
+	var tower := _view.island.get_tower(_view.world_to_hex(world_position))
+	return tower != null and tower.type == &"wall"
 
 
 ## Damage lands on the building of `coord`, or on the ground if there is none.
