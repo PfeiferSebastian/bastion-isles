@@ -109,6 +109,11 @@ func _add_slot(kind: StringName, item: Dictionary, badge := "") -> void:
 	slot.modulate = Color.WHITE if amount > 0 or not price.is_empty() else Color(1, 1, 1, 0.4)
 	slot.disabled = not island.can_get(item)
 	slot.button_down.connect(func() -> void:
+		# During a mission, picking an item switches to the battle edit mode first.
+		if not view.editable:
+			view.edit_requested.emit()
+			if not view.editable:
+				return
 		var shop := view.island
 		var paid := shop.price_of(item)
 		var bought := shop.treasury.inventory.count(item) <= 0

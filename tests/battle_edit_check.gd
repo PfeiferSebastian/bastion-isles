@@ -27,8 +27,20 @@ func _initialize() -> void:
 		combat.spawn_enemy(&"rammer")
 	await _frames(10)
 
+	# Outside the edit mode the island can't be changed: map clicks only aim focus fire.
+	_check(not view.editable, "island locked during the fight")
+	var some_tower := Vector2i(999, 999)
+	for coord in island.coords():
+		if island.get_tower(coord):
+			some_tower = coord
+			break
+	if some_tower != Vector2i(999, 999):
+		view.handle_secondary_tap(view.hex_center_world(some_tower))
+		_check(island.get_tower(some_tower) != null, "right click outside edit mode removes nothing")
+
 	main.set_editing(true)
 	_check(paused, "tree paused in edit mode")
+	_check(view.editable, "island editable in edit mode")
 	var positions := combat.enemies().map(func(e: Enemy) -> Vector2: return e.global_position)
 	var energy := _total_energy(island)
 	await _frames(30)

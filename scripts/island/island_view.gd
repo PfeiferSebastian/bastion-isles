@@ -5,6 +5,9 @@ extends Node2D
 
 ## Short feedback for the player at a world position (e.g. "Need 50 gold").
 signal message(world_position: Vector2, text: String)
+## The player wants to build while the island isn't editable (picked an inventory slot during
+## a running mission); main switches to the battle edit mode.
+signal edit_requested
 
 @export var hex_size := 48.0
 ## Rings of tiles around the HQ at the start (1 = the HQ plus one ring).
@@ -45,6 +48,9 @@ const ATTACK_REACH_COLOR := Color(1, 1, 1)
 const CONSTRUCTION_COLOR := Color("ffb347")
 
 var island: Island
+## Whether clicks may change the island (place, merge, tier up, pick up). Off during a running
+## mission outside the battle edit mode, so map clicks there only aim focus fire.
+var editable := true
 ## Inventory item selected for placing (see Inventory), or empty.
 var held: Dictionary = {}
 var hovered_coord := Vector2i.ZERO
@@ -117,6 +123,8 @@ func aim_tower(coord: Vector2i, angle: float) -> void:
 # --- Input ---------------------------------------------------------------
 
 func handle_tap(world_position: Vector2) -> void:
+	if not editable:
+		return
 	if not held.is_empty():
 		place_item(world_to_hex(world_position), held, world_position)
 		_keep_or_release()
@@ -129,12 +137,14 @@ func handle_tap(world_position: Vector2) -> void:
 
 
 ## Right click: drops the held item, otherwise picks up the top layer of the tile
-## (tower, then biome stone, then the tile itself) back into the inventory.
+## (tower, then biome stone, then the tile itself) back into the inventory. Does nothing while
+## the island isn't editable.
 func handle_secondary_tap(world_position: Vector2) -> void:
 	if not held.is_empty():
 		release_hold()
 		return
-	pick_up(world_to_hex(world_position), world_position)
+	if editable:
+		pick_up(world_to_hex(world_position), world_position)
 
 
 ## Puts `item` from the inventory onto `coord`. Towers and biome stones on an empty hex next
@@ -259,7 +269,7 @@ func _input(event: InputEvent) -> void:
 		return
 	_dragging = false
 	var moved := button.position.distance_to(_drag_start) > DRAG_THRESHOLD
-	if moved and get_viewport().gui_get_hovered_control() == null:
+	if moved and editable and get_viewport().gui_get_hovered_control() == null:
 		var world := get_global_mouse_position()
 		place_item(world_to_hex(world), held, world)
 		_keep_or_release()
@@ -280,6 +290,9 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		return
 	match key.keycode:
 		KEY_U:
+			if not editable:
+				message.emit(hex_center_world(hovered_coord), "Tier upgrades in edit mode (E)")
+				return
 			var cost := island.tier_up_cost(hovered_coord)
 			var at := hex_center_world(hovered_coord)
 			if cost.is_empty():

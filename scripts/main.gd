@@ -5,9 +5,10 @@ extends Node2D
 ## fleeing saves the island (IslandSave).
 ## During a mission E (or the HUD's hammer icon) toggles the battle edit mode: the fight is
 ## paused (scene tree paused; only the island view, camera and HUD keep running) and the
-## player adds towers, tiles and biome stones (nothing can be removed in a mission); what is
-## built stays under construction for a while once the fight resumes
-## (Island.start_construction).
+## player adds towers, tiles and biome stones (nothing can be removed in a mission). Outside
+## it the island can't be changed at all, so map clicks only aim focus fire; picking an
+## inventory slot switches into the edit mode. What is built stays under construction for a
+## while once the fight resumes (Island.start_construction).
 
 const MENU_SCENE := "res://scenes/ui/main_menu.tscn"
 
@@ -47,6 +48,9 @@ func _ready() -> void:
 		_hud.show_edit_mode()
 	else:
 		_island_view.island.builds_take_time = true
+		# In a mission the island only changes in the battle edit mode.
+		_island_view.editable = false
+		_island_view.edit_requested.connect(set_editing.bind(true))
 	_hud.get_node("%Inventory").set(&"view", _island_view)
 	_island_view.message.connect(func(at: Vector2, text: String) -> void: _combat.popup(at, text, Color("ffb070")))
 
@@ -114,6 +118,10 @@ func set_editing(on: bool) -> void:
 		return
 	editing = on
 	get_tree().paused = on
+	_island_view.editable = on
+	if not on:
+		# An item still held goes back (an unplaced purchase is refunded).
+		_island_view.release_hold()
 	_hud.show_battle_edit(on)
 
 
