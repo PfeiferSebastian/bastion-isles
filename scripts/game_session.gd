@@ -20,6 +20,16 @@ static func mission_name(which: Vector2i = mission) -> String:
 	return "%d-%d" % [which.x, which.y]
 
 
+## The mission after `which` in the mission select (1-5 is followed by 2-1), or
+## Vector2i.ZERO after the last one.
+static func next_mission(which: Vector2i = mission) -> Vector2i:
+	if which.y < MISSIONS_PER_WORLD:
+		return Vector2i(which.x, which.y + 1)
+	if which.x < WORLDS:
+		return Vector2i(which.x + 1, 1)
+	return Vector2i.ZERO
+
+
 ## Placeholder difficulty of a mission (0 for 1-1, rising by one per mission):
 ## {kill_goal, strength (enemy HP and damage), count (enemies per wave)}.
 static func mission_rules(which: Vector2i = mission) -> Dictionary:

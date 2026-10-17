@@ -23,8 +23,10 @@ signal leave_requested
 signal flee_requested
 ## The player toggles the battle edit mode (hammer icon or Resume; main also listens to E).
 signal edit_requested
-## Return in the retreat report: the player goes back to the menu.
+## Return in the retreat or mission report: the player goes back to the menu.
 signal return_requested
+## Next mission in the mission report: the player starts the next mission right away.
+signal next_mission_requested
 
 ## Set by main; the HUD reads hover state and island data from it every frame.
 var view: IslandView:
@@ -334,6 +336,71 @@ func _build_battle_edit() -> void:
 ## `found` is Combat.mission_loot, `result` what Combat.flee returned ({} = nothing lost).
 func show_retreat_report(found: Dictionary, result: Dictionary) -> void:
 	var lost: Dictionary = result.get("lost", {})
+	var column := _report_window("Retreat from " + ("endless mode" if GameSession.endless else "mission " + GameSession.mission_name()),
+		"Everything found is kept." if lost.is_empty() else "Retreating keeps only %d%% of this mission's loot." % roundi(Island.FLEE_KEEP * 100.0))
+	var grid := GridContainer.new()
+	grid.columns = 4
+	grid.add_theme_constant_override("h_separation", 28)
+	grid.add_theme_constant_override("v_separation", 4)
+	column.add_child(grid)
+	for head in ["", "Found", "Lost", "Kept"]:
+		_report_cell(grid, head, MenuTheme.BRASS_LIGHT)
+	for row in _loot_rows(found, lost):
+		_report_cell(grid, row[0], MenuTheme.CREAM)
+		_report_cell(grid, "+%d" % row[1], Color("7cc35a"))
+		_report_cell(grid, "−%d" % row[2] if row[2] > 0 else "–", Color("e05545") if row[2] > 0 else MenuTheme.CREAM)
+		_report_cell(grid, "+%d" % (row[1] - row[2]), MenuTheme.BRASS_LIGHT)
+	if result.get("rebuilt", 0) > 0:
+		_report_line(column, "%d destroyed towers rebuilt at level 0 · wasteland biomes back at Tier 1" % result.rebuilt)
+	var buttons := _report_buttons(column)
+	buttons.add_child(_report_button("Return", "", return_requested.emit))
+
+
+## Mission report after a win: this mission's loot and what the towers gained (`growth`,
+## Combat.mission_growth), with Return (to the menu) and Next mission (the next one in the
+## mission select, if there is one).
+func show_mission_report(found: Dictionary, growth: Dictionary) -> void:
+	var column := _report_window("Mission %s complete" % GameSession.mission_name(), "Everything found is yours.")
+	var grid := GridContainer.new()
+	grid.columns = 2
+	grid.add_theme_constant_override("h_separation", 40)
+	grid.add_theme_constant_override("v_separation", 4)
+	column.add_child(grid)
+	for row in _loot_rows(found, {}):
+		_report_cell(grid, row[0], MenuTheme.CREAM)
+		_report_cell(grid, "+%d" % row[1], Color("7cc35a"))
+	_report_cell(grid, "Tower XP", MenuTheme.CREAM)
+	_report_cell(grid, "+%d" % roundi(growth.get("xp", 0.0)), Color("7cc35a"))
+	_report_cell(grid, "Tower levels", MenuTheme.CREAM)
+	_report_cell(grid, "+%d" % growth.get("levels", 0), Color("7cc35a"))
+	var buttons := _report_buttons(column)
+	buttons.add_child(_report_button("Return", "Save the island and return to the main menu", return_requested.emit))
+	var next := GameSession.next_mission()
+	if next != Vector2i.ZERO:
+		buttons.add_child(_report_button("Next mission " + GameSession.mission_name(next),
+			"Save the island and start mission %s right away" % GameSession.mission_name(next), next_mission_requested.emit))
+	else:
+		_report_line(column, "That was the last mission – try the endless mode.")
+
+
+## Rows [name, found, lost] for gold, blueprints and every faction resource and biome stone
+## found (`lost` in Combat.flee's shape, {} = nothing lost).
+func _loot_rows(found: Dictionary, lost: Dictionary) -> Array:
+	var rows: Array = [["Gold", found.gold, lost.get("gold", 0)], ["Blueprints", found.blueprints, lost.get("blueprints", 0)]]
+	for biome in Treasury.STONE_BIOMES:
+		var amount: int = found.resources.get(biome, 0)
+		if amount > 0:
+			rows.append([Biome.resource_name(biome), amount, lost.get("resources", {}).get(biome, 0)])
+	for biome in Treasury.STONE_BIOMES:
+		var amount: int = found.stones.get(biome, 0)
+		if amount > 0:
+			rows.append([Inventory.label_of(Inventory.stone_item(biome)), amount, lost.get("stones", {}).get(biome, 0)])
+	return rows
+
+
+## A dimmed screen with a centred report window; returns its column, holding the title and
+## `note` so far.
+func _report_window(title_text: String, note_text: String) -> VBoxContainer:
 	var shade := ColorRect.new()
 	shade.color = Color(0, 0, 0, 0.55)
 	shade.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -348,47 +415,39 @@ func show_retreat_report(found: Dictionary, result: Dictionary) -> void:
 	column.add_theme_constant_override("separation", 10)
 	window.add_child(column)
 	var title := Label.new()
-	title.text = "Retreat from " + ("endless mode" if GameSession.endless else "mission " + GameSession.mission_name())
+	title.text = title_text
 	title.add_theme_font_size_override("font_size", 24)
 	title.add_theme_color_override("font_color", MenuTheme.BRASS_LIGHT)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	column.add_child(title)
-	var note := Label.new()
-	note.text = "Everything found is kept." if lost.is_empty() else "Retreating keeps only %d%% of this mission's loot." % roundi(Island.FLEE_KEEP * 100.0)
-	note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	column.add_child(note)
-	var grid := GridContainer.new()
-	grid.columns = 4
-	grid.add_theme_constant_override("h_separation", 28)
-	grid.add_theme_constant_override("v_separation", 4)
-	column.add_child(grid)
-	for head in ["", "Found", "Lost", "Kept"]:
-		_report_cell(grid, head, MenuTheme.BRASS_LIGHT)
-	var rows: Array = [["Gold", found.gold, lost.get("gold", 0)], ["Blueprints", found.blueprints, lost.get("blueprints", 0)]]
-	for biome in Treasury.STONE_BIOMES:
-		var amount: int = found.resources.get(biome, 0)
-		if amount > 0:
-			rows.append([Biome.resource_name(biome), amount, lost.get("resources", {}).get(biome, 0)])
-	for biome in Treasury.STONE_BIOMES:
-		var amount: int = found.stones.get(biome, 0)
-		if amount > 0:
-			rows.append([Inventory.label_of(Inventory.stone_item(biome)), amount, lost.get("stones", {}).get(biome, 0)])
-	for row in rows:
-		_report_cell(grid, row[0], MenuTheme.CREAM)
-		_report_cell(grid, "+%d" % row[1], Color("7cc35a"))
-		_report_cell(grid, "−%d" % row[2] if row[2] > 0 else "–", Color("e05545") if row[2] > 0 else MenuTheme.CREAM)
-		_report_cell(grid, "+%d" % (row[1] - row[2]), MenuTheme.BRASS_LIGHT)
-	if result.get("rebuilt", 0) > 0:
-		var rebuilt := Label.new()
-		rebuilt.text = "%d destroyed towers rebuilt at level 0 · wasteland biomes back at Tier 1" % result.rebuilt
-		rebuilt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		column.add_child(rebuilt)
-	var back := Button.new()
-	back.text = "Return"
-	back.focus_mode = Control.FOCUS_NONE
-	back.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	back.pressed.connect(return_requested.emit)
-	column.add_child(back)
+	_report_line(column, note_text)
+	return column
+
+
+func _report_line(column: VBoxContainer, text: String) -> void:
+	var label := Label.new()
+	label.text = text
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	column.add_child(label)
+
+
+## The centred button row at the bottom of a report.
+func _report_buttons(column: VBoxContainer) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 16)
+	column.add_child(row)
+	return row
+
+
+func _report_button(text: String, info: String, on_pressed: Callable) -> Button:
+	var button := Button.new()
+	button.text = text
+	button.focus_mode = Control.FOCUS_NONE
+	if info != "":
+		button.set_meta(&"info", info)
+	button.pressed.connect(on_pressed)
+	return button
 
 
 func _report_cell(grid: GridContainer, text: String, color: Color) -> void:
@@ -418,7 +477,8 @@ func _on_mission_failed(lost: Dictionary) -> void:
 
 
 ## Top centre: countdown before the mission starts, then nothing, then "complete" with Leave
-## and Proceed (a harder next round) – or, if the HQ fell, "fallen" with Leave only.
+## (and in endless mode Proceed, a harder next round) – or, if the HQ fell, "fallen" with
+## Leave only.
 func _update_mission() -> void:
 	if combat.defeated:
 		_mission_text.text = "Bastion fallen – half of your resources are lost"
@@ -430,7 +490,9 @@ func _update_mission() -> void:
 		_mission_panel.position.x = (_root.size.x - _mission_panel.size.x) / 2.0
 		return
 	_leave.visible = combat.mission_done
-	_proceed.visible = combat.mission_done
+	# Another, harder round on the same island only in endless mode; a won mission ends in
+	# its report (Return or Next mission).
+	_proceed.visible = combat.mission_done and GameSession.endless
 	var title := "Endless mode" if GameSession.endless else "Mission " + GameSession.mission_name()
 	if combat.mission_round > 0:
 		title += " · round %d" % (combat.mission_round + 1)

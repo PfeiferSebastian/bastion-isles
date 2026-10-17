@@ -196,7 +196,7 @@ func _initialize() -> void:
 	# nothing is saved).
 	combat.mission_loot.gold = 40
 	main.call(&"_flee")
-	_check(paused and main.retreating, "retreat pauses and opens the report")
+	_check(paused and main.reporting, "retreat pauses and opens the report")
 	_check(combat.mission_loot.gold == 40 and island.treasury.gold >= 0, "loot found stays listed")
 	await _frames(2)
 

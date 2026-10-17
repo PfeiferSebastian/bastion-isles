@@ -54,6 +54,8 @@ var defeated := false
 var mission_loot := {gold = 0, blueprints = 0, resources = {}, stones = {}}
 ## Rounds proceeded past the first (0 = the first round).
 var mission_round := 0
+## Each tower's XP when the mission started (Tower -> xp), for the mission report.
+var _start_xp := {}
 var _base_kill_goal := 0
 ## Fog of war; when set, towers only target enemies in open sky. Null = everything visible.
 var fog: FogOfWar
@@ -133,6 +135,10 @@ func _ready() -> void:
 	mission_countdown = mission_start_delay
 	_apply_session()
 	_base_kill_goal = mission_kill_goal
+	for coord in _view.island.coords():
+		var tower := _view.island.get_tower(coord)
+		if tower and not tower.is_part:
+			_start_xp[tower] = tower.xp
 
 
 func _process(delta: float) -> void:
@@ -334,6 +340,21 @@ func proceed() -> void:
 	mission_kill_goal = roundi(_base_kill_goal * count_factor())
 	mission_countdown = mission_start_delay
 	_view.island.gains_xp = not GameSession.edit_mode
+
+
+## What the towers gained this mission, for the report: {xp, levels} (towers built in it
+## count from level 0; a merge, which starts again at level 0, counts as no loss).
+func mission_growth() -> Dictionary:
+	var xp := 0.0
+	var levels := 0
+	for coord in _view.island.coords():
+		var tower := _view.island.get_tower(coord)
+		if tower == null or tower.is_part:
+			continue
+		var before: float = _start_xp.get(tower, 0.0)
+		xp += maxf(tower.xp - before, 0.0)
+		levels += maxi(tower.level() - Tower.level_for_xp(before), 0)
+	return {xp = xp, levels = levels}
 
 
 ## Mission progress from 0 to 1 (placeholder: kills toward mission_kill_goal).
