@@ -22,6 +22,14 @@ const IRON := Color("2f2a26")
 const COPPER := Color("b4643c")
 ## Bridges between the buildings of a combined building are this much wider than a wing.
 const BRIDGE_WIDTH := 1.45
+## Pixel sprites that replace the drawn building of a type on a biome (made by
+## tools/aseprite/tower_sprites.lua; same 56×96 layout as the terrain tiles, so they are drawn
+## over the tile's hex like TerrainArt).
+const SPRITES := {
+	&"repair": {Biome.Type.MOUNTAIN: "res://assets/art/towers/mountainRepair.png"},
+}
+
+static var _sprite_cache := {}
 
 
 ## Draws `type` centred on `c` with symbol radius `r`. `links`: per HexMath.DIRECTIONS
@@ -35,6 +43,10 @@ static func draw(ci: CanvasItem, type: StringName, biome: Biome.Type, c: Vector2
 		_segment(ci, type, c, d, 0.0, link_length, r, m, true)
 	for d in dirs:
 		_joint(ci, type, c + d * link_length, d, r, m)
+	var sprite := _sprite(type, biome) if link_length > 0.0 else null
+	if sprite:
+		ci.draw_texture_rect(sprite, TerrainArt.tile_rect(c, link_length * 2.0 / HexMath.SQRT3), false)
+		return
 	match type:
 		&"wall":
 			_wall_tower(ci, c, r, m)
@@ -92,7 +104,7 @@ static func draw_group(ci: CanvasItem, type: StringName, art: Dictionary, r: flo
 			continue
 		# A merged tower is one big building over its hexes.
 		var size: int = art.sizes[i]
-		draw(ci, type, biome, art.big_centers[i], r * (1.0 + 0.45 * (size - 1)), [], 0.0, aim)
+		draw(ci, type, biome, art.big_centers[i], r * (1.0 + 0.45 * (size - 1)), [], link_length, aim)
 
 
 static func _link_dirs(links: Array[bool]) -> Array[Vector2]:
@@ -136,6 +148,16 @@ static func _wall_tower(ci: CanvasItem, c: Vector2, r: float, m: Array) -> void:
 	ci.draw_arc(c, tower * 0.58, 0, TAU, 24, m[2], 1.0, true)
 	ci.draw_rect(Rect2(c - Vector2(tower, tower) * 0.18, Vector2(tower, tower) * 0.36), m[2])
 	ci.draw_rect(Rect2(c - Vector2(tower, tower) * 0.18, Vector2(tower, tower) * 0.36), m[3], false, 1.0)
+
+
+## The pixel sprite for `type` on `biome`, or null when there is none (see SPRITES).
+static func _sprite(type: StringName, biome: Biome.Type) -> Texture2D:
+	var path: String = SPRITES.get(type, {}).get(biome, "")
+	if path.is_empty() or not ResourceLoader.exists(path):
+		return null
+	if not _sprite_cache.has(path):
+		_sprite_cache[path] = load(path)
+	return _sprite_cache[path]
 
 
 # --- Attack ----------------------------------------------------------------
