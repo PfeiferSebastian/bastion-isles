@@ -14,5 +14,4 @@ static func for_tile(island: Island, coord: Vector2i) -> EnergyProfile:
 	var aura := island.aura_at(coord)
 	p.output *= (1.0 + aura.get(&"efficiency", 0.0)) * (1.0 + aura.get(&"output", 0.0))
 	p.output *= island.effect_bonus(coord)
-	p.pipes = EnergyGrid.feeds(island, coord)
 	return p

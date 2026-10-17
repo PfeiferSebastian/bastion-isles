@@ -382,7 +382,7 @@ func _test_energy() -> void:
 	_check(EnergyGrid.entry_pipes(island, c) == 3, "buildings take energy in through one pipe per tier")
 	_check(EnergyGrid.upkeep(&"attack") == EnergyGrid.UPKEEP and EnergyGrid.upkeep(&"energy") == 0.0, "every building but generators pays upkeep")
 
-	# A generator feeds a turret through an empty tile: nothing lost, one pipe at Tier 0–1.
+	# A generator feeds a turret through an empty tile: nothing lost.
 	var line := Island.create_starter(3)
 	var gen := Vector2i(1, 0)
 	var mid := Vector2i(2, 0)
@@ -450,6 +450,18 @@ func _test_energy() -> void:
 		EnergyGrid.step(chain, EnergyGrid.TICK)
 	_check(chain.get_tile(Vector2i(3, 0)).energy > 0.0, "energy passes through a full building")
 	_check(wall.energy >= EnergyGrid.capacity(wall) - EnergyGrid.UPKEEP * 1.0 - 0.01, "the building keeps its own store")
+	# A cluster of generators is one plant: one store, every pipe around it at once.
+	var plant := Island.create_starter(2)
+	plant.place_tower(Vector2i(1, 0), &"energy")
+	plant.place_tower(Vector2i(1, -1), &"energy")
+	_check(EnergyGrid.plants(plant).size() == 1 and EnergyGrid.plants(plant)[0].size() == 2, "clustered generators form one plant")
+	var hungry: Array[Vector2i] = [Vector2i(2, 0), Vector2i(2, -1), Vector2i(0, -1)]
+	for c2 in hungry:
+		plant.place_tower(c2, &"attack")
+		plant.get_tile(c2).energy = 0.0
+	for i in 3:
+		EnergyGrid.step(plant, EnergyGrid.TICK)
+	_check(hungry.all(func(c2: Vector2i) -> bool: return plant.get_tile(c2).energy > 0.0), "a plant feeds all its neighbours at once")
 	# Overflow: a generator with no one to feed fills its store, spills to side tiles, then wastes.
 	var full := Island.create_starter(1)
 	full.place_tower(Vector2i(1, 0), &"energy")

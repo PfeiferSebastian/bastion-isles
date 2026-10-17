@@ -8,8 +8,9 @@ extends RefCounted
 ##   or the buildings behind them – need it. That makes the roads. Each tile splits what it
 ##   sends by its own biome's rule: by demand (Neutral, and every biome without a rule yet) or
 ##   by the capacity of its exits (Forest).
-## - A tile feeds at most FEEDS pipes at once (generators one per tier) and takes energy in
-##   through a limited number of pipes (buildings: one per tier).
+## - A tile feeds at most FEEDS pipes at once and takes energy in through a limited number of
+##   pipes (buildings: one per tier). A generator – alone, clustered or merged – is one plant
+##   with one store that feeds every pipe around it at once.
 ## - What a generator can't send fills its store; past that it spills to side tiles (on no
 ##   road), which hand it back to buildings and roads that need it. The rest is wasted.
 ## - Every building except generators pays an upkeep. Working buildings (Attack with targets,
@@ -99,10 +100,9 @@ static func pipe_rate(tile: IslandTile, island: Island = null) -> float:
 	return rate
 
 
-## Pipes `coord` feeds at once: generators one per tier, everything else FEEDS.
-static func feeds(island: Island, coord: Vector2i) -> int:
-	var tile := island.get_tile(coord)
-	return maxi(1, tile.tier) if is_producer(tile) else FEEDS
+## Pipes a tile (not a generator) feeds at once; generators feed all of theirs.
+static func feeds(_island: Island, _coord: Vector2i) -> int:
+	return FEEDS
 
 
 ## Pipes `coord` takes energy in through: buildings one per tier, other tiles the
@@ -236,18 +236,49 @@ static func _demand(island: Island, dist: Dictionary, urgency: Dictionary) -> Di
 	return demand
 
 
-## Generators fill their stores; returns what didn't fit, by generator root.
+## Power plants: every generator hex, grouped into the combined buildings they form (a lone
+## generator, a cluster or a merged generator). Each plant is listed by its hexes.
+static func plants(island: Island) -> Array:
+	var result: Array = []
+	var seen := {}
+	for coord in island.coords():
+		if seen.has(coord) or not is_producer(island.get_tile(coord)) or island.get_tile(coord).blocks_energy():
+			continue
+		var members: Array[Vector2i] = []
+		for member in island.group_of(coord):
+			if is_producer(island.get_tile(member)) and not island.get_tile(member).blocks_energy():
+				members.append(member)
+				seen[member] = true
+		if members.is_empty():
+			members.append(coord)
+			seen[coord] = true
+		result.append(members)
+	return result
+
+
+## The hex a plant is tracked under (its first generator root).
+static func _plant_lead(island: Island, members: Array[Vector2i]) -> Vector2i:
+	return island.merge_root_of(members[0])
+
+
+## Plants fill their shared store; returns what didn't fit, by plant lead.
 static func _produce(island: Island, dt: float) -> Dictionary:
 	var spill := {}
-	for coord in island.coords():
-		var profile := generator_at(island, coord)
-		if profile == null:
-			continue
-		var tile := island.get_tile(coord)
-		var made := profile.output * dt
-		var stored := minf(made, maxf(capacity(tile) - tile.energy, 0.0))
-		tile.energy += stored
-		spill[coord] = made - stored
+	for members: Array[Vector2i] in plants(island):
+		var made := 0.0
+		var room := 0.0
+		for member in members:
+			var profile := generator_at(island, member)
+			if profile:
+				made += profile.output * dt
+			var tile := island.get_tile(member)
+			room += maxf(capacity(tile) - tile.energy, 0.0)
+		var stored := minf(made, room)
+		for member in members:
+			var tile := island.get_tile(member)
+			if room > 0.0:
+				tile.energy += stored * maxf(capacity(tile) - tile.energy, 0.0) / room
+		spill[_plant_lead(island, members)] = made - stored
 	return spill
 
 
@@ -262,8 +293,12 @@ static func _flow(island: Island, dist: Dictionary, demand: Dictionary, working:
 		start[coord] = _passable(island.get_tile(coord))
 	# Parents each tile took energy from this tick (limited by its entry pipes).
 	var parents := {}
+	for members: Array[Vector2i] in plants(island):
+		_plant_flow(island, members, dist, demand, working, urgency, parents, dt)
 	for source in senders:
 		var tile := island.get_tile(source)
+		if is_producer(tile):
+			continue
 		var available: float = minf(start[source], _passable(tile))
 		if available <= 0.0:
 			continue
@@ -286,11 +321,60 @@ static func _flow(island: Island, dist: Dictionary, demand: Dictionary, working:
 				parents[n] = []
 			if not parents[n].has(source):
 				parents[n].append(source)
-		if is_producer(tile) and sent > 0.0:
-			var root := island.merge_root_of(source)
-			island.track(root, &"delivered", sent)
-			island.get_tower(root).saw_target = true
-			island.get_tower(root).did_work = true
+
+
+## A power plant sends from its shared store through every pipe around it at once, split by
+## the rule of its lead hex's biome; each exit is fed from the plant hex next to it.
+static func _plant_flow(island: Island, members: Array[Vector2i], dist: Dictionary, demand: Dictionary, working: Dictionary, urgency: Dictionary, parents: Dictionary, dt: float) -> void:
+	var lead := _plant_lead(island, members)
+	var lead_tile := island.get_tile(lead)
+	var pool := 0.0
+	var pool_capacity := 0.0
+	for member in members:
+		pool += island.get_tile(member).energy
+		pool_capacity += capacity(island.get_tile(member))
+	if pool <= 0.0:
+		return
+	# Every exit once, with the plant hex it borders.
+	var via := {}
+	var kids: Array[Vector2i] = []
+	for member in members:
+		for n in HexMath.neighbors(member):
+			if via.has(n) or dist.get(n, -1) != 1 or demand[n] <= 0.0 or _room(island.get_tile(n)) <= 0.001:
+				continue
+			if parents.get(n, []).size() >= entry_pipes(island, n):
+				continue
+			via[n] = member
+			kids.append(n)
+	if kids.is_empty():
+		return
+	var split := _split(island, lead, kids, demand, working)
+	kids = kids.filter(func(n: Vector2i) -> bool: return split[n] > 0.0)
+	if kids.is_empty():
+		return
+	# Send from the whole pool as if from the lead hex, then share the rest out again.
+	for member in members:
+		island.get_tile(member).energy = 0.0
+	lead_tile.energy = pool
+	var sent := _send(island, lead, kids, split, demand, urgency, pool, dt)
+	var left := lead_tile.energy
+	for member in members:
+		var tile := island.get_tile(member)
+		tile.energy = left * capacity(tile) / pool_capacity if pool_capacity > 0.0 else 0.0
+	for n in kids:
+		var from: Vector2i = via[n]
+		if from != lead:
+			var key := Vector4i(lead.x, lead.y, n.x, n.y)
+			if island.energy_flows.has(key):
+				island.energy_flows[Vector4i(from.x, from.y, n.x, n.y)] = island.energy_flows[key]
+				island.energy_flows.erase(key)
+		if not parents.has(n):
+			parents[n] = []
+		parents[n].append(from)
+	if sent > 0.0:
+		island.track(lead, &"delivered", sent)
+		island.get_tower(lead).saw_target = true
+		island.get_tower(lead).did_work = true
 
 
 ## How `source` weighs its exits, by the rule of its own biome (receivers just accept within

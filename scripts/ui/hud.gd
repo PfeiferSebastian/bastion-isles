@@ -668,7 +668,7 @@ static func _describe_generator(p: EnergyProfile) -> PackedStringArray:
 	var lines: PackedStringArray = []
 	if p == null:
 		return lines
-	lines.append("Generates %.1f energy/s · feeds %d pipe%s at once" % [p.output, p.pipes, "" if p.pipes == 1 else "s"])
+	lines.append("Generates %.1f energy/s · feeds every pipe around it at once" % p.output)
 	return lines
 
 
