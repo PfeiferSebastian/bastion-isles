@@ -839,6 +839,8 @@ local BARK = palette { "1e140c", "2e1f12", "41301c", "574129", "715537", "8c6c46
 local SANDSTONE = palette { "6a5a42", "8a7656", "a8946c", "c4b086", "dccaa0", "eee0bc", "faf2dc" }
 local GOLD = palette { "4a3008", "7a5410", "a87a18", "d0a428", "ecc84a", "fae68a", "fffbe0" }
 local NECRO = palette { "120a1c", "1e1030", "2c1844", "3c225a", "4e2e72", "623c8a", "7a4ea4" }
+-- The pyramid's corner ridges: the same stone in shadow.
+local NECRO_DARK = palette { "07040c", "0e0818", "160c24", "1e1030", "2c1844", "3c225a", "4e2e72" }
 local GHOST = palette { "08200f", "0f3d1c", "1d6a30", "36a04c", "6be08a", "c0ffd0" }
 local GLASS = palette { "0e3a4a", "176070", "2a8a96", "4cb2b8", "82d4d4", "bdeeea", "f0fffc" }
 
@@ -1192,7 +1194,10 @@ local function keep_swamp(s, g, d, theme)
 			local mm = math.max(math.abs(dx) / 17, math.abs(dy) / 11)
 			if mm <= 1 then
 				local h = 3 + math.floor((1 - mm) * 4.6) * 5
-				m.set(x, y, h, h, dx / 17 * 1.2, NECRO)
+				-- Where two faces meet (the diagonals), and along each step's outer rim, darker.
+				local corner = math.abs(math.abs(dx) / 17 - math.abs(dy) / 11) < 0.08
+				local rim = ((1 - mm) * 4.6) % 1 < 0.12
+				m.set(x, y, h, h, dx / 17 * 1.2, (corner or rim) and NECRO_DARK or NECRO)
 			end
 		end
 	end
