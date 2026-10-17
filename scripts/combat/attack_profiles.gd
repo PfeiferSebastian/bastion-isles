@@ -97,20 +97,6 @@ static func _beam(p: AttackProfile, range_hexes: float, delivery: StringName, co
 	p.beam_color = color
 
 
-## The HQ's own cannon: solid damage and range from the start, free of energy.
-static func hq() -> AttackProfile:
-	var p := AttackProfile.new()
-	p.damage = 20.0
-	p.cooldown = 1.0
-	p.range_hexes = 5.0
-	p.projectile_speed = 460.0
-	p.projectile_size = 5.5
-	p.color = Color("f0d28a")
-	p.energy_per_shot = 0.0
-	p.turn_speed = 720.0
-	return p
-
-
 ## The full profile for the Attack tower on `coord`: biome, tier, tile auras.
 static func for_tile(island: Island, coord: Vector2i) -> AttackProfile:
 	var tile := island.get_tile(coord)

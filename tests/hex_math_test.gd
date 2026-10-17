@@ -211,10 +211,10 @@ func _test_health() -> void:
 	# Blueprints are a currency: towers and tiles are bought with them.
 	var shop := Island.create_starter(1)
 	shop.treasury.add_blueprint(3)
-	_check(shop.blueprint_cost(&"aura") == 1 and shop.blueprint_cost(&"repair") == 2, "price grows with the towers owned")
-	_check(shop.affordable_count(&"aura") == 2 and shop.affordable_count(&"repair") == 1, "3 blueprints buy 2 auras (1+2) or 1 repair (2)")
-	_check(shop.ensure_item(Inventory.tower_item(&"aura")) and shop.treasury.blueprints == 2, "buy an aura tower for 1 blueprint")
-	_check(shop.blueprint_cost(&"aura") == 2, "the next aura costs 2")
+	_check(shop.blueprint_cost(&"aura") == 0 and shop.blueprint_cost(&"repair") == 1, "price grows with the towers owned")
+	_check(shop.affordable_count(&"aura") == 3 and shop.affordable_count(&"repair") == 2, "3 blueprints buy 3 auras (0+1+2) or 2 repairs (1+2)")
+	_check(shop.ensure_item(Inventory.tower_item(&"aura")) and shop.treasury.blueprints == 3, "the first aura tower is free")
+	_check(shop.blueprint_cost(&"aura") == 1, "the next aura costs 1")
 	_check(not shop.ensure_item(Inventory.tower_item(&"repair", 5)), "levelled towers can't be bought")
 	_check(shop.ensure_item(Inventory.tower_item(&"aura")), "an aura in stock needs no purchase")
 	_check(not shop.can_get(Inventory.stone_item(Biome.Type.FOREST)), "biome stones can't be bought")
@@ -478,12 +478,27 @@ func _test_healing() -> void:
 	_check(damaged[0].coord == b and damaged[0].tower, "weakest target comes first")
 	_check(is_equal_approx(island.heal(b, true, 25.0), 25.0), "heal restores hp")
 	_check(is_equal_approx(island.heal(a, true, 1000.0), 30.0), "heal stops at max hp")
+	# The HQ takes the most common biome; ties go to faction biomes, then tiers, then the current one.
+	var hq_island := Island.create_starter(1)
+	_check(hq_island.hq_biome() == Biome.Type.NEUTRAL, "a fresh island's HQ is neutral")
+	for c in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1)]:
+		hq_island.set_biome(c, Biome.Type.SWAMP)
+	_check(hq_island.hq_biome() == Biome.Type.SWAMP, "3 swamp vs 3 neutral: the faction biome wins")
+	hq_island.set_biome(Vector2i(0, -1), Biome.Type.FOREST)
+	hq_island.set_biome(Vector2i(1, -1), Biome.Type.FOREST)
+	hq_island.set_biome(Vector2i(-1, 1), Biome.Type.FOREST)
+	_check(hq_island.hq_biome() == Biome.Type.SWAMP, "3 swamp vs 3 forest: the HQ keeps its biome")
+	hq_island.set_tier(Vector2i(0, -1), 2)
+	_check(hq_island.hq_biome() == Biome.Type.FOREST, "on a tie the higher tiers win")
+	_check(hq_island.get_tile(Island.HQ_COORD).biome == Biome.Type.NEUTRAL, "the HQ tile stays neutral ground")
 	# Heal over time spreads the amount.
 	island.add_heal_over_time(b, true, 10.0, 2.0)
+	_check(island.has_heal_over_time(b, true) and not island.has_heal_over_time(b, false) and not island.has_heal_over_time(a, true), "heal over time is known per target")
 	island.tick(1.0)
 	_check(is_equal_approx(island.get_tower(b).hp, 70.0), "heal over time half way")
 	island.tick(5.0)
 	_check(is_equal_approx(island.get_tower(b).hp, 75.0), "heal over time complete")
+	_check(not island.has_heal_over_time(b, true), "a finished heal over time frees the target")
 	# Drain never destroys.
 	_check(is_equal_approx(island.drain(a, true, 1000.0), 99.0), "drain stops at 1 hp")
 	# Repaired wasteland turns back into ground.
@@ -616,7 +631,9 @@ func _test_economy() -> void:
 	bp_island.persist_blueprints = true
 	bp_island.add_blueprint()
 	bp_island.add_blueprint()
-	_check(bp_island.ensure_item(Inventory.tower_item(&"scout")) and bp_island.treasury.blueprints == 1, "buy a scout for 1 blueprint")
+	_check(bp_island.ensure_item(Inventory.tower_item(&"scout")) and bp_island.treasury.blueprints == 2, "the first scout is free")
+	bp_island.place_tower(Vector2i(1, 0), &"warehouse")
+	_check(bp_island.ensure_item(Inventory.tower_item(&"warehouse")) and bp_island.treasury.blueprints == 1, "buy a second warehouse for 1 blueprint")
 	var reloaded := IslandSave.load_island(1)
 	_check(reloaded.treasury.blueprints == 1, "blueprints survive without an island save")
 	_check(reloaded.treasury.inventory.count(Inventory.tower_item(&"scout")) == 1, "towers bought with blueprints survive without an island save")
@@ -637,7 +654,11 @@ func _test_economy() -> void:
 	_check(island.treasury.gold == Economy.STARTING_GOLD, "island starts with gold")
 	for type in [&"attack", &"wall", &"energy", &"repair"]:
 		_check(island.treasury.inventory.count(Inventory.tower_item(type)) == 1, "island starts with one %s" % type)
-	_check(AttackProfiles.hq().damage > AttackProfiles.base(Biome.Type.NEUTRAL).damage and AttackProfiles.hq().energy_per_shot == 0.0, "hq cannon is strong and free")
+	for biome in Biome.Type.values():
+		var hq_weapon := HqWeapons.profile(biome)
+		_check(hq_weapon.range_hexes == 10.0 and hq_weapon.energy_per_shot == 0.0 and hq_weapon.beam_energy == 0.0, "hq weapon %d: 10 hexes, no energy" % biome)
+		# Damage plus healing and effects (the siphon's heal is its effect) add up to one budget.
+		_check(is_equal_approx(HqWeapons.dps(biome) + hq_weapon.effect_dps + (hq_weapon.damage / hq_weapon.cooldown if biome == Biome.Type.FOREST else 0.0), HqWeapons.BUDGET), "hq weapon %d keeps the budget" % biome)
 	# Loot: always gold; stronger enemies drop biome stones more often.
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 7

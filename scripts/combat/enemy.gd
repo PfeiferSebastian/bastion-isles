@@ -1,7 +1,7 @@
 class_name Enemy
 extends Node2D
 ## An enemy airship. Its type (EnemyDefs) sets stats, armour, weapon and behaviour; Combat
-## moves it. Keeps its own status effects: damage-over-time stacks, weaken, attack slow.
+## moves it. Keeps its own status effects: damage-over-time stacks, weaken, attack slow, root.
 
 signal died(enemy: Enemy)
 
@@ -52,6 +52,8 @@ var _weaken := 0.0
 var _weaken_time := 0.0
 var _attack_slow := 0.0
 var _attack_slow_time := 0.0
+## Seconds left enclosed in a bubble (HQ Lake weapon): rooted in place, still attacking.
+var _root_time := 0.0
 
 
 ## Applies the stats of `type_kind`, HP and damage scaled by `factor`, speed by `speed_factor`
@@ -125,6 +127,16 @@ func add_attack_slow(share: float, duration: float) -> void:
 	_attack_slow_time = maxf(_attack_slow_time, duration)
 
 
+## Encloses this enemy in a bubble: it can't move for `duration` seconds but still attacks.
+func root(duration: float) -> void:
+	_root_time = maxf(_root_time, duration)
+	queue_redraw()
+
+
+func is_rooted() -> bool:
+	return _root_time > 0.0
+
+
 func dot_stacks() -> int:
 	return _dots.size()
 
@@ -158,6 +170,10 @@ func tick_statuses(delta: float) -> void:
 		_attack_slow_time -= delta
 		if _attack_slow_time <= 0.0:
 			_attack_slow = 0.0
+	if _root_time > 0.0:
+		_root_time -= delta
+		if _root_time <= 0.0:
+			queue_redraw()
 
 
 func face(angle: float) -> void:
@@ -194,6 +210,11 @@ func _draw() -> void:
 		draw_arc(Vector2.ZERO, 20, 0, TAU, 24, Color(AttackProfiles.WATER_COLOR, 0.8), 1.5, true)
 	# Health bar and thorn stacks stay upright regardless of rotation.
 	draw_set_transform(Vector2.ZERO, -rotation)
+	if _root_time > 0.0:
+		# Enclosed in a bubble: a watery sphere with a shine.
+		draw_circle(Vector2.ZERO, 21.0, Color(HqWeapons.BUBBLE_COLOR, 0.22))
+		draw_arc(Vector2.ZERO, 21.0, 0.0, TAU, 32, Color(HqWeapons.BUBBLE_COLOR, 0.85), 2.0, true)
+		draw_arc(Vector2.ZERO, 15.0, PI * 1.1, PI * 1.45, 8, Color(1, 1, 1, 0.75), 2.5, true)
 	for i in mini(_dots.size(), 6):
 		draw_circle(Vector2(-10 + i * 4, 16), 1.8, Color("5fd068"))
 	var ratio := clampf(hp / max_hp, 0.0, 1.0)

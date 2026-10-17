@@ -78,8 +78,10 @@ var _bursts: Array[Dictionary] = []
 ## Floating loot texts: {position, text, color, time}.
 var _popups: Array[Dictionary] = []
 var _loot_rng := RandomNumberGenerator.new()
-## Seconds until the HQ cannon may fire again.
+## Seconds until the HQ weapon may fire (or heal) again.
 var _hq_cooldown := 0.0
+## HQ Swamp siphon this frame: {from (enemy), to (HQ), heal_to (building) or null}.
+var _siphons: Array[Dictionary] = []
 
 const HEAL_FLASH_TIME := 0.35
 const BURST_TIME := 0.4
@@ -122,6 +124,7 @@ func _process(delta: float) -> void:
 	_drop_dead_focus()
 	_beams.clear()
 	_beam_colors.clear()
+	_siphons.clear()
 	for enemy in enemies():
 		enemy.tick_statuses(delta)
 		if not enemy.is_dead:
@@ -438,6 +441,16 @@ func popup(world_position: Vector2, text: String, color: Color) -> void:
 
 func _move_and_attack(enemy: Enemy, delta: float) -> void:
 	enemy.cooldown_left = maxf(enemy.cooldown_left - delta, 0.0)
+	if enemy.is_rooted():
+		# Enclosed in a bubble: it acts (aims, attacks) but stays where it is.
+		var held := enemy.global_position
+		_move_and_attack_free(enemy, delta)
+		enemy.global_position = held
+		return
+	_move_and_attack_free(enemy, delta)
+
+
+func _move_and_attack_free(enemy: Enemy, delta: float) -> void:
 	if enemy.in_formation and _fly_in_formation(enemy, delta):
 		return
 	match enemy.behaviour:
@@ -800,21 +813,101 @@ func _towers_attack(delta: float) -> void:
 				island.add_xp(coord, 1.0)
 
 
-## The HQ fires its own cannon at the nearest visible enemy (needs no energy).
+## The HQ fights with the weapon of its biome (HqWeapons, Island.hq_biome) at the nearest
+## visible enemy, or the scoped one; it needs no energy and has no reach past its range.
 func _hq_attack(delta: float) -> void:
-	var hq := _view.island.get_tile(Island.HQ_COORD)
+	var island := _view.island
+	var hq := island.get_tile(Island.HQ_COORD)
 	_hq_cooldown = maxf(_hq_cooldown - delta, 0.0)
-	if hq == null or hq.hp <= 0.0 or _hq_cooldown > 0.0:
+	if hq == null or hq.hp <= 0.0:
 		return
-	var profile := AttackProfiles.hq()
+	var biome := island.hq_biome()
+	var profile := HqWeapons.profile(biome)
 	var origin := _view.hex_center_world(Island.HQ_COORD)
+	if biome == Biome.Type.FOREST:
+		_hq_heal(profile)
+		return
 	var targets := _targets_in_range(origin, profile.range_hexes * HexMath.SQRT3 * _view.hex_size)
-	# The HQ cannon has no reach past its core range, so any focus in range counts.
 	_focus_first(targets, origin, INF)
 	if targets.is_empty():
 		return
+	match biome:
+		Biome.Type.PLAINS:
+			_fire_beam(origin, targets[0], profile, 1.0, delta, Island.HQ_COORD)
+		Biome.Type.SWAMP:
+			_hq_siphon(origin, targets[0], profile, delta)
+		_:
+			if _hq_cooldown > 0.0:
+				return
+			_hq_cooldown = profile.cooldown
+			match biome:
+				Biome.Type.MOUNTAIN:
+					_launch(HqWeapons.Rocket.new(), origin, targets[0], profile, _credit.bind(Island.HQ_COORD))
+				Biome.Type.LAKE:
+					_hq_bubble(origin, targets, profile)
+				_:
+					# Twin cannon: both barrels at once, side by side across the line of fire.
+					var side := (targets[0].global_position - origin).normalized().orthogonal() * HqWeapons.TWIN_SPREAD / 2.0
+					for barrel in [side, -side]:
+						_launch(Projectile.new(), origin + barrel, targets[0], profile, _credit.bind(Island.HQ_COORD))
+
+
+## Forest: heals the weakest building or ground in range, one pulse per interval.
+func _hq_heal(profile: AttackProfile) -> void:
+	if _hq_cooldown > 0.0:
+		return
+	var island := _view.island
+	var damaged := island.damaged_in_reach(Island.HQ_COORD, int(profile.range_hexes))
+	if damaged.is_empty():
+		return
 	_hq_cooldown = profile.cooldown
-	_fire_projectile(origin, targets[0], profile)
+	var target: Dictionary = damaged[0]
+	island.track(Island.HQ_COORD, &"healed", island.heal(target.coord, target.tower, profile.damage))
+	_flash(Island.HQ_COORD, target.coord, HqWeapons.HEAL_COLOR)
+
+
+## Swamp: a channelled stream drains the target and heals the closest damaged building
+## (the HQ itself counts, at distance 0) by the rest of the budget.
+func _hq_siphon(origin: Vector2, target: Enemy, profile: AttackProfile, delta: float) -> void:
+	var island := _view.island
+	var before := target.hp
+	target.take_damage(profile.beam_dps * delta)
+	_credit(target, before, Island.HQ_COORD)
+	var siphon := {from = target.global_position, to = origin, heal_to = null}
+	var closest := {}
+	for entry in island.damaged_in_reach(Island.HQ_COORD, int(profile.range_hexes)):
+		if not entry.tower and entry.coord != Island.HQ_COORD:
+			continue
+		if closest.is_empty() or HexMath.distance(Island.HQ_COORD, entry.coord) < HexMath.distance(Island.HQ_COORD, closest.coord):
+			closest = entry
+	if not closest.is_empty():
+		island.track(Island.HQ_COORD, &"healed", island.heal(closest.coord, closest.tower, profile.effect_dps * delta))
+		siphon.heal_to = _view.hex_center_world(closest.coord)
+	_siphons.append(siphon)
+
+
+## Lake: a bubble for the nearest enemy not already enclosed; on arrival it roots it.
+func _hq_bubble(origin: Vector2, targets: Array[Enemy], profile: AttackProfile) -> void:
+	var target := targets[0]
+	if target.is_rooted() and target != focus:
+		for enemy in targets:
+			if not enemy.is_rooted():
+				target = enemy
+				break
+	var on_hit := func(enemy: Enemy, before: float) -> void:
+		if not enemy.is_dead:
+			enemy.root(profile.dot_duration)
+		_credit(enemy, before, Island.HQ_COORD)
+	_launch(HqWeapons.Bubble.new(), origin, target, profile, on_hit)
+
+
+## Sends `projectile` (Projectile or a subclass) from `origin` at `target`.
+func _launch(projectile: Projectile, origin: Vector2, target: Enemy, profile: AttackProfile, on_hit: Callable) -> void:
+	projectile.target = target
+	projectile.profile = profile
+	projectile.on_hit = on_hit
+	_projectile_layer.add_child(projectile)
+	projectile.global_position = origin
 
 
 ## Visible enemies within range, nearest first.
@@ -902,6 +995,13 @@ func _towers_repair(delta: float) -> void:
 		if damaged.is_empty():
 			continue
 		tower.saw_target = true
+		if profile.mode == &"over_time":
+			# Heals over time don't stack: targets that already have one are passed over.
+			for i in range(damaged.size() - 1, -1, -1):
+				if island.has_heal_over_time(damaged[i].coord, damaged[i].tower):
+					damaged.remove_at(i)
+			if damaged.is_empty():
+				continue
 		# Only pay (and cool down) when the heal actually happens.
 		if not _can_repair(coord, profile, damaged):
 			continue
@@ -1018,9 +1118,30 @@ func _draw() -> void:
 		draw_line(a, b, Color(color, 0.3 * alpha), 7.0, true)
 		draw_line(a, b, Color(color, alpha), 2.0, true)
 		draw_circle(b, 6.0 * alpha + 2.0, Color(color, 0.6 * alpha))
+	for siphon in _siphons:
+		_draw_siphon(siphon)
 	for i in _beams.size():
 		var a := to_local(_beams[i][0])
 		var b := to_local(_beams[i][1])
 		var color := _beam_colors[i]
 		draw_line(a, b, Color(color, 0.25), 8.0, true)
 		draw_line(a, b, color, 2.5, true)
+
+
+## HQ siphon: a purple stream with motes flowing from the enemy into the HQ, and a green
+## thread on to the building it heals.
+func _draw_siphon(siphon: Dictionary) -> void:
+	var a := to_local(siphon.from)
+	var b := to_local(siphon.to)
+	var color := HqWeapons.SIPHON_COLOR
+	draw_line(a, b, Color(color, 0.25), 9.0, true)
+	draw_line(a, b, Color(color, 0.8), 2.0, true)
+	var phase := fmod(Time.get_ticks_msec() / 600.0, 1.0)
+	for i in 5:
+		var t := fmod(phase + i / 5.0, 1.0)
+		draw_circle(a.lerp(b, t), 3.0, Color(color.lightened(0.4), 0.9))
+	if siphon.heal_to != null:
+		var c := to_local(siphon.heal_to)
+		draw_line(b, c, Color(HqWeapons.HEAL_COLOR, 0.25), 6.0, true)
+		draw_line(b, c, Color(HqWeapons.HEAL_COLOR, 0.8), 1.5, true)
+		draw_circle(c, 4.0, Color(HqWeapons.HEAL_COLOR, 0.7))

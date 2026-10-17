@@ -74,7 +74,7 @@ static func building_lines(island: Island, coord: Vector2i) -> PackedStringArray
 ## energy income against demand, and this wave's totals.
 static func island_lines(island: Island, combat: Combat) -> PackedStringArray:
 	var lines: PackedStringArray = ["— Island analysis —"]
-	var dps := AttackProfiles.hq().damage / AttackProfiles.hq().cooldown
+	var dps := HqWeapons.dps(island.hq_biome())
 	var demand := 0.0
 	var income := EnergyProfiles.hq().output
 	for coord in island.coords():
@@ -87,7 +87,7 @@ static func island_lines(island: Island, combat: Combat) -> PackedStringArray:
 		var generator := EnergyGrid.generator_at(island, coord)
 		if generator and coord != Island.HQ_COORD:
 			income += generator.output
-	lines.append("Total DPS %.1f (HQ cannon included)" % dps)
+	lines.append("Total DPS %.1f (HQ %s included)" % [dps, HqWeapons.name_of(island.hq_biome()).to_lower()])
 	if combat:
 		var alive := 0.0
 		for enemy in combat.enemies():

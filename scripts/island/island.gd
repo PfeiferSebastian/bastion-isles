@@ -25,9 +25,8 @@ const TILE_HP_PER_TIER := 100.0
 ## Every tower in a combined building (2+ neighbouring towers of one type) works this much
 ## better: two towers count as 2.6, three as 3.9 and so on.
 const MERGE_BONUS := 0.3
-## Blueprint price of a new tower: this many, plus one for every tower of that type already
-## owned; the first tower of each type is free (tiles: plus one for every unused tile in the
-## inventory, never free).
+## Blueprint price of a new tile: this many, plus one for every unused tile in the inventory.
+## Towers cost one blueprint per tower of that type already owned, so the first is free.
 const BLUEPRINTS_BASE := 1
 ## Currency id of blueprints in price_of() (faction resources use their Biome.Type).
 const CURRENCY_BLUEPRINTS := -2
@@ -56,6 +55,9 @@ var _aura_cache: Dictionary = {}
 var _group_cache: Dictionary = {}
 ## Towers only gain experience while this is on (off when editing the island).
 var gains_xp := true
+## The HQ's biome (see hq_biome), recounted after any tile change.
+var _hq_biome := Biome.Type.NEUTRAL
+var _hq_biome_dirty := true
 ## Towers destroyed this mission, as they stood ({coord, type, tier, is_part, merge_root,
 ## merge_hexes}), and biome tiles turned to wasteland – fleeing rebuilds them (see
 ## rebuild_losses).
@@ -82,6 +84,7 @@ func _init() -> void:
 func _on_tiles_changed(_coord: Vector2i) -> void:
 	_aura_cache.clear()
 	_group_cache.clear()
+	_hq_biome_dirty = true
 
 ## Wasteland turns back into usable ground once repaired to this share of its HP.
 const WASTELAND_RESTORE_SHARE := 0.5
@@ -169,6 +172,37 @@ func coords() -> Array[Vector2i]:
 
 func tile_count() -> int:
 	return _tiles.size()
+
+
+## The HQ takes the biome most present on the island (every tile but the HQ, neutral and
+## wasteland included) and fights with its weapon (HqWeapons). Ties: a faction biome beats
+## neutral, then the higher summed tier wins, then the HQ keeps its current biome, then the
+## first in Biome.Type order. The HQ tile itself stays neutral ground (no aura, no conduction).
+func hq_biome() -> Biome.Type:
+	if not _hq_biome_dirty:
+		return _hq_biome
+	_hq_biome_dirty = false
+	var counts := {}
+	var tiers := {}
+	for coord in _tiles:
+		var tile := _tiles[coord]
+		if tile.is_hq:
+			continue
+		counts[tile.biome] = counts.get(tile.biome, 0) + 1
+		tiers[tile.biome] = tiers.get(tile.biome, 0) + tile.tier
+	var best := _hq_biome if counts.has(_hq_biome) else Biome.Type.NEUTRAL
+	for biome in Biome.Type.values():
+		if not counts.has(biome) or biome == best:
+			continue
+		if not counts.has(best):
+			best = biome
+			continue
+		var rank := [counts[biome], 0 if biome == Biome.Type.NEUTRAL else 1, tiers[biome]]
+		var best_rank := [counts[best], 0 if best == Biome.Type.NEUTRAL else 1, tiers[best]]
+		if rank > best_rank:
+			best = biome
+	_hq_biome = best
+	return best
 
 
 # --- Tiles ---------------------------------------------------------------
@@ -345,6 +379,18 @@ func drain(coord: Vector2i, tower: bool, amount: float) -> float:
 
 func add_heal_over_time(coord: Vector2i, tower: bool, total: float, duration: float) -> void:
 	_heals_over_time.append({coord = coord, tower = tower, rate = total / duration, time = duration})
+
+
+## True while a heal over time runs on this tower (or any tower of its group, which share one
+## HP pool) or on this ground.
+func has_heal_over_time(coord: Vector2i, tower: bool) -> bool:
+	var covered: Array[Vector2i] = [coord]
+	if tower and get_tower(coord):
+		covered = group_of(coord)
+	for hot in _heals_over_time:
+		if hot.tower == tower and hot.coord in covered:
+			return true
+	return false
 
 
 func _tick_heals_over_time(delta: float) -> void:
@@ -803,11 +849,11 @@ func owned_of(kind: StringName) -> int:
 
 
 ## Blueprints a new `kind` (tower type or &"tile") costs: more the more of them the player owns.
-## The first tower of each type costs nothing.
+## Towers: 0 for the first of each type, then 1, 2, 3 …; tiles: 1 + unused tiles.
 func blueprint_cost(kind: StringName) -> int:
 	var owned := owned_of(kind)
-	if kind != &"tile" and owned == 0:
-		return 0
+	if kind != &"tile":
+		return owned
 	return BLUEPRINTS_BASE + owned
 
 

@@ -434,6 +434,8 @@ func _draw_top() -> void:
 			# Ground HP all around the edge: always for the HQ, otherwise once damaged.
 			var ratio := clampf(tile.hp / island.tile_max_hp(coord), 0.0, 1.0)
 			_draw_arc(center, 0, 6, ratio, HP_LOW_COLOR.lerp(HP_FULL_COLOR, ratio), TRACK_COLOR)
+		if tile.is_hq:
+			_draw_hq_pennant(center)
 	for group in island.groups():
 		_draw_group_status(group)
 	_draw_tier_arrows()
@@ -761,6 +763,17 @@ func _draw_tower_reach() -> void:
 	var inner := _scaled(_hex_points, 0.92)
 	for coord in shares:
 		_canvas.draw_colored_polygon(_offset(inner, HexMath.to_pixel(coord, hex_size)), Color(color, 0.4 * shares[coord]))
+
+
+## A pennant in the colour of the HQ's biome (Island.hq_biome) above the castle.
+func _draw_hq_pennant(center: Vector2) -> void:
+	var foot := center + Vector2(hex_size * 0.32, -hex_size * 0.35)
+	var top := foot + Vector2(0, -hex_size * 0.75)
+	var dark := Color(0.12, 0.09, 0.07)
+	_canvas.draw_line(foot, top, dark, 2.5, true)
+	var flag := PackedVector2Array([top, top + Vector2(hex_size * 0.42, hex_size * 0.13), top + Vector2(0, hex_size * 0.26)])
+	_canvas.draw_colored_polygon(flag, Biome.color_of(island.hq_biome()))
+	_canvas.draw_polyline(_closed(flag), dark, 1.5, true)
 
 
 func _draw_tier(center: Vector2, tile: IslandTile) -> void:

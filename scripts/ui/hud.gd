@@ -351,17 +351,19 @@ func _describe_tile(coord: Vector2i) -> String:
 	if tile.tower:
 		lines.append_array(_describe_building(coord, tile))
 		lines.append("")
-	var what := "HQ" if tile.is_hq else "%s ground · Tier %d" % [Biome.name_of(tile.biome), tile.tier]
+	var what := "%s ground · Tier %d" % [Biome.name_of(tile.biome), tile.tier]
+	var shown_biome := tile.biome
+	if tile.is_hq:
+		shown_biome = view.island.hq_biome()
+		what = "HQ · %s (the island's most common biome)" % Biome.name_of(shown_biome)
 	if tile.destroyed:
 		what += " · WASTELAND"
-	lines.append("{icon:%s}%s" % [IconCache.biome_kind(tile.biome), what])
+	lines.append("{icon:%s}%s" % [IconCache.biome_kind(shown_biome), what])
 	lines.append("Ground HP %d / %d" % [ceili(tile.hp), roundi(view.island.tile_max_hp(coord))])
 	if tile.tower == null and not tile.is_hq:
 		lines.append("Conducts %d%% of passing energy" % roundi(EnergyGrid.pass_through(tile, view.island) * 100.0))
 	if tile.is_hq:
-		var cannon := AttackProfiles.hq()
-		lines.append("Cannon: %.0f damage every %.1f s (%.1f dps)" % [cannon.damage, cannon.cooldown, cannon.damage / cannon.cooldown])
-		lines.append("Cannon range: %.1f hexes, no energy" % cannon.range_hexes)
+		lines.append_array(HqWeapons.describe(view.island.hq_biome()))
 		lines.append_array(_describe_generator(EnergyGrid.generator_at(view.island, coord)))
 	if _analysis and tile.tower:
 		lines.append("")
@@ -485,7 +487,7 @@ static func _describe_repair(p: RepairProfile) -> PackedStringArray:
 	var what := ""
 	match p.mode:
 		&"over_time":
-			what = "Repairs %.0f HP over %.0f s" % [p.amount, p.duration]
+			what = "Repairs %.0f HP over %.0f s, each time on a target not already being healed" % [p.amount, p.duration]
 		&"redistribute":
 			what = "Moves %.0f HP from healthy to damaged" % p.amount
 		&"lifesteal":
