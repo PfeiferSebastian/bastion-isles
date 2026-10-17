@@ -1,5 +1,5 @@
 extends Control
-## Main menu: title and tagline at the top, Start / Edit Island / Options / Exit in a column
+## Main menu: the title at the top, Start / Edit Island / Options / Exit in a column
 ## on the left, the island (in the game's own tile art) floating on the right while enemy
 ## airship formations cross the cloud sky, all inside the steampunk frame. Start opens the mission select:
 ## numbered missions (1-1, 1-2 … 2-1 …), the endless mode below them and Back at the bottom.
@@ -8,7 +8,6 @@ const GAME_SCENE := "res://main.tscn"
 
 @onready var _island: Node2D = $Island
 @onready var _airships: Node2D = $Airships
-@onready var _tagline: Label = %Tagline
 @onready var _buttons: Control = $Buttons
 @onready var _start: Button = %Start
 @onready var _edit_island: Button = %EditIsland
@@ -113,7 +112,6 @@ func _show_missions(open: bool) -> void:
 	_buttons.visible = not open
 	_island.visible = not open
 	_airships.visible = not open
-	_tagline.visible = not open
 	if open:
 		_missions_panel.reset_size()
 		_missions_panel.position = (size - _missions_panel.size) / 2.0 + Vector2(0, 40)
@@ -141,7 +139,6 @@ func _open_island(edit: bool) -> void:
 func _show_options(open: bool) -> void:
 	_options_panel.visible = open
 	_buttons.visible = not open
-	_tagline.visible = not open
 	(_back if open else _start).grab_focus()
 
 
