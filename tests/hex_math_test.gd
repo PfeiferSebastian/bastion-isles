@@ -428,12 +428,15 @@ func _test_energy() -> void:
 	split.get_tile(wide).tier = 1
 	var demand := {wide: 1.0, narrow: 3.0}
 	var targets: Array[Vector2i] = [wide, narrow]
-	var neutral_split := EnergyGrid._split(split, hub, targets, demand)
+	var none := {wide: 0.0, narrow: 0.0}
+	var neutral_split := EnergyGrid._split(split, hub, targets, demand, none)
 	_check(is_equal_approx(neutral_split[narrow] / neutral_split[wide], 3.0), "neutral splits by demand")
 	split.set_biome(hub, Biome.Type.FOREST)
 	split.restore_tiles()
-	var forest_split := EnergyGrid._split(split, hub, targets, demand)
+	var forest_split := EnergyGrid._split(split, hub, targets, demand, none)
 	_check(is_equal_approx(forest_split[wide] / forest_split[narrow], 2.0), "forest splits by exit capacity (power line 12 vs building 6)")
+	var working_split := EnergyGrid._split(split, hub, targets, demand, {wide: 0.0, narrow: 2.0})
+	_check(working_split[wide] == 0.0 and working_split[narrow] > 0.0, "forest serves exits with working buildings first")
 	# A full building on the road passes energy through to the one behind it without giving
 	# up its own store.
 	var chain := Island.create_starter(3)

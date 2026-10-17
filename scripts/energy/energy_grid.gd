@@ -155,12 +155,19 @@ static func step(island: Island, dt: float) -> void:
 	for coord in coords:
 		urgency[coord] = _urgency(island, coord, dt)
 	var demand := _demand(island, dist, urgency)
+	# The same, counting only working buildings (Forest serves those exits first).
+	var working_urgency := {}
+	for coord in coords:
+		var tower := island.get_tower(coord)
+		var is_working: bool = tower != null and not is_storage(island.get_tile(coord)) and is_active(island.get_tower(island.merge_root_of(coord)))
+		working_urgency[coord] = urgency[coord] if is_working else 0.0
+	var working := _demand(island, dist, working_urgency)
 	_settle_transit(island, demand, urgency)
 	var spill := _produce(island, dt)
 	island.energy_flows.clear()
-	_flow(island, dist, demand, urgency, dt)
+	_flow(island, dist, demand, working, urgency, dt)
 	_spill(island, spill, demand)
-	_hand_back(island, demand, urgency, dt)
+	_hand_back(island, demand, working, urgency, dt)
 
 
 ## Hop distance from the nearest generator for every tile energy can reach.
@@ -246,7 +253,7 @@ static func _produce(island: Island, dt: float) -> Dictionary:
 
 ## Main flow: outward along roads, by demand, within pipe rates and entry pipes. Only what a
 ## tile held at the start of the tick moves on (one hop per tick).
-static func _flow(island: Island, dist: Dictionary, demand: Dictionary, urgency: Dictionary, dt: float) -> void:
+static func _flow(island: Island, dist: Dictionary, demand: Dictionary, working: Dictionary, urgency: Dictionary, dt: float) -> void:
 	var senders := dist.keys()
 	senders.sort_custom(func(a: Vector2i, b: Vector2i) -> bool: return dist[a] < dist[b])
 	# Buildings pass on only their pass-through buffer; empty ground and generators all they hold.
@@ -270,7 +277,8 @@ static func _flow(island: Island, dist: Dictionary, demand: Dictionary, urgency:
 			kids.append(n)
 		if kids.is_empty():
 			continue
-		var split := _split(island, source, kids, demand)
+		var split := _split(island, source, kids, demand, working)
+		kids = kids.filter(func(n: Vector2i) -> bool: return split[n] > 0.0)
 		kids = _take_turns(island, source, kids, split, feeds(island, source))
 		var sent := _send(island, source, kids, split, demand, urgency, available, dt)
 		for n in kids:
@@ -286,16 +294,21 @@ static func _flow(island: Island, dist: Dictionary, demand: Dictionary, urgency:
 
 
 ## How `source` weighs its exits, by the rule of its own biome (receivers just accept within
-## their entry pipes and room): Forest by the capacity of each exit (a canal of 3 gets three
-## times a canal of 1); Neutral and every biome without a rule yet by the demand behind each
-## exit. Only exits with demand behind them are candidates either way.
-static func _split(island: Island, source: Vector2i, targets: Array[Vector2i], demand: Dictionary) -> Dictionary:
+## their entry pipes and room). Neutral and every biome without a rule yet: by the demand
+## behind each exit. Forest: working buildings first, like everywhere – if any exit has a
+## working building behind it (`working` demand), only those exits count – and among them by
+## the capacity of each exit (a canal of 3 gets three times a canal of 1). Exits weighted 0
+## get nothing.
+static func _split(island: Island, source: Vector2i, targets: Array[Vector2i], demand: Dictionary, working: Dictionary) -> Dictionary:
 	var tile := island.get_tile(source)
 	var weight := {}
-	for n in targets:
-		if tile.biome == Biome.Type.FOREST:
-			weight[n] = _pipe(island, tile, island.get_tile(n))
-		else:
+	if tile.biome == Biome.Type.FOREST:
+		var any_working := targets.any(func(n: Vector2i) -> bool: return working[n] > 0.0)
+		for n in targets:
+			var counts: bool = working[n] > 0.0 if any_working else demand[n] > 0.0
+			weight[n] = _pipe(island, tile, island.get_tile(n)) if counts else 0.0
+	else:
+		for n in targets:
 			weight[n] = demand[n]
 	return weight
 
@@ -441,7 +454,7 @@ static func _spill(island: Island, spill: Dictionary, demand: Dictionary) -> voi
 ## Side tiles hand their energy to neighbours on a road (or that need it themselves) and even
 ## out with other side tiles; storehouses hand theirs to the buildings next to them that need
 ## it. Lowest priority, after the main flow.
-static func _hand_back(island: Island, demand: Dictionary, urgency: Dictionary, dt: float) -> void:
+static func _hand_back(island: Island, demand: Dictionary, working: Dictionary, urgency: Dictionary, dt: float) -> void:
 	var start := {}
 	for coord in island.coords():
 		start[coord] = island.get_tile(coord).energy
@@ -463,7 +476,7 @@ static func _hand_back(island: Island, demand: Dictionary, urgency: Dictionary, 
 				spread.append(n)
 		var available: float = minf(start[coord], tile.energy)
 		if not targets.is_empty():
-			available -= _send(island, coord, targets, _split(island, coord, targets, demand), demand, urgency, available, dt, true)
+			available -= _send(island, coord, targets, _split(island, coord, targets, demand, working), demand, urgency, available, dt, true)
 		for n in spread:
 			var other := island.get_tile(n)
 			var amount := minf(available, (fill(tile) - fill(other)) * capacity(other) * SIDE_SPREAD)
