@@ -18,7 +18,7 @@ const TICK := 0.1
 ## Most ticks one frame may catch up on (after a hitch the grid falls behind instead).
 const MAX_STEPS := 10
 ## Energy per second one pipe carries out of a tile with a building; more per tier above 1.
-const PIPE_RATE := 3.0
+const PIPE_RATE := 6.0
 const PIPE_RATE_PER_TIER := 0.5
 ## Empty tiles (and the HQ hub) are power lines.
 const POWER_LINE_FACTOR := 2.0

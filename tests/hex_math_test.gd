@@ -352,13 +352,13 @@ func _test_enemy_statuses() -> void:
 func _test_energy() -> void:
 	var island := Island.create_starter(3)
 	var c := Vector2i(1, 0)
-	_check(is_equal_approx(EnergyGrid.capacity(island.get_tile(c)), 9.0), "every tile stores pipe rate × 3")
-	_check(is_equal_approx(EnergyGrid.pipe_rate(island.get_tile(c)), 6.0), "empty ground is a power line (twice the rate)")
+	_check(is_equal_approx(EnergyGrid.capacity(island.get_tile(c)), 18.0), "every tile stores pipe rate × 3")
+	_check(is_equal_approx(EnergyGrid.pipe_rate(island.get_tile(c)), 12.0), "empty ground is a power line (twice the rate)")
 	island.place_tower(c, &"attack")
-	_check(is_equal_approx(EnergyGrid.pipe_rate(island.get_tile(c)), 3.0), "built tiles pass 3/s per pipe")
+	_check(is_equal_approx(EnergyGrid.pipe_rate(island.get_tile(c)), 6.0), "built tiles pass 6/s per pipe")
 	island.set_biome(c, Biome.Type.MOUNTAIN)
 	island.get_tile(c).tier = 3
-	_check(is_equal_approx(EnergyGrid.capacity(island.get_tile(c)), 12.0), "higher tiers store and pass more")
+	_check(is_equal_approx(EnergyGrid.capacity(island.get_tile(c)), 21.0), "higher tiers store and pass more")
 	_check(EnergyGrid.entry_pipes(island, c) == 3, "buildings take energy in through one pipe per tier")
 	_check(EnergyGrid.upkeep(&"attack") == EnergyGrid.UPKEEP and EnergyGrid.upkeep(&"energy") == 0.0, "every building but generators pays upkeep")
 
