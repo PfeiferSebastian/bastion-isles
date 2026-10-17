@@ -5,13 +5,15 @@ extends RefCounted
 ##   carries at most the tile's pipe rate per second (empty tiles are power lines with twice
 ##   the rate); nothing is lost on the way.
 ## - Energy flows outward from the generators (by hop distance) toward tiles whose buildings –
-##   or the buildings behind them – need it, split by urgency. That makes the roads.
+##   or the buildings behind them – need it. That makes the roads. Each tile splits what it
+##   sends by its own biome's rule: by demand (Neutral, and every biome without a rule yet) or
+##   by the capacity of its exits (Forest).
 ## - A tile feeds at most FEEDS pipes at once (generators one per tier) and takes energy in
 ##   through a limited number of pipes (buildings: one per tier).
 ## - What a generator can't send fills its store; past that it spills to side tiles (on no
 ##   road), which hand it back to buildings and roads that need it. The rest is wasted.
-## - Every building except generators pays an upkeep; urgency rises the longer a building
-##   sits empty.
+## - Every building except generators pays an upkeep. Working buildings (Attack with targets,
+##   Repair while healing, Aura and Scout always) are served before idle ones.
 ## Runs in fixed ticks (TICK) independent of the frame rate.
 
 const TICK := 0.1
@@ -33,14 +35,17 @@ const STORAGE_CAPACITY := 75.0
 ## Every building but generators pays this per second; Aura and Scout pay their 1/s instead.
 const UPKEEP := 0.5
 const SELF_PAID: Array[StringName] = [&"aura", &"scout"]
-## How urgently each type wants energy (scaled by how empty it is), and how much the urgency
-## grows per second it sits empty.
-const URGENCY_WEIGHT := {&"attack": 2.0, &"repair": 2.0, &"wall": 1.5, &"aura": 1.0, &"scout": 1.0}
-## Storehouses' urgency: tiny, so they mostly fill once the buildings are full.
+## Urgency by state, scaled by how empty the building is: working buildings far before idle
+## ones, which only top up with what is left; storehouses last.
+const ACTIVE_URGENCY := 100.0
+const IDLE_URGENCY := 1.0
 const STORAGE_URGENCY := 0.02
+## Aura and Scout towers draw all the time, so they always count as working.
+const ALWAYS_ACTIVE: Array[StringName] = [&"aura", &"scout"]
+## A tower counts as working for this long after it last had something to do.
+const ACTIVE_HOLD := 1.0
 ## A building's pass-through buffer holds this many seconds of its pipe rate.
 const TRANSIT_SECONDS := 1.0
-const STARVE_URGENCY := 0.2
 ## Below this share of its store a building counts as empty.
 const EMPTY_SHARE := 0.05
 ## Side tiles even out with side neighbours by this share of the fill difference per tick.
@@ -179,23 +184,32 @@ static func distances(island: Island) -> Dictionary:
 	return dist
 
 
-## How urgently the building on `coord` wants energy (0 = full or no building). Also counts
-## how long it has been empty.
+## Marks a tower as working (Attack with targets, Repair with something to heal), so the grid
+## serves it before idle buildings for ACTIVE_HOLD seconds.
+static func mark_active(tower: Tower) -> void:
+	tower.energy_active = ACTIVE_HOLD
+
+
+static func is_active(tower: Tower) -> bool:
+	return ALWAYS_ACTIVE.has(tower.type) or tower.energy_active > 0.0
+
+
+## How urgently the building on `coord` wants energy (0 = full or no building): by its state
+## (working or idle), within the same state the emptier first.
 static func _urgency(island: Island, coord: Vector2i, dt: float) -> float:
 	var tile := island.get_tile(coord)
 	if tile.tower == null or is_producer(tile):
 		return 0.0
+	tile.tower.energy_active = maxf(tile.tower.energy_active - dt, 0.0)
 	var cap := capacity(tile)
-	if cap <= 0.0:
-		return 0.0
 	var missing := cap - tile.energy
-	# Storehouses take only what the buildings leave and never grow impatient.
-	if is_storage(tile):
-		return STORAGE_URGENCY * missing / cap if missing > 0.001 else 0.0
-	tile.starved = tile.starved + dt if tile.energy < cap * EMPTY_SHARE else 0.0
-	if missing <= 0.001:
+	if cap <= 0.0 or missing <= 0.001:
 		return 0.0
-	return URGENCY_WEIGHT.get(tile.tower.type, 1.0) * (missing / cap + STARVE_URGENCY * tile.starved)
+	if is_storage(tile):
+		return STORAGE_URGENCY * missing / cap
+	# Parts of a merged building work when their root does.
+	var tower := island.get_tower(island.merge_root_of(coord))
+	return (ACTIVE_URGENCY if is_active(tower) else IDLE_URGENCY) * missing / cap
 
 
 ## A tile's own urgency plus that of every tile further out it could pass energy on to.
@@ -256,8 +270,9 @@ static func _flow(island: Island, dist: Dictionary, demand: Dictionary, urgency:
 			kids.append(n)
 		if kids.is_empty():
 			continue
-		kids = _take_turns(island, source, kids, demand, feeds(island, source))
-		var sent := _send(island, source, kids, demand, urgency, available, dt)
+		var split := _split(island, source, kids, demand)
+		kids = _take_turns(island, source, kids, split, feeds(island, source))
+		var sent := _send(island, source, kids, split, demand, urgency, available, dt)
 		for n in kids:
 			if not parents.has(n):
 				parents[n] = []
@@ -270,19 +285,42 @@ static func _flow(island: Island, dist: Dictionary, demand: Dictionary, urgency:
 			island.get_tower(root).did_work = true
 
 
+## How `source` weighs its exits, by the rule of its own biome (receivers just accept within
+## their entry pipes and room): Forest by the capacity of each exit (a canal of 3 gets three
+## times a canal of 1); Neutral and every biome without a rule yet by the demand behind each
+## exit. Only exits with demand behind them are candidates either way.
+static func _split(island: Island, source: Vector2i, targets: Array[Vector2i], demand: Dictionary) -> Dictionary:
+	var tile := island.get_tile(source)
+	var weight := {}
+	for n in targets:
+		if tile.biome == Biome.Type.FOREST:
+			weight[n] = _pipe(island, tile, island.get_tile(n))
+		else:
+			weight[n] = demand[n]
+	return weight
+
+
+## Energy per second the pipe from `from` to `to` carries (generators pump at the receiver's rate).
+static func _pipe(island: Island, from: IslandTile, to: IslandTile) -> float:
+	var rate := pipe_rate(to, island)
+	if not is_producer(from):
+		rate = minf(rate, pipe_rate(from, island))
+	return rate
+
+
 ## With more candidates than pipes it can feed at once, a tile gives its pipes turns in
-## proportion to the demand behind them: every candidate earns credit by its share, the ones
-## with the most credit get this tick and pay one turn for it (90/10 demand → 9 ticks to 1).
-static func _take_turns(island: Island, source: Vector2i, kids: Array[Vector2i], demand: Dictionary, pipes: int) -> Array[Vector2i]:
+## proportion to their weight (see _split): every candidate earns credit by its share, the
+## ones with the most credit get this tick and pay one turn for it (90/10 → 9 ticks to 1).
+static func _take_turns(island: Island, source: Vector2i, kids: Array[Vector2i], weight: Dictionary, pipes: int) -> Array[Vector2i]:
 	if kids.size() <= pipes:
 		return kids
 	var total := 0.0
 	for n in kids:
-		total += demand[n]
+		total += weight[n]
 	var credit := {}
 	for n in kids:
 		var key := Vector4i(source.x, source.y, n.x, n.y)
-		credit[n] = island.energy_credits.get(key, 0.0) + pipes * demand[n] / total
+		credit[n] = island.energy_credits.get(key, 0.0) + pipes * weight[n] / maxf(total, 0.000001)
 	kids.sort_custom(func(a: Vector2i, b: Vector2i) -> bool: return credit[a] > credit[b])
 	for i in kids.size():
 		var key := Vector4i(source.x, source.y, kids[i].x, kids[i].y)
@@ -292,10 +330,11 @@ static func _take_turns(island: Island, source: Vector2i, kids: Array[Vector2i],
 
 
 ## Sends up to `available` from `source` to `targets`, split by `weight`, each within the
-## pipe's rate and the target's room. A building keeps its own share (by its urgency) and
+## pipe's rate and the target's room; what a full or narrow exit can't take goes to the others
+## (by weight). A building keeps its own share (its urgency within the demand behind it) and
 ## holds the rest in its pass-through buffer for the buildings behind it. Buildings send from
 ## their pass-through buffer unless `own_store`. Returns what was sent.
-static func _send(island: Island, source: Vector2i, targets: Array[Vector2i], weight: Dictionary, urgency: Dictionary, available: float, dt: float, own_store := false) -> float:
+static func _send(island: Island, source: Vector2i, targets: Array[Vector2i], weight: Dictionary, demand: Dictionary, urgency: Dictionary, available: float, dt: float, own_store := false) -> float:
 	var tile := island.get_tile(source)
 	var from_transit := _keeps_own(tile) and not own_store
 	var sent := 0.0
@@ -311,16 +350,14 @@ static func _send(island: Island, source: Vector2i, targets: Array[Vector2i], we
 		var still_open: Array[Vector2i] = []
 		for n in open:
 			var target := island.get_tile(n)
-			var rate := pipe_rate(target, island)
-			if not is_producer(tile):
-				rate = minf(rate, pipe_rate(tile, island))
+			var rate := _pipe(island, tile, target)
 			var key := Vector4i(source.x, source.y, n.x, n.y)
 			var moved: float = island.energy_flows.get(key, 0.0) * dt
 			var share := minf(budget * weight[n] / total, rate * dt - moved)
 			var own := share
 			var passing := 0.0
 			if _keeps_own(target):
-				var keep := clampf(urgency[n] / weight[n], 0.0, 1.0) if weight[n] > 0.0 else 1.0
+				var keep := clampf(urgency[n] / demand[n], 0.0, 1.0) if demand[n] > 0.0 else 1.0
 				own = share * keep
 				passing = minf(share - own, transit_capacity(target, island) - target.transit)
 			own = minf(own, capacity(target) - target.energy)
@@ -426,7 +463,7 @@ static func _hand_back(island: Island, demand: Dictionary, urgency: Dictionary, 
 				spread.append(n)
 		var available: float = minf(start[coord], tile.energy)
 		if not targets.is_empty():
-			available -= _send(island, coord, targets, demand, urgency, available, dt, true)
+			available -= _send(island, coord, targets, _split(island, coord, targets, demand), demand, urgency, available, dt, true)
 		for n in spread:
 			var other := island.get_tile(n)
 			var amount := minf(available, (fill(tile) - fill(other)) * capacity(other) * SIDE_SPREAD)

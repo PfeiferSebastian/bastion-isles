@@ -392,18 +392,35 @@ func _test_energy() -> void:
 	for i in 50:
 		EnergyGrid.tick(b, 0.01)
 	_check(is_equal_approx(a.get_tile(Vector2i(2, 0)).energy, b.get_tile(Vector2i(2, 0)).energy), "grid runs in fixed ticks")
-	# Urgency: the emptier, hungrier building is served first.
+	# Urgency by state: a working building is served before an idle one.
 	var fork := Island.create_starter(2)
 	fork.place_tower(Vector2i(0, 1), &"energy")
 	fork.place_tower(Vector2i(1, 1), &"attack")
-	fork.place_tower(Vector2i(-1, 2), &"scout")
+	fork.place_tower(Vector2i(-1, 2), &"attack")
 	fork.get_tile(Vector2i(1, 1)).energy = 0.0
 	fork.get_tile(Vector2i(-1, 2)).energy = 0.0
-	# The generator's single pipe takes turns by demand: the turret (weight 2) gets more turns.
 	for i in 9:
+		EnergyGrid.mark_active(fork.get_tower(Vector2i(1, 1)))
 		EnergyGrid.step(fork, EnergyGrid.TICK)
-	_check(fork.get_tile(Vector2i(1, 1)).energy > fork.get_tile(Vector2i(-1, 2)).energy * 1.5, "turret outranks scout")
-	_check(fork.get_tile(Vector2i(-1, 2)).energy > 0.0, "scout still gets its turns")
+	_check(fork.get_tile(Vector2i(1, 1)).energy > fork.get_tile(Vector2i(-1, 2)).energy * 5.0, "a turret with targets outranks an idle one")
+	_check(EnergyGrid.is_active(fork.get_tower(Vector2i(1, 1))) and not EnergyGrid.is_active(fork.get_tower(Vector2i(-1, 2))), "only the turret with targets counts as working")
+	fork.place_tower(Vector2i(1, 0), &"scout")
+	_check(EnergyGrid.is_active(fork.get_tower(Vector2i(1, 0))), "scouts always count as working")
+	# Split by the sender's biome: Neutral by demand, Forest by the capacity of its exits.
+	var split := Island.create_starter(3)
+	var hub := Vector2i(1, 0)
+	var wide := Vector2i(2, 0)
+	var narrow := Vector2i(1, 1)
+	split.place_tower(narrow, &"attack")
+	split.get_tile(wide).tier = 1
+	var demand := {wide: 1.0, narrow: 3.0}
+	var targets: Array[Vector2i] = [wide, narrow]
+	var neutral_split := EnergyGrid._split(split, hub, targets, demand)
+	_check(is_equal_approx(neutral_split[narrow] / neutral_split[wide], 3.0), "neutral splits by demand")
+	split.set_biome(hub, Biome.Type.FOREST)
+	split.restore_tiles()
+	var forest_split := EnergyGrid._split(split, hub, targets, demand)
+	_check(is_equal_approx(forest_split[wide] / forest_split[narrow], 2.0), "forest splits by exit capacity (power line 12 vs building 6)")
 	# A full building on the road passes energy through to the one behind it without giving
 	# up its own store.
 	var chain := Island.create_starter(3)

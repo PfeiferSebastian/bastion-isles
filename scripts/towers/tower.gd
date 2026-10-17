@@ -67,6 +67,8 @@ var uptime_working := 0.0
 ## Set during a tick by whoever notices, read and cleared by Island.tick.
 var saw_target := false
 var did_work := false
+## Seconds it still counts as working for the energy grid (served before idle buildings).
+var energy_active := 0.0
 ## XP per minute (moving average) and the XP gained since the last tick.
 var xp_per_minute := 0.0
 var xp_this_tick := 0.0

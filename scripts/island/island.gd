@@ -1235,7 +1235,7 @@ func fill_up() -> void:
 	for coord in _tiles:
 		var tile := _tiles[coord]
 		tile.energy = EnergyGrid.capacity(tile)
-		tile.starved = 0.0
+		tile.transit = 0.0
 		if tile.tower:
 			tile.tower.hp = tower_max_hp(coord)
 			tile.tower.last_max_hp = tile.tower.hp

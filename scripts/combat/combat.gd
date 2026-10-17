@@ -805,6 +805,7 @@ func _towers_attack(delta: float) -> void:
 		if targets.is_empty():
 			continue
 		tower.saw_target = true
+		EnergyGrid.mark_active(tower)
 		# The turret turns toward the target and fires only once it points at it.
 		var wanted := (targets[0].global_position - origin).angle()
 		tower.aim = rotate_toward(tower.aim, wanted, deg_to_rad(profile.turn_speed) * delta)
@@ -1045,6 +1046,7 @@ func _towers_repair(delta: float) -> void:
 		if damaged.is_empty():
 			continue
 		tower.saw_target = true
+		EnergyGrid.mark_active(tower)
 		if profile.mode == &"over_time":
 			# Heals over time don't stack: targets that already have one are passed over.
 			for i in range(damaged.size() - 1, -1, -1):
