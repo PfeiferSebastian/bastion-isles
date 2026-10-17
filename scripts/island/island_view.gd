@@ -69,6 +69,12 @@ var _canvas: CanvasItem = self
 var _hex_points: PackedVector2Array
 var _font: Font
 var _dragging := false
+## Calm HP bars (HpDrain): ground rings per tile, building rings per group (keyed by the
+## group's first coord). Advanced while drawing by the last frame's time, pruned once a second.
+var _tile_drains: Dictionary[Vector2i, HpDrain] = {}
+var _group_drains: Dictionary[Vector2i, HpDrain] = {}
+var _drain_delta := 0.0
+var _drain_prune_left := HpDrain.STEP
 ## A slot purchase not placed yet: {item, price} (see note_purchase), or {}.
 var _pending_purchase: Dictionary = {}
 var _drag_start := Vector2.ZERO
@@ -107,6 +113,12 @@ func _process(delta: float) -> void:
 	elif not get_tree().paused:
 		island.tick(delta)
 	hovered_coord = world_to_hex(get_global_mouse_position())
+	_drain_delta = delta
+	_drain_prune_left -= delta
+	if _drain_prune_left <= 0.0:
+		_drain_prune_left = HpDrain.STEP
+		_prune_drains(_tile_drains)
+		_prune_drains(_group_drains)
 	queue_redraw()
 	_top.queue_redraw()
 
@@ -469,10 +481,13 @@ func _draw_top() -> void:
 		var center := HexMath.to_pixel(coord, hex_size)
 		if tile.tower:
 			continue   # buildings: see _draw_group_status
-		elif tile.is_hq or (not tile.destroyed and tile.hp < island.tile_max_hp(coord)):
-			# Ground HP all around the edge: always for the HQ, otherwise once damaged.
-			var ratio := clampf(tile.hp / island.tile_max_hp(coord), 0.0, 1.0)
-			_draw_arc(center, 0, 6, ratio, HP_LOW_COLOR.lerp(HP_FULL_COLOR, ratio), TRACK_COLOR)
+		if not tile.destroyed:
+			# Ground HP all around the edge: always for the HQ, otherwise while damaged or
+			# still draining. A destroyed tile drops its bar at once.
+			var real := clampf(tile.hp / island.tile_max_hp(coord), 0.0, 1.0)
+			var drain := _drain(_tile_drains, coord, real)
+			if tile.is_hq or real < 1.0 or drain.busy():
+				_draw_hp_arc(center, drain)
 		if tile.is_hq:
 			_draw_hq_pennant(center)
 	for group in island.groups():
@@ -713,10 +728,14 @@ func _draw_group_status(group: Array[Vector2i]) -> void:
 	var energy := Vector2.ZERO if EnergyGrid.is_producer(island.get_tile(coord)) else island.group_pool(coord, &"energy")
 	var hp_start := 4 if energy.y > 0.0 else 2
 	var hp_edges := 6 - (2 if shield.y > 0.0 else 0) - (2 if energy.y > 0.0 else 0)
-	var hp_ratio := clampf(hp.x / maxf(hp.y, 0.001), 0.0, 1.0)
+	var hp_drain := _drain(_group_drains, coord, clampf(hp.x / maxf(hp.y, 0.001), 0.0, 1.0))
 	var hovered := group.has(hovered_coord)
-	if hovered or hp_ratio < 0.995:
-		_draw_ring_bar(ring, sixth, hp_start, hp_edges, hp_ratio, HP_LOW_COLOR.lerp(HP_FULL_COLOR, hp_ratio), TRACK_COLOR)
+	if hovered or hp_drain.solid() < 0.995 or hp_drain.busy():
+		var solid := hp_drain.solid()
+		var color := HP_LOW_COLOR.lerp(HP_FULL_COLOR, solid)
+		_canvas.draw_polyline(_ring_piece(ring, sixth, hp_start, hp_edges, 1.0), TRACK_COLOR, HP_RING_WIDTH + 2.0, true)
+		_draw_ring_piece(_ring_piece(ring, sixth, hp_start, hp_edges, hp_drain.ghost()), HpDrain.GHOST_COLOR)
+		_draw_ring_piece(_ring_piece(ring, sixth, hp_start, hp_edges, solid), color)
 	if shield.y > 0.0 and (hovered or shield.x < shield.y * 0.995):
 		_canvas.draw_polyline(_ring_piece(ring, sixth, 0, 2, 1.0), TRACK_COLOR, HP_RING_WIDTH + 2.0, true)
 		var points := _ring_piece(ring, sixth, 0, 2, clampf(shield.x / shield.y, 0.0, 1.0))
@@ -727,6 +746,46 @@ func _draw_group_status(group: Array[Vector2i]) -> void:
 		var track := ENERGY_EMPTY_COLOR if ratio < 0.05 else TRACK_COLOR
 		# Anchored at the lower left, so energy drains from right to left.
 		_draw_ring_bar(ring, sixth, 2, 2, ratio, ENERGY_COLOR, track, true)
+
+
+func _draw_ring_piece(piece: PackedVector2Array, color: Color) -> void:
+	if piece.size() >= 2:
+		_canvas.draw_polyline(piece, color, HP_RING_WIDTH, true)
+
+
+## The HP drain of `drains[key]`, advanced to `real`; a bar not drawn last frame belongs to
+## something new (a rebuilt tower, a restored tile) and starts at `real` without draining.
+func _drain(drains: Dictionary[Vector2i, HpDrain], key: Vector2i, real: float) -> HpDrain:
+	var frame := Engine.get_process_frames()
+	var drain: HpDrain = drains.get(key)
+	if drain == null:
+		drain = HpDrain.new()
+		drains[key] = drain
+		drain.restart(real)
+	elif drain.seen_frame < frame - 1:
+		drain.restart(real)
+	elif drain.seen_frame < frame:
+		drain.advance(real, _drain_delta)
+	drain.seen_frame = frame
+	return drain
+
+
+## Drops drains whose bar hasn't been drawn for a while (towers gone, tiles destroyed).
+func _prune_drains(drains: Dictionary[Vector2i, HpDrain]) -> void:
+	var frame := Engine.get_process_frames()
+	for key in drains.keys():
+		if drains[key].seen_frame < frame - 1:
+			drains.erase(key)
+
+
+## Ground HP all around a hex: coloured up to the drain's solid part, white up to its ghost.
+func _draw_hp_arc(center: Vector2, drain: HpDrain) -> void:
+	var solid := drain.solid()
+	_canvas.draw_polyline(_arc(center, 0, 6, 1.0), TRACK_COLOR, HP_RING_WIDTH + 2.0, true)
+	if drain.ghost() > 0.0:
+		_canvas.draw_polyline(_arc(center, 0, 6, drain.ghost()), HpDrain.GHOST_COLOR, HP_RING_WIDTH, true)
+	if solid > 0.0:
+		_canvas.draw_polyline(_arc(center, 0, 6, solid), HP_LOW_COLOR.lerp(HP_FULL_COLOR, solid), HP_RING_WIDTH, true)
 
 
 func _draw_ring_bar(ring: PackedVector2Array, sixth: float, start: int, edges: int, ratio: float, color: Color, track: Color, from_end := false) -> void:

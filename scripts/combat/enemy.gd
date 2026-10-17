@@ -54,6 +54,8 @@ var _attack_slow := 0.0
 var _attack_slow_time := 0.0
 ## Seconds left enclosed in a bubble (HQ Lake weapon): rooted in place, still attacking.
 var _root_time := 0.0
+## The health bar catches up with hits once a second (see HpDrain).
+var _hp_bar := HpDrain.new()
 
 
 ## Applies the stats of `type_kind`, HP and damage scaled by `factor`, speed by `speed_factor`
@@ -65,6 +67,7 @@ func setup(type_kind: StringName, factor := 1.0, speed_factor := -1.0) -> void:
 	target_priority.assign(def.get("targets", [&"nearest", &"ground"]))
 	max_hp = def.hp * factor
 	hp = max_hp
+	_hp_bar.advance(1.0, 0.0)
 	speed = def.speed * (factor if speed_factor < 0.0 else speed_factor)
 	dps = def.get("contact_dps", 0.0) * factor
 	weapon_range_hexes = def.get("range_hexes", 0.0)
@@ -174,6 +177,10 @@ func tick_statuses(delta: float) -> void:
 		_root_time -= delta
 		if _root_time <= 0.0:
 			queue_redraw()
+	var was_draining := _hp_bar.busy()
+	_hp_bar.advance(clampf(hp / max_hp, 0.0, 1.0), delta)
+	if was_draining or _hp_bar.busy():
+		queue_redraw()
 
 
 func face(angle: float) -> void:
@@ -217,7 +224,7 @@ func _draw() -> void:
 		draw_arc(Vector2.ZERO, 15.0, PI * 1.1, PI * 1.45, 8, Color(1, 1, 1, 0.75), 2.5, true)
 	for i in mini(_dots.size(), 6):
 		draw_circle(Vector2(-10 + i * 4, 16), 1.8, Color("5fd068"))
-	var ratio := clampf(hp / max_hp, 0.0, 1.0)
 	draw_rect(Rect2(-12, -20, 24, 3), Color(0, 0, 0, 0.6))
-	draw_rect(Rect2(-12, -20, 24 * ratio, 3), Color("e05545"))
+	draw_rect(Rect2(-12, -20, 24 * _hp_bar.ghost(), 3), HpDrain.GHOST_COLOR)
+	draw_rect(Rect2(-12, -20, 24 * _hp_bar.solid(), 3), Color("e05545"))
 	draw_set_transform(Vector2.ZERO)
