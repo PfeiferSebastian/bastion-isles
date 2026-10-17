@@ -1,12 +1,11 @@
 extends Control
 ## Main menu: the title at the top, Start / Edit Island / Options / Exit in a column
-## on the left, the island (in the game's own tile art) floating on the right while enemy
-## airship formations cross the cloud sky, all inside the steampunk frame. Start opens the mission select:
+## on the left while enemy airship formations cross the cloud sky, all inside the steampunk
+## frame (the floating island is out until it is redrawn, see GDD 14). Start opens the mission select:
 ## numbered missions (1-1, 1-2 … 2-1 …), the endless mode below them and Back at the bottom.
 
 const GAME_SCENE := "res://main.tscn"
 
-@onready var _island: Node2D = $Island
 @onready var _airships: Node2D = $Airships
 @onready var _buttons: Control = $Buttons
 @onready var _start: Button = %Start
@@ -32,8 +31,6 @@ func _ready() -> void:
 	_fullscreen.toggled.connect(_on_fullscreen_toggled)
 	_volume.value = db_to_linear(AudioServer.get_bus_volume_db(0)) * 100.0
 	_volume.value_changed.connect(_on_volume_changed)
-	resized.connect(_layout)
-	_layout()
 	_show_options(false)
 
 
@@ -110,7 +107,6 @@ static func _menu_button(text: String, min_size: Vector2) -> Button:
 func _show_missions(open: bool) -> void:
 	_missions_panel.visible = open
 	_buttons.visible = not open
-	_island.visible = not open
 	_airships.visible = not open
 	if open:
 		_missions_panel.reset_size()
@@ -123,11 +119,6 @@ func _start_mission(which: Vector2i, endless: bool) -> void:
 	GameSession.mission = which
 	GameSession.endless = endless
 	_open_island(false)
-
-
-func _layout() -> void:
-	# Right of the button column, a little below the title.
-	_island.call(&"place", Vector2(size.x * 0.64, size.y * 0.5))
 
 
 ## Opens the island scene for a mission, or for editing without enemies.

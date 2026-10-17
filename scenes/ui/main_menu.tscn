@@ -2,7 +2,6 @@
 
 [ext_resource type="Script" path="res://scripts/ui/main_menu.gd" id="1_menu"]
 [ext_resource type="Script" path="res://scripts/world/sky_background.gd" id="2_sky"]
-[ext_resource type="Script" path="res://scripts/ui/floating_island_art.gd" id="3_island"]
 [ext_resource type="Script" path="res://scripts/ui/menu_frame.gd" id="4_frame"]
 [ext_resource type="Script" path="res://scripts/ui/brass_button.gd" id="5_button"]
 [ext_resource type="Script" path="res://scripts/ui/menu_airships.gd" id="6_airships"]
@@ -22,10 +21,6 @@ flight_velocity = Vector2(-25, -10)
 
 [node name="Airships" type="Node2D" parent="."]
 script = ExtResource("6_airships")
-
-[node name="Island" type="Node2D" parent="."]
-position = Vector2(760, 300)
-script = ExtResource("3_island")
 
 [node name="Frame" type="Control" parent="."]
 layout_mode = 1
