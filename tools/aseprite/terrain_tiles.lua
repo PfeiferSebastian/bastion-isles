@@ -610,7 +610,7 @@ local CASTLE_THEMES = {
 		banner = palette { "8a8a82", "b8b8b0", "e2e2da", "f2f2ec" },
 	} },
 	{ "hexCastleSwamp00", {
-		ground = palette { "2b1e37", "372646", "443055", "553c68", "664a7c", "785a90" },
+		ground = palette { "1a2210", "26301a", "334022", "40502a", "4e6034", "5e7040" },
 		roof = palette { "1a1222", "2a1d38", "3c2a52", "50386c", "664a88", "8062a6" },
 		banner = palette { "2a1840", "4a2a70", "7b4bb0", "a98cc8" },
 		tufts = BOG_REED,
@@ -838,7 +838,7 @@ end
 local BARK = palette { "1e140c", "2e1f12", "41301c", "574129", "715537", "8c6c46" }
 local SANDSTONE = palette { "6a5a42", "8a7656", "a8946c", "c4b086", "dccaa0", "eee0bc", "faf2dc" }
 local GOLD = palette { "4a3008", "7a5410", "a87a18", "d0a428", "ecc84a", "fae68a", "fffbe0" }
-local NECRO = palette { "050408", "0b0910", "121019", "1a1724", "241f30", "2f283e", "3b3350" }
+local NECRO = palette { "120a1c", "1e1030", "2c1844", "3c225a", "4e2e72", "623c8a", "7a4ea4" }
 local GHOST = palette { "08200f", "0f3d1c", "1d6a30", "36a04c", "6be08a", "c0ffd0" }
 local GLASS = palette { "0e3a4a", "176070", "2a8a96", "4cb2b8", "82d4d4", "bdeeea", "f0fffc" }
 
@@ -950,10 +950,18 @@ local function massing()
 					for k = 0, top do
 						local sy = y - k
 						local col
-						if k > c.wall then
+						if c.base and k <= c.base and not (c.rock and k == top) then
+							-- Rock below a building (or a bare rock column): broken cliff faces.
+							local d1, d2 = cells(x, sy * 1.3, 4, 91)
+							local v = 0.5 - (c.rnx or 0) * 0.3 + (hash(x, sy, 92) - 0.5) * 0.14 - (d2 - d1 < 0.7 and 0.14 or 0) + k / math.max(c.base, 1) * 0.14
+							col = dither(STONE, v, x, sy)
+						elseif c.rock then
+							-- Top of the rock: snow drifts between bare stone.
+							col = vnoise(x * 0.4, sy * 0.5, 93) > 0.62 and dither(SNOW, 0.55 - (c.rnx or 0) * 0.3, x, sy) or dither(STONE, 0.72, x, sy)
+						elseif k > c.wall then
 							col = dither(c.rpal, 0.6 - c.nx * 0.4 - slope * 0.06, x, sy)
 						elseif k == top then
-							col = dither(c.wpal, 0.82 - c.nx * 0.1, x, sy)
+							col = c.snowcap and dither(SNOW, 0.6 - c.nx * 0.2, x, sy) or dither(c.wpal, 0.82 - c.nx * 0.1, x, sy)
 						else
 							local v = 0.36 - c.nx * 0.26 + k / math.max(c.wall, 1) * 0.1
 							if sy % 4 == 0 or (x + (sy // 4) % 2 * 3) % 6 == 0 then v = v - 0.07 end
@@ -1041,51 +1049,68 @@ local function keep_forest(s, g, d, theme)
 	put(d, 28, 75, GLOW[3])
 end
 
--- Mountain: one broad mountain in the middle with the stronghold built into it – a curtain
--- wall and gatehouse at its foot, a hall and a lookout on its flanks, the keep high up near the
--- snowy summit, a winding path between them.
+-- Mountain: a stronghold of tall stacked towers growing out of a low rock mound (cliffs to
+-- both sides, snow on every ledge), the mound fading into the ground so nothing is cut off
+-- at the hex's edge.
+local WARM_STONE = palette { "2a2420", "3a322c", "4a4038", "5c5046", "6e6054", "827262", "988670", "b09c84" }
+
 local function keep_mountain(s, g, d, theme)
 	keep_ground(s, g, theme)
-	peak(g, d, 28, 81, 37, s + 3)
-	-- Path zigzagging up from the gate.
-	local path = { { 28, 79 }, { 17, 72 }, { 38, 66 }, { 26, 58 } }
-	for i = 1, #path - 1 do
-		local a, b = path[i], path[i + 1]
-		local steps = math.ceil(math.max(math.abs(b[1] - a[1]), math.abs(b[2] - a[2])))
-		for k = 0, steps do
-			local x = a[1] + (b[1] - a[1]) * k / steps
-			local y = a[2] + (b[2] - a[2]) * k / steps
-			put(d, x, y, STONE[9])
-			put(d, x, y + 1, STONE[4])
+	local m = massing()
+	local function rock(x, y)
+		local function bump(cx, cy, rx, ry, h)
+			local e = ((x + 0.5 - cx) / rx) ^ 2 + ((y + 0.5 - cy) / ry) ^ 2
+			return e < 1 and h * (1 - e) ^ 0.35 or 0
+		end
+		local r = math.max(bump(28, 66, 20, 12, 13), bump(12, 70, 8, 6, 9), bump(44, 70, 8, 6, 8))
+		return r > 0.5 and r + (vnoise(x * 0.3, y * 0.3, s + 80) - 0.5) * 3 or 0
+	end
+	for y = 0, H - 1 do
+		for x = 0, W - 1 do
+			local r = rock(x, y)
+			if r > 0.5 and in_hex(x, y, 1) then
+				m.cols[y * W + x] = { h = r, wall = r, base = r, rock = true, nx = 0, rnx = (rock(x + 1, y) - rock(x - 1, y)) * -0.3, wpal = STONE, rpal = STONE }
+			end
 		end
 	end
-	local m = massing()
-	-- Curtain wall across the front foot, gatehouse in its middle.
-	for x = 9, 47 do
-		local y = math.floor(80 - ((x - 28) / 19) ^ 2 * 7 + 0.5)
-		local h = 4 + ((x % 2 == 0) and 2 or 0)
-		m.set(x, y, h, h, (x - 28) / 19, DARK_STONE)
-		m.set(x, y - 1, h, h, (x - 28) / 19, DARK_STONE)
+	-- Buildings on the rock: a flat foundation at the rock's height under their middle.
+	local function build(x0, y0, x1, y1, height)
+		local base = math.floor(rock((x0 + x1) / 2, (y0 + y1) / 2))
+		for y = y0, y1 do
+			for x = x0, x1 do
+				local rim = x == x0 or x == x1 or y == y0 or y == y1
+				local h = base + height + ((rim and (x + y) % 2 == 0) and 2 or 0)
+				m.cols[y * W + x] = { h = h, wall = h, base = base, nx = (x - (x0 + x1) / 2) / (x1 - x0) * 1.6, wpal = WARM_STONE, rpal = WARM_STONE, snowcap = true }
+			end
+		end
+		return base
 	end
-	m.block(24, 76, 32, 80, 7, DARK_STONE)
-	-- Hall on the left flank, lookout on the right, the keep below the summit.
-	m.block(11, 67, 19, 71, 5, DARK_STONE)
-	m.cylinder(13, 68, 2.4, 7, 5, DARK_STONE, theme.roof)
-	m.cylinder(41, 64, 2.2, 9, 5, DARK_STONE, theme.roof)
-	m.block(23, 55, 33, 59, 6, DARK_STONE)
-	m.cylinder(28, 55, 3.2, 10, 8, DARK_STONE, theme.roof)
-	m.cylinder(34, 50, 1.6, 6, 4, DARK_STONE, theme.roof)
+	local towers = {
+		{ 23, 60, 33, 65, 17 }, -- the tall keep
+		{ 16, 63, 22, 67, 12 }, { 34, 63, 40, 67, 11 }, -- flanking towers
+		{ 26, 57, 30, 60, 21 }, -- the high spire behind the keep
+		{ 23, 71, 33, 75, 7 }, -- gatehouse
+	}
+	local bases = {}
+	for i, t in ipairs(towers) do bases[i] = build(t[1], t[2], t[3], t[4], t[5]) end
 	m.render(g, d)
-	-- Gate, lit windows, banners in the biome colour.
-	for k = 0, 3 do
-		for x = 27, 29 do put(d, x, 80 - k, k == 0 and GLOW[1] or DARK_STONE[1]) end
+	-- Glowing window slits on the front faces, the gate in the gatehouse.
+	local function window(x, row, base, k)
+		put(d, x, row - base - k, GLOW[3])
+		put(d, x, row - base - k + 1, GLOW[2])
 	end
-	for _, w in ipairs({ { 15, 66 }, { 28, 47 }, { 26, 52 }, { 31, 52 }, { 41, 57 }, { 34, 46 } }) do
-		put(d, w[1], w[2], GLOW[3]); put(d, w[1], w[2] + 1, GLOW[2])
+	for i, t in ipairs(towers) do
+		local n = math.max(1, (t[3] - t[1]) // 4)
+		for j = 1, n do
+			local x = t[1] + math.floor((t[3] - t[1]) * j / (n + 1) + 0.5)
+			for k = 4, t[5] - 3, 6 do window(x, t[4], bases[i], k) end
+		end
 	end
-	for _, bx in ipairs({ 25, 31 }) do
-		for k = 0, 3 do put(d, bx, 71 + k, theme.banner[(k < 3) and 3 or 1]) end
+	local gate_floor = 75 - bases[5]
+	for k = 0, 4 do
+		for x = 27, 29 do put(d, x, gate_floor - k, k == 0 and GLOW[1] or WARM_STONE[1]) end
 	end
+	keep_outline(d, STONE[1])
 end
 
 -- A horseshoe onion dome: narrow neck, wide bulb, drawn out into a point, lit from the left.
@@ -1152,7 +1177,14 @@ end
 -- above its apex, obelisks at the front.
 local function keep_swamp(s, g, d, theme)
 	keep_ground(s, g, theme)
-	glow(g, 28, 68, 26, GHOST[4], 0.75)
+	-- Dark mud puddles.
+	for y = 0, H - 1 do
+		for x = 0, W - 1 do
+			if in_hex(x, y, 3) and fbm(x * 0.12, y * 0.16, s + 70) < 0.36 then
+				put(g, x, y, dither(POOL, 0.2 + vnoise(x * 0.5, y * 1.2, s + 71) * 0.25, x, y))
+			end
+		end
+	end
 	local m = massing()
 	for y = 50, 80 do
 		for x = 8, 48 do
@@ -1167,6 +1199,25 @@ local function keep_swamp(s, g, d, theme)
 	m.cylinder(11, 76, 1.4, 9, 0, NECRO)
 	m.cylinder(45, 76, 1.4, 9, 0, NECRO)
 	m.render(g, d)
+	-- Ghostly green light hugging the pyramid's outline on the ground.
+	for y = 0, H - 1 do
+		for x = 0, W - 1 do
+			if not d.px[y * W + x] and get(g, x, y) then
+				local near = 99
+				for yy = -4, 4 do
+					for xx = -4, 4 do
+						if d.px[(y + yy) * W + (x + xx)] and y + yy >= 0 and y + yy < H then
+							near = math.min(near, math.sqrt(xx * xx + yy * yy))
+						end
+					end
+				end
+				local f = 1 - near / 4.5
+				if f > 0 and f > (BAYER[(y % 4) * 4 + (x % 4) + 1] + 0.5) / 16 * 0.9 then
+					put(g, x, y, mix(get(g, x, y), GHOST[5], 0.3 + f * 0.4))
+				end
+			end
+		end
+	end
 	-- Glowing step edges: dotted green along every front edge of a step.
 	for y = 0, H - 2 do
 		for x = 0, W - 1 do
