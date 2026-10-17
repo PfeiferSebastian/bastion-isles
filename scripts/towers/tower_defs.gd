@@ -49,7 +49,7 @@ const AURA_RADIUS_MAX := 1
 const SHIELD_ENERGY_PER_HP := 0.05
 
 ## Largest reach any Repair profile has (used to look for nearby Repair towers).
-const REPAIR_REACH_MAX := 3
+const REPAIR_REACH_MAX := 6
 
 ## Wall (Tier 0): regenerates from its own energy after this long without damage.
 const WALL_REST_DELAY := 10.0

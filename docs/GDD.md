@@ -430,7 +430,7 @@ How each biome changes each base tower. Tier 0 has no traits (6.1); the trait gr
 
 | Biome | Trait | Tier 3 / Tier 6 milestones |
 |---|---|---|
-| **Neutral (Tier 0)** | Heals the **weakest tile** in range. Healing drops with hex distance. Uses a lot of energy while healing. 💡 Starting values: radius 2 hexes | – |
+| **Neutral (Tier 0)** | Heals the **weakest tile** in range. Healing drops with hex distance. Uses a lot of energy while healing. ✅ Reach **6 hexes** (2026-10-17): 100% up to 1 hex, then 10% less per hex down to 50% at 6 hexes (all biomes) | – |
 | **Forest** | **Healing over time:** cheap in energy, slow, with a high total amount | ✅ Milestone: also **restores tile tiers** lost in battle (8.4). 💡 T3 = tiers, T6 = several targets at once |
 | **Mountain** | **Rebuild:** restores HP in **big chunks** with a long cooldown, like a construction crew | 💡 T3: shorter cooldown · T6: also repairs destroyed towers |
 | **Desert** | **Jumping pulses:** fast, small heals that jump to several targets | ✅ A **continuous healing beam** is a bigger fused Repair tower (e.g. 3 or more tiles/biomes) |

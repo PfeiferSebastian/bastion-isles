@@ -549,7 +549,7 @@ func _test_healing() -> void:
 	island.heal(w, false, Island.TILE_BASE_HP * 0.2)
 	_check(not island.get_tile(w).destroyed, "repaired wasteland becomes ground again")
 	# Profiles.
-	_check(RepairProfiles.base(Biome.Type.NEUTRAL).reach() == 2, "neutral repair reach 2")
+	_check(RepairProfiles.base(Biome.Type.NEUTRAL).reach() == 6 and is_equal_approx(RepairProfiles.base(Biome.Type.NEUTRAL).falloff[6], 0.5), "repair reach 6, half the heal at the edge")
 	_check(RepairProfiles.base(Biome.Type.FOREST).mode == &"over_time", "forest heals over time")
 	_check(RepairProfiles.base(Biome.Type.PLAINS).mode == &"redistribute", "plains redistributes")
 	_check(RepairProfiles.base(Biome.Type.SWAMP).mode == &"lifesteal", "swamp drains enemies")

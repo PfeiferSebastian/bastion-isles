@@ -11,7 +11,7 @@ var cooldown := 1.0
 ## How many of the weakest targets each heal reaches.
 var targets := 1
 ## Share of the heal that arrives at hex distance 0, 1, 2…; the last entry sets the reach.
-var falloff := PackedFloat32Array([1.0, 1.0, 0.6])
+var falloff := PackedFloat32Array([1.0, 1.0, 0.9, 0.8, 0.7, 0.6, 0.5])
 var energy_per_heal := 3.0
 ## For &"over_time": seconds the heal is spread over.
 var duration := 0.0

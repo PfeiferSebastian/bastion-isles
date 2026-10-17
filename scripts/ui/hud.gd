@@ -618,7 +618,7 @@ static func _describe_repair(p: RepairProfile) -> PackedStringArray:
 			what = "Repairs %.0f HP" % p.amount
 	var lines: PackedStringArray = [what + (" × %d targets" % p.targets if p.targets > 1 else "")]
 	lines.append("Every %.1f s (%.1f HP/s), %.1f energy each" % [p.cooldown, p.amount * p.targets / maxf(p.cooldown, 0.001), p.energy_per_heal])
-	lines.append("Reach %d hexes" % p.reach())
+	lines.append("Reach %d hexes, %d%% of the heal at the edge" % [p.reach(), roundi(p.falloff[p.reach()] * 100.0)])
 	return lines
 
 
